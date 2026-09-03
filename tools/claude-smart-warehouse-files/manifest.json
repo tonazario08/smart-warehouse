@@ -1,0 +1,35 @@
+{
+  "manifest_version": "0.2",
+  "name": "smart-warehouse-files",
+  "display_name": "Smart Warehouse Files",
+  "version": "1.0.0",
+  "description": "Read and edit files in the Smart Warehouse project workspace.",
+  "author": {
+    "name": "Smart Warehouse"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "${user_config.workspace_path}"
+      ]
+    }
+  },
+  "user_config": {
+    "workspace_path": {
+      "type": "directory",
+      "title": "Smart Warehouse workspace",
+      "description": "The only directory this extension can read or edit.",
+      "required": true,
+      "default": "C:\\Users\\TQUOCTOAN\\OneDrive\\Documents\\ChatGPT\\smart-warehouse"
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["win32"]
+  }
+}
