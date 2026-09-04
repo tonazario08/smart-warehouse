@@ -148,7 +148,7 @@ every sensitive endpoint.
 | Capability | Anonymous | admin | warehouse | client |
 |---|---:|---:|---:|---:|
 | Register and login | Yes | Yes | Yes | Yes |
-| Read products and categories | Yes | Yes | Yes | Yes |
+| Read products and categories | No | Yes | Yes | Yes |
 | Mutate products and categories | No | Yes | No | No |
 | Read suppliers | No | Yes | Yes | No |
 | Mutate suppliers | No | Yes | No | No |
@@ -162,6 +162,9 @@ every sensitive endpoint.
 
 Backend tests verify both route access and important actions within a route. Frontend role checks
 only improve navigation and prevent presenting unusable controls.
+
+Product and category reads require an authenticated `admin`, `warehouse`, or `client`. Anonymous
+users can only register and log in; Phase 1 does not expose a public catalogue.
 
 ## 6. User Administration and Audit
 
@@ -203,6 +206,10 @@ rolled back. Audit payload construction uses an allowlist and cannot include a p
 Only admins can list and inspect audit records. The application exposes no update or delete route
 for audit history. Database access outside the application is governed operationally rather than
 by application endpoints.
+
+Administrative audit is reserved for security-sensitive user administration in Phase 1. Inventory
+movements use stock-transaction history as their authoritative business audit and do not create a
+second administrative audit record for the same operation.
 
 ## 7. API and Error Contract
 
@@ -298,6 +305,9 @@ successful decrement, outbound record, and stock transaction commit together. Co
 outbounds cannot produce negative stock or more than one successful allocation of the same units.
 
 Inbound, outbound, and stock-transaction history are append-only through application APIs.
+Each successful inbound or outbound appends exactly one stock transaction in the same database
+transaction. This stock transaction is the inventory operation's audit record; duplicating it in
+the administrative audit table is neither required nor permitted.
 
 ### 8.4 Dashboard
 
