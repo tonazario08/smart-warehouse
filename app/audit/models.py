@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 from app.models.domain import IdentifierMixin, utc_now
 
+USER_AUDIT_FIELDS = ("email", "role", "is_active")
+
 
 class AuditLog(IdentifierMixin, Base):
     __tablename__ = "audit_logs"

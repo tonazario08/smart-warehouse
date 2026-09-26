@@ -199,6 +199,18 @@ npm.cmd run e2e
 - Task 4 implementation checkpoints are `3a70150` and `eefd763`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-4-review-report.md`.
 - Internal Task 4 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 5.
 
+### 2026-09-26 — Internal Task 5 implementation evidence
+
+- Implemented admin-only user creation, paginated listing, detail, role and active-status updates, plus read-only paginated audit listing and detail. User creation, role changes, and status changes commit with allowlisted audit rows in the same service transaction.
+- Focused PostgreSQL/unit verification passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_audit_payload.py tests/postgres/test_users_audit.py tests/postgres/test_auth_integration.py -q` — 35 passed, 2 existing deprecation warnings.
+- Rollback was failure-injected by patching `AuditRepository.add` and calling `UserService.create`; an independent PostgreSQL `Session` found neither the attempted user nor a matching audit row. A separate route test confirmed the safe generic 500 response.
+- Regression verification passed: `.venv\Scripts\python.exe -m pytest -q` — 120 passed, 2 existing deprecation warnings. `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed.
+- Audit package import cycle was reproduced by importing `app.audit.service` before implementation. Lazy package exports preserve both existing `AuditLog` import forms; the direct package-export/service import smoke check passed.
+- The repository boundary regression first failed because loaded-user `change_role` was missing. Adding repository-owned role/status changes made the test pass while `Session.commit` was patched to fail.
+- Ruling: Task 5 trims/lowercases email only and preserves password whitespace. The plan's illustrative global `str_strip_whitespace=True` changed the supplied secret; the test failed before the correction, and Task 4 normalizes only email. Cost if wrong: an operator expecting trimming must communicate the exact supplied password.
+- Ruling: make the existing `AuditLog` package exports lazy to resolve the reproduced import cycle while preserving direct class imports. Cost if wrong: an external caller relying on eager module initialization must use the preserved class export.
+- Detailed RED/GREEN, transaction evidence, changed files, verification, and self-review are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-5-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused
