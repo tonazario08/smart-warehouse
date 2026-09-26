@@ -290,6 +290,13 @@ npm.cmd run e2e
 - Mutation RED was observed separately for every reference check by changing that check's product predicate to an impossible ID. Each corresponding parameter case failed at the repository assertion. All temporary mutations were restored; no production behavior changed. The five restored cases passed.
 - Focused all-master-data and architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/postgres/test_suppliers.py tests/postgres/test_products.py tests/unit/test_architecture.py -q` — 74 passed. Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 188 passed. Ruff and `git diff --check` passed. Only the existing Starlette/httpx and pytest-asyncio deprecation warnings were emitted.
 
+### 2026-09-27 — Internal Task 8 accepted
+
+- Independent re-review of cumulative diff `31670ad..c8505d1` found no remaining Critical, Important, or Minor finding.
+- Reviewer verification passed: focused PostgreSQL product suite — 25 passed. All five reference-table cases verify the repository guard, `PRODUCT_IN_USE`, and persistence of both product and referencing row after rejection.
+- Task 8 checkpoints are `536ed2f` and `c8505d1`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-8-review-report.md`.
+- Internal Task 8 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 9.
+
 ## Verification Evidence
 
 ### Focused
