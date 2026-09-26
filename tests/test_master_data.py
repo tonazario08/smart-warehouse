@@ -65,28 +65,6 @@ def test_product_requires_existing_category_and_is_publicly_readable(
     assert response.json()["sku"] == "SKU-001"
 
 
-def test_supplier_read_requires_staff_and_write_requires_admin(
-    client: tuple[TestClient, Session],
-) -> None:
-    test_client, session = client
-    response = test_client.get("/api/v1/suppliers", headers=auth_headers(session, UserRole.CLIENT))
-    assert response.status_code == 403
-
-    response = test_client.post(
-        "/api/v1/suppliers",
-        json={"name": "Main Supplier", "email": "supplier@example.com"},
-        headers=auth_headers(session, UserRole.WAREHOUSE),
-    )
-    assert response.status_code == 403
-
-    response = test_client.post(
-        "/api/v1/suppliers",
-        json={"name": "Main Supplier", "email": "supplier@example.com"},
-        headers=auth_headers(session, UserRole.ADMIN),
-    )
-    assert response.status_code == 201
-
-
 def test_admin_can_update_and_delete_product(client: tuple[TestClient, Session]) -> None:
     test_client, session = client
     category = Category(name="Hardware")

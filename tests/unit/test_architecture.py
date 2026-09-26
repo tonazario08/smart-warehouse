@@ -31,7 +31,7 @@ def test_category_router_module_has_no_sql_or_transaction_operations() -> None:
     assert transaction_calls == []
 
 
-def test_legacy_router_contains_only_deferred_product_and_supplier_routes() -> None:
+def test_legacy_router_contains_only_deferred_product_routes() -> None:
     path = Path("app/master_data/_legacy_router.py")
     tree = ast.parse(path.read_text(encoding="utf-8"))
     routes: set[tuple[str, str]] = set()
@@ -69,11 +69,6 @@ def test_legacy_router_contains_only_deferred_product_and_supplier_routes() -> N
         "create_product",
         "update_product",
         "delete_product",
-        "list_suppliers",
-        "get_supplier",
-        "create_supplier",
-        "update_supplier",
-        "delete_supplier",
     }
     assert functions == handlers | {"_page"}
     assert nested_route_registrations == []
@@ -83,9 +78,4 @@ def test_legacy_router_contains_only_deferred_product_and_supplier_routes() -> N
         ("post", "/products"),
         ("put", "/products/{product_id}"),
         ("delete", "/products/{product_id}"),
-        ("get", "/suppliers"),
-        ("get", "/suppliers/{supplier_id}"),
-        ("post", "/suppliers"),
-        ("put", "/suppliers/{supplier_id}"),
-        ("delete", "/suppliers/{supplier_id}"),
     }

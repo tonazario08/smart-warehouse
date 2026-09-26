@@ -1,4 +1,4 @@
-"""Existing product and supplier routes pending their planned service slices."""
+"""Product routes pending their planned repository and service slice."""
 
 from typing import Annotated
 
@@ -13,8 +13,6 @@ from app.master_data.schemas import (
     Page,
     ProductCreate,
     ProductResponse,
-    SupplierCreate,
-    SupplierResponse,
 )
 from app.models import Category, Product, Supplier, User
 
@@ -107,80 +105,3 @@ def delete_product(
         raise HTTPException(
             status_code=409, detail="Product is referenced by inventory data"
         ) from error
-
-
-@router.get("/suppliers", response_model=Page[SupplierResponse])
-def list_suppliers(
-    session: Annotated[Session, Depends(get_session)],
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-    _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_READ))] = None,
-) -> Page:
-    return _page(session, Supplier, page, page_size)
-
-
-@router.get("/suppliers/{supplier_id}", response_model=SupplierResponse)
-def get_supplier(
-    supplier_id: int,
-    session: Annotated[Session, Depends(get_session)],
-    _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_READ))],
-) -> Supplier:
-    supplier = session.get(Supplier, supplier_id)
-    if supplier is None:
-        raise HTTPException(status_code=404, detail="Supplier not found")
-    return supplier
-
-
-@router.post("/suppliers", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
-def create_supplier(
-    request: SupplierCreate,
-    session: Annotated[Session, Depends(get_session)],
-    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
-) -> Supplier:
-    supplier = Supplier(**request.model_dump())
-    session.add(supplier)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="Supplier already exists") from error
-    session.refresh(supplier)
-    return supplier
-
-
-@router.put("/suppliers/{supplier_id}", response_model=SupplierResponse)
-def update_supplier(
-    supplier_id: int,
-    request: SupplierCreate,
-    session: Annotated[Session, Depends(get_session)],
-    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
-) -> Supplier:
-    supplier = session.get(Supplier, supplier_id)
-    if supplier is None:
-        raise HTTPException(status_code=404, detail="Supplier not found")
-    for field, value in request.model_dump().items():
-        setattr(supplier, field, value)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="Supplier already exists") from error
-    session.refresh(supplier)
-    return supplier
-
-
-@router.delete("/suppliers/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_supplier(
-    supplier_id: int,
-    session: Annotated[Session, Depends(get_session)],
-    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
-) -> None:
-    supplier = session.get(Supplier, supplier_id)
-    if supplier is None:
-        raise HTTPException(status_code=404, detail="Supplier not found")
-    try:
-        session.delete(supplier)
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="Supplier is still referenced") from error

@@ -1,4 +1,12 @@
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StrictInt,
+    StrictStr,
+    field_validator,
+)
 
 
 class Page[T](BaseModel):
@@ -30,15 +38,50 @@ class CategoryResponse(CategoryCreate):
     id: int
 
 
-class SupplierCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    email: str | None = Field(default=None, max_length=320)
-    phone: str | None = Field(default=None, max_length=50)
-    address: str | None = None
+class _SupplierFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: StrictStr = Field(min_length=1, max_length=200)
+    email: EmailStr | None = Field(default=None, max_length=320)
+    phone: StrictStr | None = Field(default=None, max_length=50)
+    address: StrictStr | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def strip_email(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        return str(value).lower() if value is not None else None
+
+    @field_validator("phone", "address", mode="before")
+    @classmethod
+    def strip_optional_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Must not be blank.")
+        return normalized
 
 
-class SupplierResponse(SupplierCreate):
-    model_config = ConfigDict(from_attributes=True)
+class SupplierCreate(_SupplierFields):
+    pass
+
+
+class SupplierUpdate(_SupplierFields):
+    pass
+
+
+class SupplierResponse(_SupplierFields):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
 
     id: int
 

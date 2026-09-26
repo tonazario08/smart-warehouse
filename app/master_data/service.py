@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
 from app.core.pagination import Page, PageParams
-from app.master_data.repository import CategoryRepository
-from app.master_data.schemas import CategoryCreate, CategoryUpdate
-from app.models import Category
+from app.master_data.repository import CategoryRepository, SupplierRepository
+from app.master_data.schemas import CategoryCreate, CategoryUpdate, SupplierCreate, SupplierUpdate
+from app.models import Category, Supplier
 
 
 def _constraint_name(error: IntegrityError) -> str | None:
@@ -115,3 +115,88 @@ class CategoryService:
                 "CATEGORY_NAME_CONFLICT",
                 "Category name already exists.",
             ) from error
+
+
+class SupplierService:
+    """Apply supplier business rules and own supplier transactions."""
+
+    def __init__(self, session: Session, suppliers: SupplierRepository) -> None:
+        self.session = session
+        self.suppliers = suppliers
+
+    def list(self, params: PageParams, search: str | None = None) -> Page[Supplier]:
+        return Page[Supplier](
+            items=self.suppliers.list(params, search),
+            total=self.suppliers.count(search),
+            page=params.page,
+            page_size=params.page_size,
+        )
+
+    def get(self, supplier_id: int) -> Supplier:
+        supplier = self.suppliers.get(supplier_id)
+        if supplier is None:
+            raise DomainError(404, "SUPPLIER_NOT_FOUND", "Supplier was not found.")
+        return supplier
+
+    def create(self, request: SupplierCreate) -> Supplier:
+        supplier = Supplier(**request.model_dump())
+        try:
+            self.suppliers.add(supplier)
+            self.session.commit()
+            self.session.refresh(supplier)
+            return supplier
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DomainError(
+                409, "SUPPLIER_CONFLICT", "Supplier already exists."
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def update(self, supplier_id: int, request: SupplierUpdate) -> Supplier:
+        supplier = self.get(supplier_id)
+        self.suppliers.update(
+            supplier,
+            name=request.name,
+            email=request.email,
+            phone=request.phone,
+            address=request.address,
+        )
+        return self._commit_or_conflict(supplier)
+
+    def delete(self, supplier_id: int) -> None:
+        supplier = self.get(supplier_id)
+        if self.suppliers.has_products(supplier_id):
+            raise DomainError(
+                409,
+                "SUPPLIER_IN_USE",
+                "Supplier is referenced by another record.",
+            )
+        try:
+            self.suppliers.delete(supplier)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DomainError(
+                409,
+                "SUPPLIER_IN_USE",
+                "Supplier is referenced by another record.",
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _commit_or_conflict(self, supplier: Supplier) -> Supplier:
+        try:
+            self.session.commit()
+            self.session.refresh(supplier)
+            return supplier
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DomainError(
+                409, "SUPPLIER_CONFLICT", "Supplier already exists."
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
