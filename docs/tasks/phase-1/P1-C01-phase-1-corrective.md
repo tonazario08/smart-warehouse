@@ -240,6 +240,13 @@ npm.cmd run e2e
 - GREEN verification passed against disposable PostgreSQL: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/unit/test_architecture.py -q` — 23 passed. Full regression: `.venv\Scripts\python.exe -m pytest -q` — 141 passed. Ruff: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. The only output warnings were the existing Starlette/httpx and pytest-asyncio deprecations.
 - The independent review report remains unchanged. This correction changes only architecture tests and this append-only evidence; Task 7/8 handlers remain deferred in `_legacy_router.py`.
 
+### 2026-09-26 — Internal Task 6 accepted
+
+- Independent re-review of cumulative diff `4a92896..57d5d8c` found no remaining Critical, Important, or Minor finding.
+- Reviewer verification passed: focused PostgreSQL category and architecture suite — 23 passed; `git diff --check` — passed. The legacy allowlist now defers only the explicit supplier/product Task 7/8 surface.
+- Task 6 implementation checkpoints are `01755bb` and `57d5d8c`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-6-review-report.md`.
+- Internal Task 6 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 7.
+
 ## Verification Evidence
 
 ### Focused
