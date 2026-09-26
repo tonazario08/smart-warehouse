@@ -1,4 +1,4 @@
-"""Authenticated category routes and master-data route composition."""
+"""Authenticated product, category, and supplier routes."""
 
 from typing import Annotated
 
@@ -8,18 +8,20 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import Permission, require_permission
 from app.core.pagination import Page, PageParams
 from app.db.session import get_session
-from app.master_data._legacy_router import router as legacy_router
-from app.master_data.repository import CategoryRepository, SupplierRepository
+from app.master_data.repository import CategoryRepository, ProductRepository, SupplierRepository
 from app.master_data.schemas import (
     CategoryCreate,
     CategoryResponse,
     CategoryUpdate,
+    ProductCreate,
+    ProductResponse,
+    ProductUpdate,
     SupplierCreate,
     SupplierResponse,
     SupplierUpdate,
 )
-from app.master_data.service import CategoryService, SupplierService
-from app.models import Category, Supplier, User
+from app.master_data.service import CategoryService, ProductService, SupplierService
+from app.models import Category, Product, Supplier, User
 
 router = APIRouter(tags=["master-data"])
 
@@ -30,6 +32,75 @@ def _category_service(session: Session) -> CategoryService:
 
 def _supplier_service(session: Session) -> SupplierService:
     return SupplierService(session, SupplierRepository(session))
+
+
+def _product_service(session: Session) -> ProductService:
+    return ProductService(
+        session,
+        ProductRepository(session),
+        CategoryRepository(session),
+        SupplierRepository(session),
+    )
+
+
+@router.get("/products", response_model=Page[ProductResponse])
+def list_products(
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    search: Annotated[str | None, Query(max_length=320)] = None,
+    category_id: Annotated[int | None, Query(ge=1)] = None,
+    supplier_id: Annotated[int | None, Query(ge=1)] = None,
+    is_active: bool | None = None,
+) -> Page[ProductResponse]:
+    params = PageParams(page=page, page_size=page_size)
+    return _product_service(session).list(
+        params,
+        search=search,
+        category_id=category_id,
+        supplier_id=supplier_id,
+        is_active=is_active,
+    )
+
+
+@router.get("/products/{product_id}", response_model=ProductResponse)
+def get_product(
+    product_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
+) -> Product:
+    return _product_service(session).get(product_id)
+
+
+@router.post(
+    "/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED
+)
+def create_product(
+    request: ProductCreate,
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
+) -> Product:
+    return _product_service(session).create(request)
+
+
+@router.put("/products/{product_id}", response_model=ProductResponse)
+def update_product(
+    product_id: int,
+    request: ProductUpdate,
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
+) -> Product:
+    return _product_service(session).update(product_id, request)
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(
+    product_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
+) -> None:
+    _product_service(session).delete(product_id)
 
 
 @router.get("/categories", response_model=Page[CategoryResponse])
@@ -134,6 +205,3 @@ def delete_supplier(
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_WRITE))],
 ) -> None:
     _supplier_service(session).delete(supplier_id)
-
-
-router.include_router(legacy_router)

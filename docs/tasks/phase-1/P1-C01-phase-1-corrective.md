@@ -272,6 +272,16 @@ npm.cmd run e2e
 - Task 7 checkpoints are `b5c695e`, `235d4ee`, and `6212d77`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-7-review-report.md`.
 - Internal Task 7 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 8.
 
+### 2026-09-27 — Internal Task 8 implementation evidence
+
+- PostgreSQL RED run reproduced public product reads, raw SKU handling, permissive create/update schemas, missing filter/reference/domain-error behavior, update conflict behavior, and the remaining legacy router. After correcting test setup for a required warehouse address and the `stocks` table name, the product/architecture RED run reported 12 failed and 12 passed for the expected missing behavior.
+- Product and architecture GREEN verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_products.py tests/unit/test_architecture.py -q` — 24 passed.
+- Focused all-master-data and architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/postgres/test_suppliers.py tests/postgres/test_products.py tests/unit/test_architecture.py -q` — 70 passed.
+- Full regression passed against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 184 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` passed.
+- Verification emitted only the existing Starlette/httpx and pytest-asyncio deprecation warnings. An overlapping test attempt against the same disposable DB was discarded; final focused and full runs were executed sequentially. A stale-data-sensitive test assertion was adjusted to check product inclusion rather than assume an empty table, then the sequential final runs passed.
+- Product routes now use `ProductRepository` and `ProductService`; the composed master-data router no longer includes `_legacy_router.py`, which has been deleted. Product delete checks stock, inbound, outbound, transaction, and purchase-request references before ORM deletion to preserve all dependent rows.
+- Detailed RED/GREEN evidence, RBAC/filter/reference/delete/architecture coverage, changed files, verification, and self-review are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-8-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused

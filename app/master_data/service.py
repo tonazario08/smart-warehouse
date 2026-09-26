@@ -5,9 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
 from app.core.pagination import Page, PageParams
-from app.master_data.repository import CategoryRepository, SupplierRepository
-from app.master_data.schemas import CategoryCreate, CategoryUpdate, SupplierCreate, SupplierUpdate
-from app.models import Category, Supplier
+from app.master_data.repository import (
+    CategoryRepository,
+    ProductRepository,
+    SupplierRepository,
+)
+from app.master_data.schemas import (
+    CategoryCreate,
+    CategoryUpdate,
+    ProductCreate,
+    ProductUpdate,
+    SupplierCreate,
+    SupplierUpdate,
+)
+from app.models import Category, Product, Supplier
 
 
 def _constraint_name(error: IntegrityError) -> str | None:
@@ -200,3 +211,113 @@ class SupplierService:
         except Exception:
             self.session.rollback()
             raise
+
+
+class ProductService:
+    """Apply product business rules and own product transactions."""
+
+    def __init__(
+        self,
+        session: Session,
+        products: ProductRepository,
+        categories: CategoryRepository,
+        suppliers: SupplierRepository,
+    ) -> None:
+        self.session = session
+        self.products = products
+        self.categories = categories
+        self.suppliers = suppliers
+
+    def list(
+        self,
+        params: PageParams,
+        *,
+        search: str | None = None,
+        category_id: int | None = None,
+        supplier_id: int | None = None,
+        is_active: bool | None = None,
+    ) -> Page[Product]:
+        filters = {
+            "search": search,
+            "category_id": category_id,
+            "supplier_id": supplier_id,
+            "is_active": is_active,
+        }
+        return Page[Product](
+            items=self.products.list(params, **filters),
+            total=self.products.count(**filters),
+            page=params.page,
+            page_size=params.page_size,
+        )
+
+    def get(self, product_id: int) -> Product:
+        product = self.products.get(product_id)
+        if product is None:
+            raise DomainError(404, "PRODUCT_NOT_FOUND", "Product was not found.")
+        return product
+
+    def create(self, request: ProductCreate) -> Product:
+        values = request.model_dump()
+        self._validate_references(values["category_id"], values["supplier_id"])
+        product = Product(**values)
+        try:
+            self.products.add(product)
+            self.session.commit()
+            self.session.refresh(product)
+            return product
+        except IntegrityError as error:
+            self.session.rollback()
+            self._raise_integrity_error(error)
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def update(self, product_id: int, request: ProductUpdate) -> Product:
+        product = self.get(product_id)
+        values = request.model_dump()
+        self._validate_references(values["category_id"], values["supplier_id"])
+        self.products.update(product, values)
+        return self._commit_or_conflict(product)
+
+    def delete(self, product_id: int) -> None:
+        product = self.get(product_id)
+        if self.products.has_references(product_id):
+            raise DomainError(409, "PRODUCT_IN_USE", "Product is referenced by other records.")
+        try:
+            self.products.delete(product)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DomainError(
+                409, "PRODUCT_IN_USE", "Product is referenced by other records."
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _validate_references(self, category_id: int, supplier_id: int | None) -> None:
+        if self.categories.get(category_id) is None:
+            raise DomainError(422, "CATEGORY_NOT_FOUND", "Category does not exist.")
+        if supplier_id is not None and self.suppliers.get(supplier_id) is None:
+            raise DomainError(422, "SUPPLIER_NOT_FOUND", "Supplier does not exist.")
+
+    def _commit_or_conflict(self, product: Product) -> Product:
+        try:
+            self.session.commit()
+            self.session.refresh(product)
+            return product
+        except IntegrityError as error:
+            self.session.rollback()
+            self._raise_integrity_error(error)
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
+    @staticmethod
+    def _raise_integrity_error(error: IntegrityError) -> None:
+        if _constraint_name(error) in {"products_sku_key", "uq_products_sku_upper"}:
+            raise DomainError(
+                409, "PRODUCT_SKU_CONFLICT", "Product SKU already exists."
+            ) from error

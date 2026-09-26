@@ -60,51 +60,14 @@ def test_master_data_router_module_has_no_sql_or_transaction_operations() -> Non
     assert database_calls == []
 
 
-def test_legacy_router_contains_only_deferred_product_routes() -> None:
+def test_legacy_router_debt_is_removed_from_master_data() -> None:
     path = Path("app/master_data/_legacy_router.py")
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    routes: set[tuple[str, str]] = set()
-    handlers: set[str] = set()
-    functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
-    route_methods = {"get", "post", "put", "patch", "delete", "api_route", "route"}
-    nested_route_registrations = [
+    assert not path.exists()
+    router = ast.parse(Path("app/master_data/router.py").read_text(encoding="utf-8"))
+    legacy_imports = [
         node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"include_router", "add_api_route"}
+        for node in ast.walk(router)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "app.master_data._legacy_router"
     ]
-
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for decorator in node.decorator_list:
-            if not isinstance(decorator, ast.Call):
-                continue
-            if not isinstance(decorator.func, ast.Attribute):
-                continue
-            if decorator.func.attr not in route_methods:
-                continue
-            if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
-                continue
-            route_path = decorator.args[0].value
-            if isinstance(route_path, str):
-                handlers.add(node.name)
-                routes.add((decorator.func.attr, route_path))
-
-    assert handlers == {
-        "list_products",
-        "get_product",
-        "create_product",
-        "update_product",
-        "delete_product",
-    }
-    assert functions == handlers | {"_page"}
-    assert nested_route_registrations == []
-    assert routes == {
-        ("get", "/products"),
-        ("get", "/products/{product_id}"),
-        ("post", "/products"),
-        ("put", "/products/{product_id}"),
-        ("delete", "/products/{product_id}"),
-    }
+    assert legacy_imports == []

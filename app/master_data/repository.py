@@ -1,10 +1,19 @@
 """Persistence boundaries for master-data records."""
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.pagination import PageParams
-from app.models import Category, Product, Supplier
+from app.models import (
+    Category,
+    Inbound,
+    Outbound,
+    Product,
+    PurchaseRequest,
+    Stock,
+    StockTransaction,
+    Supplier,
+)
 
 
 class CategoryRepository:
@@ -104,3 +113,102 @@ class SupplierRepository:
     def has_products(self, supplier_id: int) -> bool:
         statement = select(Product.id).where(Product.supplier_id == supplier_id).limit(1)
         return self.session.scalar(statement) is not None
+
+
+class ProductRepository:
+    """Query and stage product persistence without owning transactions."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    @staticmethod
+    def _filters(
+        *,
+        search: str | None,
+        category_id: int | None,
+        supplier_id: int | None,
+        is_active: bool | None,
+    ):
+        filters = []
+        if search:
+            pattern = f"%{search.strip()}%"
+            filters.append(
+                or_(
+                    Product.sku.ilike(pattern),
+                    Product.name.ilike(pattern),
+                    Product.description.ilike(pattern),
+                )
+            )
+        if category_id is not None:
+            filters.append(Product.category_id == category_id)
+        if supplier_id is not None:
+            filters.append(Product.supplier_id == supplier_id)
+        if is_active is not None:
+            filters.append(Product.is_active.is_(is_active))
+        return filters
+
+    def list(
+        self,
+        params: PageParams,
+        *,
+        search: str | None = None,
+        category_id: int | None = None,
+        supplier_id: int | None = None,
+        is_active: bool | None = None,
+    ) -> list[Product]:
+        statement = select(Product).where(
+            *self._filters(
+                search=search,
+                category_id=category_id,
+                supplier_id=supplier_id,
+                is_active=is_active,
+            )
+        )
+        statement = (
+            statement.order_by(Product.id)
+            .offset(params.offset)
+            .limit(params.page_size)
+        )
+        return list(self.session.scalars(statement).all())
+
+    def count(
+        self,
+        *,
+        search: str | None = None,
+        category_id: int | None = None,
+        supplier_id: int | None = None,
+        is_active: bool | None = None,
+    ) -> int:
+        statement = select(func.count()).select_from(Product).where(
+            *self._filters(
+                search=search,
+                category_id=category_id,
+                supplier_id=supplier_id,
+                is_active=is_active,
+            )
+        )
+        return self.session.scalar(statement) or 0
+
+    def get(self, product_id: int) -> Product | None:
+        return self.session.get(Product, product_id)
+
+    def add(self, product: Product) -> None:
+        self.session.add(product)
+
+    @staticmethod
+    def update(product: Product, values: dict[str, object]) -> None:
+        for field, value in values.items():
+            setattr(product, field, value)
+
+    def delete(self, product: Product) -> None:
+        self.session.delete(product)
+
+    def has_references(self, product_id: int) -> bool:
+        references = (
+            exists(select(Stock.id).where(Stock.product_id == product_id)),
+            exists(select(Inbound.id).where(Inbound.product_id == product_id)),
+            exists(select(Outbound.id).where(Outbound.product_id == product_id)),
+            exists(select(StockTransaction.id).where(StockTransaction.product_id == product_id)),
+            exists(select(PurchaseRequest.id).where(PurchaseRequest.product_id == product_id)),
+        )
+        return bool(self.session.scalar(select(or_(*references))))
