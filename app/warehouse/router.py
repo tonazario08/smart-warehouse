@@ -1,24 +1,33 @@
+"""Authenticated warehouse API routes."""
+
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import Permission, require_permission
+from app.core.pagination import Page, PageParams
 from app.db.session import get_session
 from app.models import User, Warehouse
-from app.warehouse.schemas import WarehouseCreate, WarehouseResponse
+from app.warehouse.repository import WarehouseRepository
+from app.warehouse.schemas import WarehouseResponse, WarehouseWrite
+from app.warehouse.service import WarehouseService
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
 
-@router.get("", response_model=list[WarehouseResponse])
+def _warehouse_service(session: Session) -> WarehouseService:
+    return WarehouseService(session, WarehouseRepository(session))
+
+
+@router.get("", response_model=Page[WarehouseResponse])
 def list_warehouses(
+    params: Annotated[PageParams, Depends()],
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.WAREHOUSE_READ))],
-) -> list[Warehouse]:
-    return list(session.scalars(select(Warehouse).order_by(Warehouse.id)))
+    search: Annotated[str | None, Query()] = None,
+) -> Page[Warehouse]:
+    return _warehouse_service(session).list(params, search)
 
 
 @router.get("/{warehouse_id}", response_model=WarehouseResponse)
@@ -27,49 +36,33 @@ def get_warehouse(
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.WAREHOUSE_READ))],
 ) -> Warehouse:
-    warehouse = session.get(Warehouse, warehouse_id)
-    if warehouse is None:
-        raise HTTPException(status_code=404, detail="Warehouse not found")
-    return warehouse
+    return _warehouse_service(session).get(warehouse_id)
 
 
 @router.post("", response_model=WarehouseResponse, status_code=status.HTTP_201_CREATED)
 def create_warehouse(
-    request: WarehouseCreate,
+    request: WarehouseWrite,
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.WAREHOUSE_WRITE))],
 ) -> Warehouse:
-    warehouse = Warehouse(**request.model_dump())
-    session.add(warehouse)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(
-            status_code=409, detail="Warehouse code or name already exists"
-        ) from error
-    session.refresh(warehouse)
-    return warehouse
+    return _warehouse_service(session).create(request)
 
 
 @router.put("/{warehouse_id}", response_model=WarehouseResponse)
 def update_warehouse(
     warehouse_id: int,
-    request: WarehouseCreate,
+    request: WarehouseWrite,
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.WAREHOUSE_WRITE))],
 ) -> Warehouse:
-    warehouse = session.get(Warehouse, warehouse_id)
-    if warehouse is None:
-        raise HTTPException(status_code=404, detail="Warehouse not found")
-    for field, value in request.model_dump().items():
-        setattr(warehouse, field, value)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(
-            status_code=409, detail="Warehouse code or name already exists"
-        ) from error
-    session.refresh(warehouse)
-    return warehouse
+    return _warehouse_service(session).update(warehouse_id, request)
+
+
+@router.delete("/{warehouse_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_warehouse(
+    warehouse_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    _: Annotated[User, Depends(require_permission(Permission.WAREHOUSE_WRITE))],
+) -> Response:
+    _warehouse_service(session).delete(warehouse_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

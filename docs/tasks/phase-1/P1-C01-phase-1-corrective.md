@@ -323,3 +323,16 @@ npm.cmd run e2e
 ## Completion Evidence
 
 - Final status: not completed
+
+## Internal Task 9 Evidence (append-only)
+
+### 2026-09-27 — Internal Task 9 implementation and verification
+
+- Confirmed P1-C01's dependency `docs/tasks/process/P-001-file-per-task-workflow.md` is `DONE`, Task 8 is accepted at HEAD `b2de738`, and the approved plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-9-brief.md` authorize this scope. The P1-C01 baseline and overall `IN_PROGRESS` state remain unchanged.
+- PostgreSQL RED: `.venv\Scripts\python.exe -m pytest tests/postgres/test_warehouses.py -q` — 22 failed and 7 passed. The failures reproduced missing paginated reads/delete, coordinate validation, strict/normalized schemas, stable errors, search, and protected-delete behavior.
+- Mutation evidence: a temporary direct `session.commit()` caused `test_warehouse_router_module_has_no_sql_or_transaction_operations` to fail. Temporarily disabling all six `WarehouseRepository.has_references` predicates caused the six isolated parameter cases to fail at their direct repository assertion. Restored every mutation; all six API cases then passed and verified `WAREHOUSE_IN_USE` plus persistence of the warehouse and reference row.
+- Focused PostgreSQL/constraint/architecture/schema verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_warehouses.py tests/postgres/test_constraints.py tests/unit/test_architecture.py tests/test_warehouses.py -q` — 54 passed.
+- Sequential full regression passed against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 225 passed. Existing Starlette/httpx and pytest-asyncio deprecation warnings were emitted; no test failed.
+- Static and diff verification passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
+- Detailed RED/GREEN and self-review evidence is in the ignored report `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-9-implementer-report.md`. Task 9 changes await checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.
+- Mutation specificity follow-up: after isolating the transaction fixture's linked inbound in a companion warehouse, each of the six predicates was independently changed to an impossible ID. Its matching reference case failed at `WarehouseRepository.has_references`; each mutation was restored, followed by a passing full focused gate.
