@@ -336,3 +336,10 @@ npm.cmd run e2e
 - Static and diff verification passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
 - Detailed RED/GREEN and self-review evidence is in the ignored report `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-9-implementer-report.md`. Task 9 changes await checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.
 - Mutation specificity follow-up: after isolating the transaction fixture's linked inbound in a companion warehouse, each of the six predicates was independently changed to an impossible ID. Its matching reference case failed at `WarehouseRepository.has_references`; each mutation was restored, followed by a passing full focused gate.
+
+### 2026-09-27 — Internal Task 9 accepted
+
+- Independent review of diff `b2de738..cedfcad` found no Critical, Important, or Minor finding.
+- Reviewer verification passed: focused PostgreSQL warehouse, constraint, architecture, and schema suite — 54 passed.
+- Task 9 checkpoint is `cedfcad`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-9-review-report.md`.
+- Internal Task 9 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 10.
