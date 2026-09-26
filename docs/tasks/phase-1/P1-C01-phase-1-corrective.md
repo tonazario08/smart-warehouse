@@ -282,6 +282,14 @@ npm.cmd run e2e
 - Product routes now use `ProductRepository` and `ProductService`; the composed master-data router no longer includes `_legacy_router.py`, which has been deleted. Product delete checks stock, inbound, outbound, transaction, and purchase-request references before ORM deletion to preserve all dependent rows.
 - Detailed RED/GREEN evidence, RBAC/filter/reference/delete/architecture coverage, changed files, verification, and self-review are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-8-implementer-report.md`.
 
+### 2026-09-27 — Task 8 review coverage correction
+
+- Independent review found the committed product delete-preservation test covered only `stocks`, while the repository guard also checks `inbounds`, `outbounds`, `transactions`, and `purchase_requests`.
+- Replaced the stock-only case with parameterized PostgreSQL cases for all five reference tables. Each case directly verifies `ProductRepository.has_references`, attempts API deletion, and confirms both the product and the matching reference row remain persisted with `PRODUCT_IN_USE`.
+- The transaction case creates a valid inbound movement link and satisfies the transaction type/link database constraint; its movement belongs to a companion product so the transaction product reference is isolated for mutation verification.
+- Mutation RED was observed separately for every reference check by changing that check's product predicate to an impossible ID. Each corresponding parameter case failed at the repository assertion. All temporary mutations were restored; no production behavior changed. The five restored cases passed.
+- Focused all-master-data and architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/postgres/test_suppliers.py tests/postgres/test_products.py tests/unit/test_architecture.py -q` — 74 passed. Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 188 passed. Ruff and `git diff --check` passed. Only the existing Starlette/httpx and pytest-asyncio deprecation warnings were emitted.
+
 ## Verification Evidence
 
 ### Focused

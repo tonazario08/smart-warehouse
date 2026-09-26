@@ -1,11 +1,24 @@
 """PostgreSQL-backed product API and transaction contract tests."""
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth.security import create_access_token
-from app.models import Category, Product, Supplier, User, UserRole, Warehouse
+from app.master_data.repository import ProductRepository
+from app.models import (
+    Category,
+    Inbound,
+    Outbound,
+    Product,
+    PurchaseRequest,
+    Stock,
+    StockTransaction,
+    Supplier,
+    TransactionType,
+    User,
+    UserRole,
+    Warehouse,
+)
 
 
 @pytest.fixture
@@ -245,35 +258,82 @@ def test_product_update_conflict_rolls_back_all_fields(
     assert persisted.unit == "each"
 
 
-def test_product_delete_in_use_preserves_references(
-    postgres_client, postgres_session, role_headers, category
+@pytest.mark.parametrize(
+    "reference_table",
+    ["stocks", "inbounds", "outbounds", "transactions", "purchase_requests"],
+)
+def test_product_delete_in_use_preserves_each_reference(
+    postgres_client, postgres_session, role_headers, category, reference_table
 ):
     warehouse = Warehouse(code="MAIN", name="Main Warehouse", address="Main Road")
     postgres_session.add(warehouse)
     postgres_session.flush()
     product = Product(sku="SKU-IN-USE", name="Bolt", category_id=category.id, unit="each")
     postgres_session.add(product)
+
+    admin = postgres_session.query(User).filter_by(role=UserRole.ADMIN).one()
+    if reference_table == "transactions":
+        # The linked movement uses a companion product so the transaction's product FK
+        # is the only reference to the product being deleted. The DB enforces the movement link.
+        movement_product = Product(
+            sku="SKU-MOVEMENT", name="Movement", category_id=category.id, unit="each"
+        )
+        postgres_session.add(movement_product)
+        postgres_session.flush()
+        movement = Inbound(
+            warehouse_id=warehouse.id,
+            product_id=movement_product.id,
+            quantity=1,
+            created_by_id=admin.id,
+        )
+        postgres_session.add(movement)
+        postgres_session.flush()
+        reference = StockTransaction(
+            transaction_type=TransactionType.INBOUND,
+            warehouse_id=warehouse.id,
+            product_id=product.id,
+            quantity=1,
+            inbound_id=movement.id,
+            created_by_id=admin.id,
+        )
+    elif reference_table == "stocks":
+        reference = Stock(warehouse_id=warehouse.id, product_id=product.id, quantity=1)
+    elif reference_table == "inbounds":
+        reference = Inbound(
+            warehouse_id=warehouse.id,
+            product_id=product.id,
+            quantity=1,
+            created_by_id=admin.id,
+        )
+    elif reference_table == "outbounds":
+        reference = Outbound(
+            warehouse_id=warehouse.id,
+            product_id=product.id,
+            quantity=1,
+            created_by_id=admin.id,
+        )
+    else:
+        reference = PurchaseRequest(
+            request_number="REQ-PRODUCT-IN-USE",
+            warehouse_id=warehouse.id,
+            product_id=product.id,
+            quantity=1,
+            requested_by_id=admin.id,
+        )
+
+    postgres_session.add(reference)
     postgres_session.commit()
-    postgres_session.execute(
-        text(
-            "INSERT INTO stocks (warehouse_id, product_id, quantity) "
-            "VALUES (:warehouse_id, :product_id, 1)"
-        ),
-        {"warehouse_id": warehouse.id, "product_id": product.id},
-    )
-    postgres_session.commit()
+    reference_id = reference.id
+    assert ProductRepository(postgres_session).has_references(product.id)
 
     response = postgres_client.delete(
         f"/api/v1/products/{product.id}", headers=role_headers[UserRole.ADMIN]
     )
     postgres_session.expire_all()
     persisted = postgres_session.get(Product, product.id)
-    stock = postgres_session.execute(
-        text("SELECT product_id FROM stocks WHERE product_id = :id"),
-        {"id": product.id},
-    ).scalar_one_or_none()
+    persisted_reference = postgres_session.get(type(reference), reference_id)
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "PRODUCT_IN_USE"
     assert persisted is not None
-    assert stock == product.id
+    assert persisted_reference is not None
