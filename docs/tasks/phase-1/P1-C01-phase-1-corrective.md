@@ -362,3 +362,10 @@ npm.cmd run e2e
 - Self-review found that initially reusing the expanded movement-read schema for POST responses added `created_by_id` and `created_at` to Task 11 write responses. Added an assertion for the existing inbound POST response shape and observed it fail with those two extra fields.
 - Split the strict `InventoryMovementReadResponse` from the existing `InventoryMovementResponse`; all inbound/outbound read routes use the former and POST routes retain the latter. The regression test then passed.
 - Re-ran the final focused gate — 31 passed — and full PostgreSQL-backed suite — 249 passed. Ruff and `git diff --check` passed. These final serial results supersede the earlier verification runs.
+
+### 2026-09-27 — Internal Task 10 accepted
+
+- Independent review of diff `58ada34..089f213` found no Critical, Important, or Minor finding.
+- Reviewer verification passed serially: PostgreSQL inventory reads — 21 passed; architecture and preserved write-contract checks — 10 passed; `git diff --check` — passed.
+- Task 10 checkpoint is `089f213`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-10-review-report.md`.
+- Internal Task 10 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 11.
