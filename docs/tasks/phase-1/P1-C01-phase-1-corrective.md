@@ -172,6 +172,19 @@ npm.cmd run e2e
 - Task 3 implementation checkpoints are `edb9b41` and `6752f58`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-3-review-report.md`.
 - Internal Task 3 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 4.
 
+### 2026-09-26 — Internal Task 4 implementation evidence
+
+- Test-first auth/schema and PostgreSQL integration run initially produced the expected RED findings: public registration accepted a supplied role, request schemas did not normalize email or forbid extra fields, and the token helper still required a role claim. The first run showed 8 failures and 3 passes; the disabled-account scenario was then rewritten to seed the real PostgreSQL session directly after its initial fixture probe was invalid.
+- Focused auth, PostgreSQL, and error-contract verification passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py tests/test_error_contract.py -q` — 24 passed.
+- Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 90 passed. `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed.
+- PostgreSQL 16 test database was started with `docker compose -f docker-compose.test.yml up -d db_test`; auth integration tests passed against the disposable `smart_warehouse_test` database.
+- Detailed RED/GREEN, boundary, file, self-review, and concern record: `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-4-implementer-report.md`.
+
+### 2026-09-26 — Task 4 verification follow-up
+
+- A test-first expiry regression initially failed because token creation hard-coded 30 minutes instead of honoring `Settings.jwt_expire_minutes`; the helper now uses the configured lifetime, and `.venv\Scripts\python.exe -m pytest tests/postgres/test_auth_integration.py::test_access_token_contains_only_identity_and_lifecycle_claims -q` passed after correction.
+- Repeated final verification after this correction: focused auth/PostgreSQL/error suite — 24 passed; full pytest suite — 90 passed; Ruff — all checks passed; `git diff --check` — passed.
+
 ## Verification Evidence
 
 ### Focused
