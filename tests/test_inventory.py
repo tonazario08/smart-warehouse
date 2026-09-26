@@ -1,7 +1,9 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -10,6 +12,7 @@ from app.auth.security import create_access_token, hash_password
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
+from app.inventory.schemas import InventoryFilters, TransactionFilters
 from app.main import create_app
 from app.models import (
     Category,
@@ -61,6 +64,14 @@ def test_inbound_increments_stock_and_writes_audit_transaction(
     )
 
     assert response.status_code == 201
+    assert set(response.json()) == {
+        "id",
+        "warehouse_id",
+        "product_id",
+        "quantity",
+        "reference",
+        "note",
+    }
     assert session.scalar(select(Stock).where(Stock.warehouse_id == warehouse.id)).quantity == 12
     assert session.scalar(select(Inbound)) is not None
     transaction = session.scalar(select(StockTransaction))
@@ -93,23 +104,24 @@ def test_outbound_decrements_stock_and_rejects_insufficient_quantity(
     assert len(session.scalars(select(StockTransaction)).all()) == 1
 
 
-def test_stock_list_is_read_only_and_available_to_inventory_read_roles(
-    inventory_client: tuple[TestClient, Session, Warehouse, Product, User],
-) -> None:
-    test_client, session, warehouse, product, user = inventory_client
-    session.add(Stock(warehouse_id=warehouse.id, product_id=product.id, quantity=5))
-    session.commit()
-
-    response = test_client.get(
-        f"/api/v1/stock?warehouse_id={warehouse.id}", headers=auth(user)
+def test_inventory_filters_require_timezone_aware_ordered_range() -> None:
+    filters = InventoryFilters(
+        created_from=datetime(2026, 1, 1, tzinfo=UTC),
+        created_to=datetime(2026, 1, 2, tzinfo=UTC),
     )
+    assert filters.created_from is not None
 
-    assert response.status_code == 200
-    assert response.json() == [
-        {
-            "id": session.scalar(select(Stock.id)),
-            "warehouse_id": warehouse.id,
-            "product_id": product.id,
-            "quantity": 5,
-        }
-    ]
+    with pytest.raises(ValidationError):
+        InventoryFilters(created_from=datetime(2026, 1, 1))
+    with pytest.raises(ValidationError):
+        InventoryFilters(
+            created_from=datetime(2026, 1, 2, tzinfo=UTC),
+            created_to=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+
+def test_transaction_filters_reject_unknown_fields_and_invalid_type() -> None:
+    with pytest.raises(ValidationError):
+        TransactionFilters(unexpected="value")
+    with pytest.raises(ValidationError):
+        TransactionFilters(transaction_type="transfer")

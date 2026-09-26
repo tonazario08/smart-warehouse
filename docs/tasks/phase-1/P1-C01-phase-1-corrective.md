@@ -343,3 +343,22 @@ npm.cmd run e2e
 - Reviewer verification passed: focused PostgreSQL warehouse, constraint, architecture, and schema suite — 54 passed.
 - Task 9 checkpoint is `cedfcad`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-9-review-report.md`.
 - Internal Task 9 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 10.
+
+## Internal Task 10 Evidence (append-only)
+
+### 2026-09-27 — Internal Task 10 implementation and verification
+
+- Confirmed P1-C01's dependency `docs/tasks/process/P-001-file-per-task-workflow.md` is `DONE`, Task 9 is accepted at HEAD `58ada34`, and the approved Task 10 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-10-brief.md` authorize this scope. The P1-C01 baseline and overall `IN_PROGRESS` state remain unchanged.
+- PostgreSQL RED: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py -q` — 20 failed and 2 warnings. Failures reproduced the raw stock/transaction arrays, missing inbound/outbound list/detail routes, missing stock detail, absent pagination/filter validation, resource-specific 404 errors, and incorrect client access to history.
+- Architecture mutation RED: temporarily adding `session.scalar(select(Stock))` to `list_stock` made `test_inventory_read_handlers_delegate_queries_and_do_not_manage_transactions` fail; adding `self.repository.session.commit()` to the inventory read service made `test_inventory_service_does_not_manage_read_transactions` fail. Both temporary mutations were restored.
+- Final focused verification against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py tests/unit/test_architecture.py tests/test_inventory.py -q` — 31 passed. Coverage includes bounded pagination and filter/count parity for all four resources, timestamp/id ordering, all detail routes and not-found codes, strict filters/responses, anonymous and client RBAC, read architecture boundaries, and preserved SQLite write behavior.
+- Final full regression against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 249 passed. Output contained only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
+- Static verification: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — PASS.
+- Added explicit inventory read repository and service methods; exposed paginated stock, inbound, outbound, and transaction reads with stable ordering, strict filters, narrow response schemas, resource-specific detail errors, and `INVENTORY_HISTORY_READ`. Existing inbound/outbound write handlers remain unchanged.
+- Detailed RED/GREEN evidence, changed files, self-review, and concerns are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-10-implementer-report.md`. Task 10 changes await checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-27 — Preserve movement write response contract
+
+- Self-review found that initially reusing the expanded movement-read schema for POST responses added `created_by_id` and `created_at` to Task 11 write responses. Added an assertion for the existing inbound POST response shape and observed it fail with those two extra fields.
+- Split the strict `InventoryMovementReadResponse` from the existing `InventoryMovementResponse`; all inbound/outbound read routes use the former and POST routes retain the latter. The regression test then passed.
+- Re-ran the final focused gate — 31 passed — and full PostgreSQL-backed suite — 249 passed. Ruff and `git diff --check` passed. These final serial results supersede the earlier verification runs.

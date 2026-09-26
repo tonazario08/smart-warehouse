@@ -25,6 +25,7 @@ class Permission(StrEnum):
     WAREHOUSE_READ = "warehouse:read"
     WAREHOUSE_WRITE = "warehouse:write"
     INVENTORY_READ = "inventory:read"
+    INVENTORY_HISTORY_READ = "inventory:history:read"
     INVENTORY_WRITE = "inventory:write"
     DASHBOARD_READ = "dashboard:read"
     USER_MANAGE = "user:manage"
@@ -40,6 +41,7 @@ PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.WAREHOUSE_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.CLIENT}),
     Permission.WAREHOUSE_WRITE: frozenset({UserRole.ADMIN}),
     Permission.INVENTORY_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.CLIENT}),
+    Permission.INVENTORY_HISTORY_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
     Permission.INVENTORY_WRITE: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
     Permission.DASHBOARD_READ: frozenset({UserRole.ADMIN}),
     Permission.USER_MANAGE: frozenset({UserRole.ADMIN}),
