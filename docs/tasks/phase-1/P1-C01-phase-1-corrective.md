@@ -247,6 +247,16 @@ npm.cmd run e2e
 - Task 6 implementation checkpoints are `01755bb` and `57d5d8c`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-6-review-report.md`.
 - Internal Task 6 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 7.
 
+### 2026-09-26 — Internal Task 7 implementation evidence
+
+- PostgreSQL RED run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_suppliers.py tests/unit/test_architecture.py -q` — 15 failed and 8 passed. Failures exposed unnormalized supplier values, permissive request schemas, absent search, unstable domain errors, referenced-supplier deletion behavior, and supplier routes still present in `_legacy_router.py`.
+- Delete regression investigation showed a successful delete also cleared the persisted product's nullable `supplier_id`; SQLAlchemy's relationship handling nulled the foreign key before PostgreSQL `RESTRICT` could reject the delete. A failing preservation assertion confirmed the behavior. `SupplierRepository.has_products()` and a service-level guard now return `SUPPLIER_IN_USE` before ORM deletion.
+- Focused PostgreSQL and architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_suppliers.py tests/postgres/test_categories.py tests/unit/test_architecture.py -q` — 49 passed.
+- Full regression passed against disposable PostgreSQL: `.venv\Scripts\python.exe -m pytest -q` — 166 passed. `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed.
+- Test output contained only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
+- Implementation checkpoint: `b5c695edeb80996799da7e119e0d627be2123dc0` (`refactor(suppliers): add validated domain service`), based on accepted Task 6 checkpoint `57d5d8c`.
+- The detailed RED/GREEN, RBAC/filter/error/architecture coverage, verification, changed-file list, and self-review are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-7-implementer-report.md`. Task 7 awaits independent review; P1-C01 remains `IN_PROGRESS`.
+
 ## Verification Evidence
 
 ### Focused
