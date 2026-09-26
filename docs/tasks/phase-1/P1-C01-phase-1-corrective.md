@@ -232,6 +232,14 @@ npm.cmd run e2e
 - The category routes now use `CategoryRepository` and `CategoryService`; missing credentials return the `AUTHENTICATION_REQUIRED` code required by the category contract. Product and supplier routes were moved unchanged into `app/master_data/_legacy_router.py` so `app/master_data/router.py` contains no direct SQL or transaction operations. This shifts the implementation location for their planned Task 7/8 service slices; those tasks should continue from `_legacy_router.py` while retaining the public API.
 - Detailed RED/GREEN output, files, verification, self-review, and the route-location note are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-6-implementer-report.md`.
 
+### 2026-09-26 — Task 6 review-test correction evidence
+
+- Independent review reported one Minor transparency finding: the architecture test name implied the composed master-data router was clean while inspecting only `router.py`, despite `_legacy_router.py` intentionally containing the deferred product/supplier handlers.
+- Renamed the assertion to `test_category_router_module_has_no_sql_or_transaction_operations` and added `test_legacy_router_contains_only_deferred_product_and_supplier_routes`, which constrains the legacy module to the ten planned product/supplier route-handler pairs and fails if a category handler is placed there.
+- Regression RED was verified by temporarily adding a category route to `_legacy_router.py`: `.venv\Scripts\python.exe -m pytest tests/unit/test_architecture.py::test_legacy_router_contains_only_deferred_product_and_supplier_routes -q` — 1 failed because `temporary_category_route` appeared outside the allowed handler set. The temporary mutation was removed.
+- GREEN verification passed against disposable PostgreSQL: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/unit/test_architecture.py -q` — 23 passed. Full regression: `.venv\Scripts\python.exe -m pytest -q` — 141 passed. Ruff: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. The only output warnings were the existing Starlette/httpx and pytest-asyncio deprecations.
+- The independent review report remains unchanged. This correction changes only architecture tests and this append-only evidence; Task 7/8 handlers remain deferred in `_legacy_router.py`.
+
 ## Verification Evidence
 
 ### Focused
