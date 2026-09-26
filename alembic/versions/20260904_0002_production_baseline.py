@@ -72,12 +72,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_transactions_exactly_one_movement", "transactions", type_="check")
-    op.drop_constraint(
-        "ck_warehouses_coordinates_paired_and_ranged", "warehouses", type_="check"
-    )
-    op.drop_constraint("ck_warehouses_code_normalized", "warehouses", type_="check")
     op.drop_index("uq_warehouses_code_upper", table_name="warehouses")
     op.drop_index("uq_products_sku_upper", table_name="products")
     op.drop_index("uq_users_email_lower", table_name="users")
+
+    with op.batch_alter_table("transactions") as batch_op:
+        batch_op.drop_constraint("ck_transactions_exactly_one_movement", type_="check")
+    with op.batch_alter_table("warehouses") as batch_op:
+        batch_op.drop_constraint("ck_warehouses_coordinates_paired_and_ranged", type_="check")
+        batch_op.drop_constraint("ck_warehouses_code_normalized", type_="check")
+
     op.drop_table("audit_logs")

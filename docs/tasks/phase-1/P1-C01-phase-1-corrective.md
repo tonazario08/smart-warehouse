@@ -158,6 +158,13 @@ npm.cmd run e2e
 - The focused and full suites emitted only existing FastAPI/Starlette and pytest-asyncio deprecation warnings. No migration or application failure remains in this workstream.
 - Detailed RED/GREEN output, changed files, self-review, and migration data note are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-3-implementer-report.md`.
 
+### 2026-09-26 — Task 3 review correction evidence
+
+- Independent review reproduced a SQLite downgrade failure: `upgrade head` succeeded, while `downgrade 20260829_0001` raised `NotImplementedError` at direct check-constraint removal.
+- Added `tests/test_migrations.py` first and observed that failure. Changed downgrade to remove functional indexes before dropping the warehouse and transaction checks through Alembic batch operations.
+- Verification passed: `.venv\Scripts\python.exe -m pytest tests/test_migrations.py -q` — 1 passed; focused PostgreSQL migration/constraint tests — 14 passed; `.venv\Scripts\python.exe -m pytest -q` — 82 passed; `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
+- Full and focused suites emitted only the existing FastAPI/Starlette and pytest-asyncio deprecation warnings. Independent review report was left unchanged.
+
 ## Verification Evidence
 
 ### Focused
