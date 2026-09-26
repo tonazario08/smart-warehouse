@@ -149,6 +149,15 @@ npm.cmd run e2e
 - Internal Task 2 checkpoint is `93bff3e`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-2-review-report.md`.
 - Internal Task 2 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 3.
 
+### 2026-09-26 — Internal Task 3 implementation evidence
+
+- Test-first PostgreSQL gate initially failed all 14 migration and constraint cases because the audit table and production checks/indexes were absent. After implementation, the focused gate passed with 14 passed.
+- A coordinate regression exposed PostgreSQL `CHECK` semantics accepting an unknown result when one coordinate was `NULL`; the pair check now explicitly requires both values in the ranged branch. The regression went from one failing parameter case to a passing focused gate.
+- A migration normalization regression was observed by temporarily removing the three canonicalization updates: upgrade failed when the normalized warehouse check found legacy lowercase/padded code. Restoring `lower(trim(email))`, `upper(trim(sku))`, and `upper(trim(code))` made both migration paths pass and stored the expected canonical values.
+- Verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_migrations.py tests/postgres/test_constraints.py -q` — 14 passed; `.venv\Scripts\python.exe -m pytest -q` — 81 passed; `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
+- The focused and full suites emitted only existing FastAPI/Starlette and pytest-asyncio deprecation warnings. No migration or application failure remains in this workstream.
+- Detailed RED/GREEN output, changed files, self-review, and migration data note are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-3-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused

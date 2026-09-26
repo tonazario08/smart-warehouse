@@ -1,3 +1,4 @@
+from app.audit.models import AuditLog
 from app.models.domain import (
     Category,
     Inbound,
@@ -16,6 +17,7 @@ from app.models.domain import (
 )
 
 __all__ = [
+    "AuditLog",
     "Category",
     "Inbound",
     "Outbound",
