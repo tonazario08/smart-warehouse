@@ -112,6 +112,13 @@ npm.cmd run e2e
 - Official SDD helper scripts cannot run because WSL/bash is unavailable; the recovery ledger is maintained manually in the git-ignored SDD workspace.
 - The untracked legacy `docs/plans/current-task.md` was intentionally not ported into the worktree and is not used for routing; P-001's authoritative completion evidence remains unchanged.
 
+### 2026-09-26 — Internal Task 1 implementation evidence
+
+- Focused Task 1 verification passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_config.py tests/unit/test_pagination.py tests/test_error_contract.py tests/test_health.py -q` — 40 passed.
+- Regression verification passed: `.venv\Scripts\python.exe -m pytest -q` — 67 passed; `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
+- A new RED/GREEN correction rejects a production JWT secret consisting only of whitespace. The focused test failed before the validator fix because no `ValidationError` was raised, and passed after measuring the stripped value's length.
+- The detailed Task 1 implementer report is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-1-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused
