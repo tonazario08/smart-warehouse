@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.auth.security import create_access_token, hash_password
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -45,7 +46,7 @@ def inventory_client() -> Iterator[tuple[TestClient, Session, Warehouse, Product
 
 
 def auth(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id, user.role)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, get_settings())}"}
 
 
 def test_inbound_increments_stock_and_writes_audit_transaction(

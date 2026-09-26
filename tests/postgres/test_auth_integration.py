@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 import jwt
+import pytest
+from pydantic import SecretStr
 
 from app.auth.security import create_access_token, hash_password
 from app.models import User, UserRole
@@ -41,17 +43,22 @@ def test_duplicate_registration_returns_specific_email_conflict(postgres_client)
 
 
 def test_access_token_contains_only_identity_and_lifecycle_claims(unit_settings) -> None:
-    settings = unit_settings.model_copy(update={"jwt_expire_minutes": 5})
-    token = create_access_token(23, settings)
-    claims = jwt.decode(
-        token,
-        settings.jwt_secret_key.get_secret_value(),
-        algorithms=["HS256"],
+    custom_secret = "distinct-custom-jwt-secret-with-more-than-32-characters"
+    settings = unit_settings.model_copy(
+        update={"jwt_expire_minutes": 5, "jwt_secret_key": SecretStr(custom_secret)}
     )
+    token = create_access_token(23, settings)
+    claims = jwt.decode(token, custom_secret, algorithms=["HS256"])
 
     assert set(claims) == {"sub", "iat", "exp"}
     assert claims["sub"] == "23"
     assert claims["exp"] - claims["iat"] == 300
+    with pytest.raises(jwt.InvalidTokenError):
+        jwt.decode(
+            token,
+            unit_settings.jwt_secret_key.get_secret_value(),
+            algorithms=["HS256"],
+        )
 
 
 def test_missing_and_disabled_users_have_same_login_error(

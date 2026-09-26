@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.auth.security import create_access_token, hash_password
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -45,7 +46,7 @@ def client() -> Iterator[tuple[TestClient, Session]]:
 def headers(session: Session, role: UserRole) -> dict[str, str]:
     user = session.query(User).filter_by(role=role).first()
     assert user is not None
-    return {"Authorization": f"Bearer {create_access_token(user.id, user.role)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, get_settings())}"}
 
 
 def test_warehouse_read_is_allowed_to_client_and_write_is_admin_only(

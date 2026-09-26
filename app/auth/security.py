@@ -4,8 +4,7 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from app.core.config import Settings, get_settings
-from app.models import UserRole
+from app.core.config import Settings
 
 JWT_ALGORITHM = "HS256"
 password_hasher = PasswordHasher()
@@ -23,11 +22,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(
-    user_id: int, settings: Settings | UserRole, expires_delta: timedelta | None = None
+    user_id: int, settings: Settings, expires_delta: timedelta | None = None
 ) -> str:
-    # Existing internal callers may still pass the former role argument; it is ignored.
-    if isinstance(settings, UserRole):
-        settings = get_settings()
+    if not isinstance(settings, Settings):
+        raise TypeError("settings must be a Settings instance")
     issued_at = datetime.now(UTC)
     lifetime = (
         expires_delta

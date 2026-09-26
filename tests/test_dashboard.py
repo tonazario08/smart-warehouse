@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.auth.security import create_access_token, hash_password
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -30,12 +31,13 @@ def test_dashboard_is_admin_only_and_reports_stock_metrics() -> None:
     application = create_app()
     application.dependency_overrides[get_session] = lambda: session
     with TestClient(application) as test_client:
-        client_token = create_access_token(client_user.id, client_user.role)
+        settings = get_settings()
+        client_token = create_access_token(client_user.id, settings)
         response = test_client.get(
             "/api/v1/dashboard/stats", headers={"Authorization": f"Bearer {client_token}"}
         )
         assert response.status_code == 403
-        admin_token = create_access_token(admin.id, admin.role)
+        admin_token = create_access_token(admin.id, settings)
         response = test_client.get(
             "/api/v1/dashboard/stats", headers={"Authorization": f"Bearer {admin_token}"}
         )

@@ -185,6 +185,13 @@ npm.cmd run e2e
 - A test-first expiry regression initially failed because token creation hard-coded 30 minutes instead of honoring `Settings.jwt_expire_minutes`; the helper now uses the configured lifetime, and `.venv\Scripts\python.exe -m pytest tests/postgres/test_auth_integration.py::test_access_token_contains_only_identity_and_lifecycle_claims -q` passed after correction.
 - Repeated final verification after this correction: focused auth/PostgreSQL/error suite — 24 passed; full pytest suite — 90 passed; Ruff — all checks passed; `git diff --check` — passed.
 
+### 2026-09-26 — Task 4 review correction evidence
+
+- Independent review identified that the temporary legacy `UserRole` argument to `create_access_token` selected process-wide settings. A test-first regression showed the helper did not reject that argument; a custom-secret case also verifies token signing and decoding use the same explicitly supplied Settings object.
+- Removed the legacy role fallback and made `Settings` mandatory. Updated the dashboard, inventory, master-data, and warehouse test callers to pass the default app Settings explicitly.
+- Focused regression passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py tests/test_error_contract.py -q` — 25 passed. Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 91 passed. Ruff and `git diff --check` passed.
+- Detailed correction evidence and expanded file list are appended to `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-4-implementer-report.md`; the independent review report was left unchanged.
+
 ## Verification Evidence
 
 ### Focused

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -24,6 +25,11 @@ def make_client(unit_settings) -> tuple[TestClient, Session, object]:
     application = create_app(unit_settings)
     application.dependency_overrides[get_session] = lambda: session
     return TestClient(application), session, engine
+
+
+def test_access_token_helper_requires_explicit_settings() -> None:
+    with pytest.raises(TypeError, match="settings must be a Settings instance"):
+        create_access_token(23, UserRole.ADMIN)
 
 
 def test_registration_always_creates_a_client_and_hashes_password(unit_settings) -> None:
