@@ -31,6 +31,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = ["postgres: requires the disposable PostgreSQL test database"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

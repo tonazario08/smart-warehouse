@@ -133,6 +133,15 @@ npm.cmd run e2e
 - Task 1 implementation checkpoints are `06810d2` and `7aa8a5a`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-1-review-report.md`.
 - Internal Task 1 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 2.
 
+### 2026-09-26 — Internal Task 2 implementation evidence
+
+- Focused PostgreSQL migration test first failed as expected because `postgres_url` was not yet provided. After adding the disposable service and fixtures, `.venv\Scripts\python.exe -m pytest tests/postgres/test_migrations.py -q` passed — 1 passed against PostgreSQL 16.
+- Fail-closed URL check verified with `TEST_DATABASE_URL` naming `warehouse`: pytest stopped at fixture setup with `TEST_DATABASE_URL must name a database ending in _test` before connecting.
+- Migration URL precedence verified by setting `DATABASE_URL` to an intentionally invalid, different database while Alembic received the explicit `postgres_url`; migration still downgraded to base, upgraded to head, and matched all 13 expected schema tables.
+- Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 68 passed. `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed.
+- The initial Compose invocation exposed a shared default project/network name with pre-existing local containers. The test Compose file now has a dedicated `smart-warehouse-test` project name and starts without orphan warnings.
+- Detailed RED/GREEN, implementation, verification, and concern record: `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-2-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused
