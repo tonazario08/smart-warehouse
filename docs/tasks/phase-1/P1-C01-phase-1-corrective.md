@@ -387,3 +387,8 @@ npm.cmd run e2e
 - Mutation checks were restored before final verification: omitting `FOR UPDATE` made the controlled waiter fail to observe a lock; omitting `ON CONFLICT DO NOTHING` reproduced `uq_stocks_warehouse_product`; omitting outbound rollback left the decremented quantity after simulated transaction-link persistence failure; omitting `inbound_id` violated `ck_transactions_exactly_one_movement`. Assertions cover competing outbound quantity and movement counts.
 - Full backend regression passed serially against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 257 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. The suites emitted the existing Starlette/httpx and pytest-asyncio deprecation warnings only.
 - Detailed evidence, changed files, self-review, and concerns are recorded in the ignored `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-11-implementer-report.md`. Task 11 awaits checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-27 — Internal Task 11 implementation checkpoint
+
+- Implementation checkpoint committed as `0a96c1762ee34fb33634e25c079a07e2695556e3` (`fix(inventory): make stock movements concurrency-safe`). The working tree was clean immediately after the commit.
+- Verification evidence above applies to this checkpoint. Task 11 awaits independent review; P1-C01 remains `IN_PROGRESS`.
