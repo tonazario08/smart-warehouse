@@ -68,6 +68,7 @@ def test_cors_origins_load_from_json_environment(monkeypatch: pytest.MonkeyPatch
     [
         "replace-with-a-long-random-secret",
         "local-development-secret-change-me",
+        " replace-with-a-long-random-secret ",
     ],
 )
 def test_production_rejects_known_jwt_placeholders(secret: str) -> None:

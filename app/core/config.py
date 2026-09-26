@@ -55,9 +55,9 @@ class Settings(BaseSettings):
         if database_url.drivername not in allowed_drivers:
             raise ValueError("database URL uses an unsupported synchronous driver")
 
-        secret = self.jwt_secret_key.get_secret_value()
+        secret = self.jwt_secret_key.get_secret_value().strip()
         if self.app_env == "production" and (
-            len(secret.strip()) < 32 or secret in UNSAFE_JWT_PLACEHOLDERS
+            len(secret) < 32 or secret in UNSAFE_JWT_PLACEHOLDERS
         ):
             raise ValueError("production JWT secret must contain at least 32 characters")
         return self

@@ -119,6 +119,13 @@ npm.cmd run e2e
 - A new RED/GREEN correction rejects a production JWT secret consisting only of whitespace. The focused test failed before the validator fix because no `ValidationError` was raised, and passed after measuring the stripped value's length.
 - The detailed Task 1 implementer report is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-1-implementer-report.md`.
 
+### 2026-09-26 — Internal Task 1 independent-review correction
+
+- Independent review reproduced acceptance of a whitespace-padded known JWT placeholder. The test-first regression case failed before the correction because configuration raised no `ValidationError`.
+- Production validation now trims the configured secret once and uses that normalized value for both minimum-length and known-placeholder checks. The regression case passed after the correction.
+- Post-fix verification passed: focused Task 1 suite — 41 passed; full pytest suite — 68 passed; Ruff — all checks passed; `git diff --check` — passed.
+- Detailed RED/GREEN output and post-review evidence are appended to `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-1-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused
