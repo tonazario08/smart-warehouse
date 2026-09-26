@@ -257,6 +257,14 @@ npm.cmd run e2e
 - Implementation checkpoint: `b5c695edeb80996799da7e119e0d627be2123dc0` (`refactor(suppliers): add validated domain service`), based on accepted Task 6 checkpoint `57d5d8c`.
 - The detailed RED/GREEN, RBAC/filter/error/architecture coverage, verification, changed-file list, and self-review are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-7-implementer-report.md`. Task 7 awaits independent review; P1-C01 remains `IN_PROGRESS`.
 
+### 2026-09-27 — Task 7 architecture guard review correction
+
+- Independent review identified a Minor regression-guard gap: the master-data router architecture test did not detect direct `Session.get`, query, persistence, or transaction calls, and its name described categories only.
+- Renamed the assertion to cover the master-data router and added AST detection for direct session/database receiver calls to `get`, `execute`, `scalars`, `scalar`, `query`, `add`, `delete`, `flush`, `refresh`, `commit`, and `rollback`. Service delegation remains unflagged because the receiver is a service-factory call rather than a direct database receiver.
+- Mutation RED was observed by temporarily adding `session.get(Supplier, supplier_id)` to `get_supplier`: `.venv\Scripts\python.exe -m pytest tests/unit/test_architecture.py::test_master_data_router_module_has_no_sql_or_transaction_operations -q` — failed with the detected `session.get()` call. The temporary mutation was removed.
+- Post-fix focused PostgreSQL supplier/category and architecture verification passed — 49 passed. Full regression passed — 166 passed. Ruff and `git diff --check` passed; only existing deprecation warnings were emitted.
+- The Task 7 review report remains unchanged. This correction does not alter supplier or product behavior; P1-C01 remains `IN_PROGRESS`.
+
 ## Verification Evidence
 
 ### Focused
