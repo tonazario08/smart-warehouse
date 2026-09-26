@@ -223,6 +223,15 @@ npm.cmd run e2e
 - Task 5 checkpoints are `013093f` and `0d2f1f3`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-5-review-report.md`.
 - Internal Task 5 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 6.
 
+### 2026-09-26 — Internal Task 6 implementation evidence
+
+- PostgreSQL RED run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/unit/test_architecture.py -q` — 14 failed and 8 passed. Failures reproduced public category reads, missing category detail, absent strict schema validation, unstable category errors, accepted indirect cycles, and the existing router/repository boundaries.
+- Intermediate GREEN run had 21 passed and one remaining failure: category deletion returned the global `DATABASE_CONFLICT` rather than `CATEGORY_IN_USE`. Mapping category-delete integrity failures in the service to the stable in-use error resolved it.
+- Final focused PostgreSQL and architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/unit/test_architecture.py -q` — 22 passed. Coverage includes authentication, all-role reads, admin-only mutations, pagination/detail, stable reference/conflict/delete errors, direct and multi-level cycles, termination over a pre-existing corrupt cycle, normalized strict names, and repository/router boundaries.
+- Full regression passed against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 140 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` passed. Test output contained only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
+- The category routes now use `CategoryRepository` and `CategoryService`; missing credentials return the `AUTHENTICATION_REQUIRED` code required by the category contract. Product and supplier routes were moved unchanged into `app/master_data/_legacy_router.py` so `app/master_data/router.py` contains no direct SQL or transaction operations. This shifts the implementation location for their planned Task 7/8 service slices; those tasks should continue from `_legacy_router.py` while retaining the public API.
+- Detailed RED/GREEN output, files, verification, self-review, and the route-location note are recorded in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-6-implementer-report.md`.
+
 ## Verification Evidence
 
 ### Focused

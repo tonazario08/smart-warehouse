@@ -44,38 +44,6 @@ def auth_headers(session: Session, role: UserRole) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id, get_settings())}"}
 
 
-def test_categories_are_publicly_readable_and_paginated(
-    client: tuple[TestClient, Session],
-) -> None:
-    test_client, session = client
-    session.add(Category(name="Hardware"))
-    session.commit()
-
-    response = test_client.get("/api/v1/categories?page=1&page_size=20")
-
-    assert response.status_code == 200
-    assert response.json()["total"] == 1
-    assert response.json()["items"][0]["name"] == "Hardware"
-
-
-def test_only_admin_can_create_category(client: tuple[TestClient, Session]) -> None:
-    test_client, session = client
-
-    response = test_client.post(
-        "/api/v1/categories",
-        json={"name": "Hardware"},
-        headers=auth_headers(session, UserRole.CLIENT),
-    )
-    assert response.status_code == 403
-
-    response = test_client.post(
-        "/api/v1/categories",
-        json={"name": "Hardware"},
-        headers=auth_headers(session, UserRole.ADMIN),
-    )
-    assert response.status_code == 201
-
-
 def test_product_requires_existing_category_and_is_publicly_readable(
     client: tuple[TestClient, Session],
 ) -> None:

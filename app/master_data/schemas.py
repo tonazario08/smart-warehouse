@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 
 
 class Page[T](BaseModel):
@@ -9,8 +9,19 @@ class Page[T](BaseModel):
 
 
 class CategoryCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    parent_id: int | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: StrictStr = Field(min_length=1, max_length=120)
+    parent_id: StrictInt | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class CategoryUpdate(CategoryCreate):
+    pass
 
 
 class CategoryResponse(CategoryCreate):

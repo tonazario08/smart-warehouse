@@ -53,9 +53,10 @@ def get_current_user(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> User:
     if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
+        raise DomainError(
+            status.HTTP_401_UNAUTHORIZED,
+            "AUTHENTICATION_REQUIRED",
+            "Authentication required.",
         )
     try:
         payload = decode_access_token(credentials.credentials, settings)
