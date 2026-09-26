@@ -192,6 +192,13 @@ npm.cmd run e2e
 - Focused regression passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py tests/test_error_contract.py -q` — 25 passed. Full regression passed: `.venv\Scripts\python.exe -m pytest -q` — 91 passed. Ruff and `git diff --check` passed.
 - Detailed correction evidence and expanded file list are appended to `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-4-implementer-report.md`; the independent review report was left unchanged.
 
+### 2026-09-26 — Internal Task 4 accepted
+
+- Independent re-review of cumulative diff `501eb6f..eefd763` found no remaining Critical, Important, or Minor finding.
+- Reviewer verification passed: focused auth and updated caller suite — 36 passed; Ruff — all checks passed; `git diff --check` — passed.
+- Task 4 implementation checkpoints are `3a70150` and `eefd763`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-4-review-report.md`.
+- Internal Task 4 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 5.
+
 ## Verification Evidence
 
 ### Focused
