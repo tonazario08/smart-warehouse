@@ -1,11 +1,20 @@
 """Inventory read queries and persistence primitives."""
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.pagination import PageParams
-from app.inventory.schemas import InventoryFilters, TransactionFilters
-from app.models import Inbound, Outbound, Stock, StockTransaction
+from app.inventory.schemas import InventoryFilters, InventoryMovementCreate, TransactionFilters
+from app.models import (
+    Inbound,
+    Outbound,
+    Product,
+    Stock,
+    StockTransaction,
+    TransactionType,
+    Warehouse,
+)
 
 
 class InventoryRepository:
@@ -139,3 +148,72 @@ class InventoryRepository:
 
     def get_transaction(self, transaction_id: int) -> StockTransaction | None:
         return self.session.get(StockTransaction, transaction_id)
+
+    def get_warehouse(self, warehouse_id: int) -> Warehouse | None:
+        return self.session.get(Warehouse, warehouse_id)
+
+    def get_product(self, product_id: int) -> Product | None:
+        return self.session.get(Product, product_id)
+
+    def get_stock_for_update(self, warehouse_id: int, product_id: int) -> Stock | None:
+        return self.session.scalar(
+            select(Stock)
+            .where(Stock.warehouse_id == warehouse_id, Stock.product_id == product_id)
+            .with_for_update()
+        )
+
+    def insert_stock_if_absent(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> Stock | None:
+        statement = (
+            insert(Stock)
+            .values(warehouse_id=warehouse_id, product_id=product_id, quantity=quantity)
+            .on_conflict_do_nothing(index_elements=[Stock.warehouse_id, Stock.product_id])
+            .returning(Stock.id)
+        )
+        stock_id = self.session.scalar(statement)
+        return self.session.get(Stock, stock_id) if stock_id is not None else None
+
+    def add_inbound(self, movement: InventoryMovementCreate, actor_id: int) -> Inbound:
+        inbound = Inbound(**movement.model_dump(), created_by_id=actor_id)
+        self.session.add(inbound)
+        return inbound
+
+    def add_outbound(self, movement: InventoryMovementCreate, actor_id: int) -> Outbound:
+        outbound = Outbound(**movement.model_dump(), created_by_id=actor_id)
+        self.session.add(outbound)
+        return outbound
+
+    def add_stock_transaction_for_inbound(
+        self, inbound: Inbound, actor_id: int
+    ) -> StockTransaction:
+        transaction = StockTransaction(
+            transaction_type=TransactionType.INBOUND,
+            warehouse_id=inbound.warehouse_id,
+            product_id=inbound.product_id,
+            quantity=inbound.quantity,
+            inbound_id=inbound.id,
+            created_by_id=actor_id,
+        )
+        self.session.add(transaction)
+        return transaction
+
+    def add_stock_transaction_for_outbound(
+        self, outbound: Outbound, actor_id: int
+    ) -> StockTransaction:
+        transaction = StockTransaction(
+            transaction_type=TransactionType.OUTBOUND,
+            warehouse_id=outbound.warehouse_id,
+            product_id=outbound.product_id,
+            quantity=outbound.quantity,
+            outbound_id=outbound.id,
+            created_by_id=actor_id,
+        )
+        self.session.add(transaction)
+        return transaction
+
+    def flush(self) -> None:
+        self.session.flush()
+
+    def refresh(self, instance: Inbound | Outbound) -> None:
+        self.session.refresh(instance)

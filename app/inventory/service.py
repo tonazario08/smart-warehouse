@@ -3,15 +3,71 @@
 from app.core.errors import DomainError
 from app.core.pagination import PageParams
 from app.inventory.repository import InventoryRepository
-from app.inventory.schemas import InventoryFilters, TransactionFilters
+from app.inventory.schemas import InventoryFilters, InventoryMovementCreate, TransactionFilters
 from app.models import Inbound, Outbound, Stock, StockTransaction
 
 
 class InventoryService:
-    """Coordinate inventory read queries without committing or rolling back."""
+    """Coordinate inventory reads and atomic movement transactions."""
 
     def __init__(self, repository: InventoryRepository) -> None:
         self.repository = repository
+
+    def _require_movement_references(self, request: InventoryMovementCreate) -> None:
+        if self.repository.get_warehouse(request.warehouse_id) is None:
+            raise DomainError(404, "WAREHOUSE_NOT_FOUND", "Warehouse was not found.")
+        if self.repository.get_product(request.product_id) is None:
+            raise DomainError(404, "PRODUCT_NOT_FOUND", "Product was not found.")
+
+    def create_inbound(self, actor_id: int, request: InventoryMovementCreate) -> Inbound:
+        try:
+            self._require_movement_references(request)
+            stock = self.repository.get_stock_for_update(
+                request.warehouse_id, request.product_id
+            )
+            if stock is None:
+                stock = self.repository.insert_stock_if_absent(
+                    request.warehouse_id, request.product_id, request.quantity
+                )
+                if stock is None:
+                    stock = self.repository.get_stock_for_update(
+                        request.warehouse_id, request.product_id
+                    )
+                    if stock is None:
+                        raise DomainError(409, "STOCK_CONFLICT", "Stock could not be created.")
+                    stock.quantity += request.quantity
+            else:
+                stock.quantity += request.quantity
+
+            inbound = self.repository.add_inbound(request, actor_id)
+            self.repository.flush()
+            self.repository.add_stock_transaction_for_inbound(inbound, actor_id)
+            self.repository.session.commit()
+            self.repository.refresh(inbound)
+            return inbound
+        except Exception:
+            self.repository.session.rollback()
+            raise
+
+    def create_outbound(self, actor_id: int, request: InventoryMovementCreate) -> Outbound:
+        try:
+            self._require_movement_references(request)
+            stock = self.repository.get_stock_for_update(
+                request.warehouse_id, request.product_id
+            )
+            if stock is None or stock.quantity < request.quantity:
+                raise DomainError(409, "INSUFFICIENT_STOCK", "Insufficient stock.")
+
+            stock.quantity -= request.quantity
+            outbound = self.repository.add_outbound(request, actor_id)
+            self.repository.flush()
+            self.repository.add_stock_transaction_for_outbound(outbound, actor_id)
+            self.repository.session.commit()
+            self.repository.refresh(outbound)
+            return outbound
+        except Exception:
+            self.repository.session.rollback()
+            raise
 
     def list_stock(
         self, filters: InventoryFilters, page: PageParams

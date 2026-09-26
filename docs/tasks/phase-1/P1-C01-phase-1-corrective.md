@@ -369,3 +369,21 @@ npm.cmd run e2e
 - Reviewer verification passed serially: PostgreSQL inventory reads — 21 passed; architecture and preserved write-contract checks — 10 passed; `git diff --check` — passed.
 - Task 10 checkpoint is `089f213`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-10-review-report.md`.
 - Internal Task 10 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 11.
+
+## Internal Task 11 Evidence (append-only)
+
+### 2026-09-27 — Internal Task 11 start
+
+- Confirmed dependency `docs/tasks/process/P-001-file-per-task-workflow.md` is `DONE`, Task 10 is accepted at HEAD `2a1aa4981064345b80e02c8b5cc9c1f1d4dcd751`, and the approved Phase 1 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-11-brief.md` authorize this scope. The P1-C01 baseline and overall `IN_PROGRESS` state remain unchanged.
+- Frozen Task 11 scope: move inventory write transaction ownership into `InventoryService`, implement safe existing-row locking and concurrent first-stock insertion, preserve the Task 10 POST response contract and RBAC, and add PostgreSQL atomicity, concurrency, and architecture coverage. Verification will use the exact Task 11 gates, run serially against the disposable PostgreSQL database, including ten separate concurrency-suite invocations.
+- Implementation has not begun; PostgreSQL RED evidence is pending.
+
+### 2026-09-27 — Internal Task 11 implementation and verification
+
+- PostgreSQL RED: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_transactions.py tests/postgres/test_inventory_concurrency.py -q` — 5 failed, 1 passed. Expected failures showed `InventoryService.create_inbound` and `create_outbound` were missing; the controlled lock test could not reach a row-lock query. Architecture RED — 2 failed — reproduced direct router persistence and missing write-service transaction methods.
+- Implemented PostgreSQL `INSERT ... ON CONFLICT DO NOTHING ... RETURNING`, stock row locking, append-only movement and linked stock-transaction writes in the repository; the service now validates references, commits each successful operation once, and rolls back any error. POST routes delegate to those service methods and retain the Task 10 response schema and `INVENTORY_WRITE` authorization.
+- Focused PostgreSQL atomicity/concurrency, inventory-read, architecture, and schema gate passed serially: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py tests/postgres/test_inventory_transactions.py tests/postgres/test_inventory_concurrency.py tests/unit/test_architecture.py tests/test_inventory.py -q` — 39 passed.
+- Concurrency repeat gate passed: ten separate serial invocations of `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_concurrency.py -q`; each invocation passed all three cases. The controlled lock test confirmed PostgreSQL reported a blocking session while the outbound waited, then passed after the inbound transaction committed.
+- Mutation checks were restored before final verification: omitting `FOR UPDATE` made the controlled waiter fail to observe a lock; omitting `ON CONFLICT DO NOTHING` reproduced `uq_stocks_warehouse_product`; omitting outbound rollback left the decremented quantity after simulated transaction-link persistence failure; omitting `inbound_id` violated `ck_transactions_exactly_one_movement`. Assertions cover competing outbound quantity and movement counts.
+- Full backend regression passed serially against the disposable PostgreSQL database: `.venv\Scripts\python.exe -m pytest -q` — 257 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. The suites emitted the existing Starlette/httpx and pytest-asyncio deprecation warnings only.
+- Detailed evidence, changed files, self-review, and concerns are recorded in the ignored `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-11-implementer-report.md`. Task 11 awaits checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.

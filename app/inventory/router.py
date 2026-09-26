@@ -1,9 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import Permission, require_permission
@@ -23,12 +22,9 @@ from app.inventory.service import InventoryService
 from app.models import (
     Inbound,
     Outbound,
-    Product,
     Stock,
     StockTransaction,
-    TransactionType,
     User,
-    Warehouse,
 )
 
 router = APIRouter(tags=["inventory"])
@@ -71,13 +67,6 @@ def get_transaction_filters(request: Request) -> TransactionFilters:
         raise RequestValidationError(
             [{**item, "loc": ("query", *item["loc"])} for item in error.errors()]
         ) from error
-
-
-def _validate_references(session: Session, movement: InventoryMovementCreate) -> None:
-    if session.get(Warehouse, movement.warehouse_id) is None:
-        raise HTTPException(status_code=422, detail="Warehouse does not exist")
-    if session.get(Product, movement.product_id) is None:
-        raise HTTPException(status_code=422, detail="Product does not exist")
 
 
 @router.get("/stock", response_model=Page[StockResponse])
@@ -128,35 +117,7 @@ def create_inbound(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
 ) -> Inbound:
-    _validate_references(session, movement)
-    stock = session.scalar(
-        select(Stock)
-        .where(Stock.warehouse_id == movement.warehouse_id, Stock.product_id == movement.product_id)
-        .with_for_update()
-    )
-    if stock is None:
-        stock = Stock(
-            warehouse_id=movement.warehouse_id, product_id=movement.product_id, quantity=0
-        )
-        session.add(stock)
-        session.flush()
-    stock.quantity += movement.quantity
-    inbound = Inbound(**movement.model_dump(), created_by_id=user.id)
-    session.add(inbound)
-    session.flush()
-    session.add(
-        StockTransaction(
-            transaction_type=TransactionType.INBOUND,
-            warehouse_id=movement.warehouse_id,
-            product_id=movement.product_id,
-            quantity=movement.quantity,
-            inbound_id=inbound.id,
-            created_by_id=user.id,
-        )
-    )
-    session.commit()
-    session.refresh(inbound)
-    return inbound
+    return InventoryService(InventoryRepository(session)).create_inbound(user.id, movement)
 
 
 @router.get("/outbounds", response_model=Page[InventoryMovementReadResponse])
@@ -187,31 +148,7 @@ def create_outbound(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
 ) -> Outbound:
-    _validate_references(session, movement)
-    stock = session.scalar(
-        select(Stock)
-        .where(Stock.warehouse_id == movement.warehouse_id, Stock.product_id == movement.product_id)
-        .with_for_update()
-    )
-    if stock is None or stock.quantity < movement.quantity:
-        raise HTTPException(status_code=409, detail="Insufficient stock")
-    stock.quantity -= movement.quantity
-    outbound = Outbound(**movement.model_dump(), created_by_id=user.id)
-    session.add(outbound)
-    session.flush()
-    session.add(
-        StockTransaction(
-            transaction_type=TransactionType.OUTBOUND,
-            warehouse_id=movement.warehouse_id,
-            product_id=movement.product_id,
-            quantity=movement.quantity,
-            outbound_id=outbound.id,
-            created_by_id=user.id,
-        )
-    )
-    session.commit()
-    session.refresh(outbound)
-    return outbound
+    return InventoryService(InventoryRepository(session)).create_outbound(user.id, movement)
 
 
 @router.get("/transactions", response_model=Page[TransactionResponse])

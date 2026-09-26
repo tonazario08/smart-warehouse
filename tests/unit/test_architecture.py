@@ -161,17 +161,97 @@ def test_inventory_read_handlers_delegate_queries_and_do_not_manage_transactions
     assert offenders == []
 
 
-def test_inventory_service_does_not_manage_read_transactions() -> None:
+def test_inventory_read_service_methods_do_not_manage_transactions() -> None:
     path = Path("app/inventory/service.py")
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    transaction_calls = [
-        f"{path}:{node.lineno} {node.func.attr}()"
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"commit", "rollback"}
-    ]
+    read_methods = {
+        "list_stock",
+        "get_stock",
+        "list_inbounds",
+        "get_inbound",
+        "list_outbounds",
+        "get_outbound",
+        "list_transactions",
+        "get_transaction",
+    }
+    transaction_calls: list[str] = []
+    for method in (node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)):
+        if method.name not in read_methods:
+            continue
+        transaction_calls.extend(
+            f"{path}:{node.lineno} {node.func.attr}()"
+            for node in ast.walk(method)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"commit", "rollback"}
+        )
     assert transaction_calls == []
+
+
+def test_inventory_write_handlers_delegate_database_work_to_service() -> None:
+    path = Path("app/inventory/router.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    offenders: list[str] = []
+    for handler_name in ("create_inbound", "create_outbound"):
+        handler = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == handler_name
+        )
+        delegated = False
+        for node in ast.walk(handler):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in {
+                    "commit",
+                    "rollback",
+                    "add",
+                    "flush",
+                    "refresh",
+                    "get",
+                    "scalar",
+                }:
+                    offenders.append(
+                        f"{path}:{node.lineno} direct {node.func.attr}() in {handler_name}"
+                    )
+                delegated |= node.func.attr == handler_name
+        if not delegated:
+            offenders.append(
+                f"{path}:{handler.lineno} {handler_name} does not delegate to its service"
+            )
+    assert offenders == []
+
+
+def test_inventory_write_transactions_are_owned_by_write_service_methods() -> None:
+    path = Path("app/inventory/service.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    methods = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+    }
+    expected = {"create_inbound", "create_outbound"}
+    assert expected <= methods.keys()
+    for name in expected:
+        calls = {
+            node.func.attr
+            for node in ast.walk(methods[name])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"commit", "rollback"}
+        }
+        assert calls == {"commit", "rollback"}
+
+
+def test_inventory_service_does_not_use_administrative_audit_repository() -> None:
+    path = Path("app/inventory/service.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    audit_references = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        and any("AuditRepository" in alias.name for alias in node.names)
+    ]
+    assert audit_references == []
 
 
 def test_legacy_router_debt_is_removed_from_master_data() -> None:
