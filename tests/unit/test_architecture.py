@@ -232,14 +232,15 @@ def test_inventory_write_transactions_are_owned_by_write_service_methods() -> No
     expected = {"create_inbound", "create_outbound"}
     assert expected <= methods.keys()
     for name in expected:
-        calls = {
+        transaction_calls = [
             node.func.attr
             for node in ast.walk(methods[name])
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr in {"commit", "rollback"}
-        }
-        assert calls == {"commit", "rollback"}
+        ]
+        assert transaction_calls.count("commit") == 1
+        assert transaction_calls.count("rollback") == 1
 
 
 def test_inventory_service_does_not_use_administrative_audit_repository() -> None:

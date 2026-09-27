@@ -392,3 +392,17 @@ npm.cmd run e2e
 
 - Implementation checkpoint committed as `0a96c1762ee34fb33634e25c079a07e2695556e3` (`fix(inventory): make stock movements concurrency-safe`). The working tree was clean immediately after the commit.
 - Verification evidence above applies to this checkpoint. Task 11 awaits independent review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-27 — Task 11 review correction: exact transaction-call counts
+
+- Independent review found the architecture guard used a set, which could not detect duplicate `commit()` calls. Replaced set membership with per-method counts requiring exactly one `commit()` and one `rollback()` in both `create_inbound` and `create_outbound`.
+- RED mutation: temporarily added a second inbound `commit()` and ran `.venv\Scripts\python.exe -m pytest tests/unit/test_architecture.py::test_inventory_write_transactions_are_owned_by_write_service_methods -q`; it failed with observed commit count 2 versus required count 1. Removed the temporary service mutation.
+- Post-restore isolated architecture verification passed: `.venv\Scripts\python.exe -m pytest tests/unit/test_architecture.py -q` — 9 passed. `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed; `git diff --check` — passed.
+- The requested focused PostgreSQL inventory gate and full pytest regression could not complete because Docker Desktop was unavailable (engine named-pipe missing; localhost port 55432 refused connections). Two stalled pytest processes were stopped after confirming the disposable database was unreachable. Native PostgreSQL on port 5432 rejected the disposable test credentials, and was not used. These PostgreSQL-dependent gates are `NOT VERIFIED` for this correction; concurrency repeats were not rerun because inventory behavior did not change.
+- This correction changes only the architecture test and this append-only evidence. The Task 11 implementation and P1-C01 remain pending independent review; no completion status is claimed.
+
+### 2026-09-27 — Exact-count guard verification follow-up
+
+- Confirmed the strengthened assertions execute inside the loop for each write method. Separate temporary duplicate-commit mutations in `create_inbound` and `create_outbound` each failed with observed count 2 versus required count 1; both service mutations were restored.
+- Final isolated architecture suite passed after restoration: `.venv\Scripts\python.exe -m pytest tests/unit/test_architecture.py -q` — 9 passed. Ruff and `git diff --check` passed after the final test edit.
+- Clarification: the focused PostgreSQL invocation stalled against unavailable Docker-backed PostgreSQL and was stopped after process and port checks. Full `.venv\Scripts\python.exe -m pytest -q` was not run because its PostgreSQL fixtures require that same unavailable endpoint. Both PostgreSQL-dependent gates remain `NOT VERIFIED`; no concurrency repeat was run because inventory behavior was unchanged.
