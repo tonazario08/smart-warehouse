@@ -3,7 +3,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
 from app.audit.repository import AuditRepository
 from app.audit.schemas import AuditLogPage, AuditLogResponse
@@ -19,7 +18,7 @@ router = APIRouter(prefix="/audit-logs", tags=["audit"])
 @router.get("", response_model=AuditLogPage)
 def list_audit_logs(
     params: Annotated[PageParams, Depends()],
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.AUDIT_READ))],
 ) -> AuditLogPage:
     repository = AuditRepository(session)
@@ -34,7 +33,7 @@ def list_audit_logs(
 @router.get("/{audit_log_id}", response_model=AuditLogResponse)
 def get_audit_log(
     audit_log_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.AUDIT_READ))],
 ) -> AuditLog:
     audit_log = AuditRepository(session).get(audit_log_id)

@@ -15,10 +15,19 @@ def test_repository_modules_never_call_commit() -> None:
     assert offenders == []
 
 
-def test_master_data_router_module_has_no_sql_or_transaction_operations() -> None:
-    path = Path("app/master_data/router.py")
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    forbidden_imports = {"select", "func", "IntegrityError"}
+def _router_boundary_violations(source: str, path: str) -> list[str]:
+    tree = ast.parse(source)
+    forbidden_imports = {
+        "and_",
+        "delete",
+        "func",
+        "insert",
+        "IntegrityError",
+        "or_",
+        "select",
+        "text",
+        "update",
+    }
     direct_database_methods = {
         "get",
         "execute",
@@ -41,72 +50,63 @@ def test_master_data_router_module_has_no_sql_or_transaction_operations() -> Non
         "conn",
         "engine",
     }
-    imports: list[str] = []
-    database_calls: list[str] = []
+    offenders: list[str] = []
 
-    def root_name(expression: ast.expr) -> str | None:
+    def name_chain(expression: ast.expr) -> set[str]:
+        names: set[str] = set()
         while isinstance(expression, ast.Attribute):
+            names.add(expression.attr)
             expression = expression.value
-        return expression.id if isinstance(expression, ast.Name) else None
+        if isinstance(expression, ast.Name):
+            names.add(expression.id)
+        return names
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            imports.extend(alias.name for alias in node.names if alias.name in forbidden_imports)
+            if node.module and node.module.startswith("sqlalchemy"):
+                offenders.append(f"{path}:{node.lineno} SQLAlchemy import")
+            offenders.extend(
+                f"{path}:{node.lineno} forbidden SQL import {alias.name}"
+                for alias in node.names
+                if alias.name in forbidden_imports
+            )
+        if isinstance(node, ast.Import):
+            offenders.extend(
+                f"{path}:{node.lineno} SQLAlchemy import"
+                for alias in node.names
+                if alias.name == "sqlalchemy" or alias.name.startswith("sqlalchemy.")
+            )
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            receiver = root_name(node.func.value)
-            if node.func.attr in direct_database_methods and receiver in database_receivers:
-                database_calls.append(f"{path}:{node.lineno} {receiver}.{node.func.attr}()")
-    assert imports == []
-    assert database_calls == []
+            receiver_names = name_chain(node.func.value)
+            if node.func.attr in {"commit", "rollback"} or (
+                node.func.attr in direct_database_methods
+                and receiver_names.intersection(database_receivers)
+            ):
+                offenders.append(f"{path}:{node.lineno} direct database call {node.func.attr}()")
+    return offenders
 
 
-def test_warehouse_router_module_has_no_sql_or_transaction_operations() -> None:
-    path = Path("app/warehouse/router.py")
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    forbidden_imports = {"select", "func", "IntegrityError"}
-    direct_database_methods = {
-        "get",
-        "execute",
-        "scalars",
-        "scalar",
-        "query",
-        "add",
-        "delete",
-        "flush",
-        "refresh",
-        "commit",
-        "rollback",
-    }
-    database_receivers = {
-        "session",
-        "db_session",
-        "db",
-        "database",
-        "connection",
-        "conn",
-        "engine",
-    }
-    imports = [
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-        if alias.name in forbidden_imports
+def test_every_router_module_stays_inside_the_service_boundary() -> None:
+    offenders = [
+        violation
+        for path in Path("app").glob("**/router.py")
+        for violation in _router_boundary_violations(path.read_text(encoding="utf-8"), str(path))
     ]
-    database_calls: list[str] = []
 
-    def root_name(expression: ast.expr) -> str | None:
-        while isinstance(expression, ast.Attribute):
-            expression = expression.value
-        return expression.id if isinstance(expression, ast.Name) else None
+    assert offenders == []
 
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            receiver = root_name(node.func.value)
-            if node.func.attr in direct_database_methods and receiver in database_receivers:
-                database_calls.append(f"{path}:{node.lineno} {receiver}.{node.func.attr}()")
-    assert imports == []
-    assert database_calls == []
+
+def test_global_router_guard_detects_sql_and_session_mutations_across_modules() -> None:
+    mutations = {
+        "app/dashboard/router.py": "from sqlalchemy import select\n",
+        "app/warehouse/router.py": "session.execute(statement)\n",
+        "app/users/router.py": "session.add(record)\n",
+        "app/audit/router.py": "session.commit()\n",
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, f"global router guard missed mutation in {path}: {mutation!r}"
 
 
 def test_inventory_read_handlers_delegate_queries_and_do_not_manage_transactions() -> None:

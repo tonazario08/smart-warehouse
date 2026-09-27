@@ -3,7 +3,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
 
 from app.audit.repository import AuditRepository
 from app.audit.service import AuditService
@@ -23,7 +22,7 @@ from app.users.service import UserService
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def _service(session: Session) -> UserService:
+def _service(session: object) -> UserService:
     return UserService(
         session,
         UserRepository(session),
@@ -34,7 +33,7 @@ def _service(session: Session) -> UserService:
 @router.post("", response_model=ManagedUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
     request: UserCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     actor: Annotated[User, Depends(require_permission(Permission.USER_MANAGE))],
 ) -> User:
     return _service(session).create(
@@ -45,7 +44,7 @@ def create_user(
 @router.get("", response_model=Page[ManagedUserResponse])
 def list_users(
     params: Annotated[PageParams, Depends()],
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.USER_MANAGE))],
 ) -> Page[ManagedUserResponse]:
     return _service(session).list(params)
@@ -54,7 +53,7 @@ def list_users(
 @router.get("/{user_id}", response_model=ManagedUserResponse)
 def get_user(
     user_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.USER_MANAGE))],
 ) -> User:
     return _service(session).get(user_id)
@@ -64,7 +63,7 @@ def get_user(
 def change_user_role(
     user_id: int,
     request: UserRoleUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     actor: Annotated[User, Depends(require_permission(Permission.USER_MANAGE))],
 ) -> User:
     return _service(session).change_role(actor, user_id, UserRole(request.role.value))
@@ -74,7 +73,7 @@ def change_user_role(
 def change_user_status(
     user_id: int,
     request: UserStatusUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     actor: Annotated[User, Depends(require_permission(Permission.USER_MANAGE))],
 ) -> User:
     return _service(session).change_status(actor, user_id, request.is_active)

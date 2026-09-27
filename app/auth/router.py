@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.repository import UserRepository
@@ -16,14 +15,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(request: RegisterRequest, session: Annotated[Session, Depends(get_session)]) -> User:
+def register(request: RegisterRequest, session: Annotated[object, Depends(get_session)]) -> User:
     return AuthService(session, UserRepository(session)).register(request.email, request.password)
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(
     request: LoginRequest,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> TokenResponse:
     service = AuthService(session, UserRepository(session))

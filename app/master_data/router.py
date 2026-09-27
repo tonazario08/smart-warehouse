@@ -3,7 +3,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
 
 from app.auth.dependencies import Permission, require_permission
 from app.core.pagination import Page, PageParams
@@ -26,15 +25,15 @@ from app.models import Category, Product, Supplier, User
 router = APIRouter(tags=["master-data"])
 
 
-def _category_service(session: Session) -> CategoryService:
+def _category_service(session: object) -> CategoryService:
     return CategoryService(session, CategoryRepository(session))
 
 
-def _supplier_service(session: Session) -> SupplierService:
+def _supplier_service(session: object) -> SupplierService:
     return SupplierService(session, SupplierRepository(session))
 
 
-def _product_service(session: Session) -> ProductService:
+def _product_service(session: object) -> ProductService:
     return ProductService(
         session,
         ProductRepository(session),
@@ -45,7 +44,7 @@ def _product_service(session: Session) -> ProductService:
 
 @router.get("/products", response_model=Page[ProductResponse])
 def list_products(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -67,7 +66,7 @@ def list_products(
 @router.get("/products/{product_id}", response_model=ProductResponse)
 def get_product(
     product_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
 ) -> Product:
     return _product_service(session).get(product_id)
@@ -78,7 +77,7 @@ def get_product(
 )
 def create_product(
     request: ProductCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> Product:
     return _product_service(session).create(request)
@@ -88,7 +87,7 @@ def create_product(
 def update_product(
     product_id: int,
     request: ProductUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> Product:
     return _product_service(session).update(product_id, request)
@@ -97,7 +96,7 @@ def update_product(
 @router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
     product_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> None:
     _product_service(session).delete(product_id)
@@ -105,7 +104,7 @@ def delete_product(
 
 @router.get("/categories", response_model=Page[CategoryResponse])
 def list_categories(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -116,7 +115,7 @@ def list_categories(
 @router.get("/categories/{category_id}", response_model=CategoryResponse)
 def get_category(
     category_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.CATALOG_READ))],
 ) -> Category:
     return _category_service(session).get(category_id)
@@ -129,7 +128,7 @@ def get_category(
 )
 def create_category(
     request: CategoryCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> Category:
     return _category_service(session).create(request)
@@ -139,7 +138,7 @@ def create_category(
 def update_category(
     category_id: int,
     request: CategoryUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> Category:
     return _category_service(session).update(category_id, request)
@@ -148,7 +147,7 @@ def update_category(
 @router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(
     category_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.PRODUCT_WRITE))],
 ) -> None:
     _category_service(session).delete(category_id)
@@ -156,7 +155,7 @@ def delete_category(
 
 @router.get("/suppliers", response_model=Page[SupplierResponse])
 def list_suppliers(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_READ))],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -169,7 +168,7 @@ def list_suppliers(
 @router.get("/suppliers/{supplier_id}", response_model=SupplierResponse)
 def get_supplier(
     supplier_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_READ))],
 ) -> Supplier:
     return _supplier_service(session).get(supplier_id)
@@ -182,7 +181,7 @@ def get_supplier(
 )
 def create_supplier(
     request: SupplierCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_WRITE))],
 ) -> Supplier:
     return _supplier_service(session).create(request)
@@ -192,7 +191,7 @@ def create_supplier(
 def update_supplier(
     supplier_id: int,
     request: SupplierUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_WRITE))],
 ) -> Supplier:
     return _supplier_service(session).update(supplier_id, request)
@@ -201,7 +200,7 @@ def update_supplier(
 @router.delete("/suppliers/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_supplier(
     supplier_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.SUPPLIER_WRITE))],
 ) -> None:
     _supplier_service(session).delete(supplier_id)

@@ -18,7 +18,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 class Permission(StrEnum):
     CATALOG_READ = "catalog:read"
-    PRODUCT_READ = "product:read"
     PRODUCT_WRITE = "product:write"
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_WRITE = "supplier:write"
@@ -34,7 +33,6 @@ class Permission(StrEnum):
 
 PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.CATALOG_READ: frozenset(UserRole),
-    Permission.PRODUCT_READ: frozenset(UserRole),
     Permission.PRODUCT_WRITE: frozenset({UserRole.ADMIN}),
     Permission.SUPPLIER_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
     Permission.SUPPLIER_WRITE: frozenset({UserRole.ADMIN}),

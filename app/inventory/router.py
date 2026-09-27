@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
 
 from app.auth.dependencies import Permission, require_permission
 from app.core.pagination import Page, PageParams
@@ -71,7 +70,7 @@ def get_transaction_filters(request: Request) -> TransactionFilters:
 
 @router.get("/stock", response_model=Page[StockResponse])
 def list_stock(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_READ))],
     page: Annotated[PageParams, Depends(get_page_params)],
     filters: Annotated[InventoryFilters, Depends(get_inventory_filters)],
@@ -83,7 +82,7 @@ def list_stock(
 @router.get("/stock/{stock_id}", response_model=StockResponse)
 def get_stock(
     stock_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_READ))],
 ) -> Stock:
     return InventoryService(InventoryRepository(session)).get_stock(stock_id)
@@ -91,7 +90,7 @@ def get_stock(
 
 @router.get("/inbounds", response_model=Page[InventoryMovementReadResponse])
 def list_inbounds(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
     page: Annotated[PageParams, Depends(get_page_params)],
     filters: Annotated[InventoryFilters, Depends(get_inventory_filters)],
@@ -103,7 +102,7 @@ def list_inbounds(
 @router.get("/inbounds/{inbound_id}", response_model=InventoryMovementReadResponse)
 def get_inbound(
     inbound_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
 ) -> Inbound:
     return InventoryService(InventoryRepository(session)).get_inbound(inbound_id)
@@ -114,7 +113,7 @@ def get_inbound(
 )
 def create_inbound(
     movement: InventoryMovementCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
 ) -> Inbound:
     return InventoryService(InventoryRepository(session)).create_inbound(user.id, movement)
@@ -122,7 +121,7 @@ def create_inbound(
 
 @router.get("/outbounds", response_model=Page[InventoryMovementReadResponse])
 def list_outbounds(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
     page: Annotated[PageParams, Depends(get_page_params)],
     filters: Annotated[InventoryFilters, Depends(get_inventory_filters)],
@@ -134,7 +133,7 @@ def list_outbounds(
 @router.get("/outbounds/{outbound_id}", response_model=InventoryMovementReadResponse)
 def get_outbound(
     outbound_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
 ) -> Outbound:
     return InventoryService(InventoryRepository(session)).get_outbound(outbound_id)
@@ -145,7 +144,7 @@ def get_outbound(
 )
 def create_outbound(
     movement: InventoryMovementCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
 ) -> Outbound:
     return InventoryService(InventoryRepository(session)).create_outbound(user.id, movement)
@@ -153,7 +152,7 @@ def create_outbound(
 
 @router.get("/transactions", response_model=Page[TransactionResponse])
 def list_transactions(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
     page: Annotated[PageParams, Depends(get_page_params)],
     filters: Annotated[TransactionFilters, Depends(get_transaction_filters)],
@@ -165,7 +164,7 @@ def list_transactions(
 @router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(
     transaction_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
 ) -> StockTransaction:
     return InventoryService(InventoryRepository(session)).get_transaction(transaction_id)
