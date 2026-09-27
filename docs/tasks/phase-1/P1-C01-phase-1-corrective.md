@@ -440,3 +440,8 @@ npm.cmd run e2e
 - PostgreSQL environment verified as server version 18.3, database `smart_warehouse_test` on `127.0.0.1:55432`, timezone `UTC`. This is the migrated disposable test cluster; no PostgreSQL 16 result is claimed for Task 12.
 - Focused command passed serially: `.venv\Scripts\python.exe -m pytest tests/postgres/test_dashboard.py tests/postgres/test_rbac_matrix.py tests/unit/test_architecture.py -q` — 55 passed. Full backend regression passed serially: `.venv\Scripts\python.exe -m pytest -q` — 303 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. Both pytest runs emitted only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
 - Detailed RED/GREEN, coverage inventory, mutation outputs, exact verification, changed files, self-review, and concerns are recorded in ignored `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-12-implementer-report.md`. Task 12 awaits checkpoint commit and independent review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-27 — Internal Task 12 implementation checkpoint
+
+- Task 12 implementation checkpoint committed as `6b891afe4a404eedbbf33c79fb289ba2b798e178` (`test(rbac): enforce the complete Phase 1 permission matrix`). The worktree was clean immediately after the commit.
+- Task 12 awaits independent review; P1-C01 remains `IN_PROGRESS`.
