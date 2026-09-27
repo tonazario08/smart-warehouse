@@ -1,6 +1,8 @@
 """PostgreSQL-backed success and denial coverage for Phase 1 route actions."""
 
 import pytest
+from sqlalchemy import inspect, select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import PERMISSION_ROLES, Permission
@@ -43,10 +45,11 @@ def test_central_permission_mapping_matches_phase_one_capabilities() -> None:
 
 @pytest.fixture
 def rbac_dataset(postgres_session: Session, unit_settings):
+    password_hash = hash_password("strong-password-1")
     users = {
         role: User(
             email=f"matrix-{role.value}@example.com",
-            password_hash=hash_password("strong-password-1"),
+            password_hash=password_hash,
             role=role,
         )
         for role in UserRole
@@ -152,9 +155,34 @@ def rbac_dataset(postgres_session: Session, unit_settings):
     }
 
 
-@pytest.mark.parametrize(
-    ("name", "method", "path_key", "allowed", "success_status", "payload_key"),
-    [
+def _mutation_tables(path_key: str) -> tuple[type, ...]:
+    if path_key in {"/api/v1/products", "product", "delete_product"}:
+        return (Product,)
+    if path_key in {"/api/v1/categories", "category", "free_category"}:
+        return (Category,)
+    if path_key in {"/api/v1/suppliers", "supplier", "free_supplier"}:
+        return (Supplier,)
+    if path_key in {"/api/v1/warehouses", "warehouse", "free_warehouse"}:
+        return (Warehouse,)
+    if path_key in {"/api/v1/inbounds", "/api/v1/outbounds"}:
+        return (Stock, Inbound, Outbound, StockTransaction)
+    if path_key in {"/api/v1/users", "role_user", "status_user"}:
+        return (User, AuditLog)
+    raise AssertionError(f"no persisted-state snapshot is defined for {path_key}")
+
+
+def _persisted_state_snapshot(engine: Engine, path_key: str) -> dict[str, tuple[tuple, ...]]:
+    snapshot = {}
+    with Session(engine) as session:
+        for model in _mutation_tables(path_key):
+            mapper = inspect(model)
+            columns = [getattr(model, column.key) for column in mapper.column_attrs]
+            rows = session.execute(select(*columns).order_by(*mapper.primary_key)).all()
+            snapshot[model.__tablename__] = tuple(tuple(row) for row in rows)
+    return snapshot
+
+
+_ROUTE_ACTIONS = [
         ("products list", "get", "/api/v1/products", set(UserRole), 200, None),
         ("product detail", "get", "product", set(UserRole), 200, None),
         ("product create", "post", "/api/v1/products", {UserRole.ADMIN}, 201, "product"),
@@ -243,10 +271,16 @@ def rbac_dataset(postgres_session: Session, unit_settings):
         ("user status update", "patch", "status_user", {UserRole.ADMIN}, 200, "status"),
         ("audit list", "get", "/api/v1/audit-logs", {UserRole.ADMIN}, 200, None),
         ("audit detail", "get", "audit", {UserRole.ADMIN}, 200, None),
-    ],
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "method", "path_key", "allowed", "success_status", "payload_key", "role"),
+    [(*action, role) for action in _ROUTE_ACTIONS for role in UserRole],
 )
 def test_route_action_matrix_uses_valid_success_payloads_for_each_allowed_role(
     postgres_client,
+    postgres_engine,
     rbac_dataset,
     name: str,
     method: str,
@@ -254,6 +288,7 @@ def test_route_action_matrix_uses_valid_success_payloads_for_each_allowed_role(
     allowed: set[UserRole],
     success_status: int,
     payload_key: str | None,
+    role: UserRole,
 ) -> None:
     data = rbac_dataset
     targets = {
@@ -336,16 +371,21 @@ def test_route_action_matrix_uses_valid_success_payloads_for_each_allowed_role(
             return postgres_client.delete(current_path, **options)
         return getattr(postgres_client, method)(current_path, **options)
 
-    for role in UserRole:
-        if role not in allowed:
-            response = send(role)
-            assert response.status_code == 403, f"{name}, denied role={role.value}: {response.text}"
-    for role in UserRole:
-        if role in allowed:
-            response = send(role)
-            assert response.status_code == success_status, (
-                f"{name}, allowed role={role.value}: {response.status_code} {response.text}"
-            )
+    is_allowed = role in allowed
+    is_mutation = method in {"post", "put", "patch", "delete"}
+    before = (
+        _persisted_state_snapshot(postgres_engine, path_key)
+        if is_mutation and not is_allowed
+        else None
+    )
+    response = send(role)
+    expected_status = success_status if is_allowed else 403
+    assert response.status_code == expected_status, (
+        f"{name}, role={role.value}: {response.status_code} {response.text}"
+    )
+    if is_mutation and not is_allowed:
+        after = _persisted_state_snapshot(postgres_engine, path_key)
+        assert after == before, f"{name}, denied role={role.value} changed persisted state"
 
 
 def test_anonymous_requests_cannot_access_sensitive_phase_one_routes(postgres_client) -> None:

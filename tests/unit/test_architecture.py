@@ -52,15 +52,6 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
     }
     offenders: list[str] = []
 
-    def name_chain(expression: ast.expr) -> set[str]:
-        names: set[str] = set()
-        while isinstance(expression, ast.Attribute):
-            names.add(expression.attr)
-            expression = expression.value
-        if isinstance(expression, ast.Name):
-            names.add(expression.id)
-        return names
-
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module and node.module.startswith("sqlalchemy"):
@@ -76,13 +67,107 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
                 for alias in node.names
                 if alias.name == "sqlalchemy" or alias.name.startswith("sqlalchemy.")
             )
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            receiver_names = name_chain(node.func.value)
-            if node.func.attr in {"commit", "rollback"} or (
-                node.func.attr in direct_database_methods
-                and receiver_names.intersection(database_receivers)
-            ):
-                offenders.append(f"{path}:{node.lineno} direct database call {node.func.attr}()")
+    class AliasAwareDatabaseCalls(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.aliases = set(database_receivers)
+
+        def references_database(self, expression: ast.expr) -> bool:
+            if isinstance(expression, ast.Name):
+                return expression.id in self.aliases
+            if isinstance(expression, ast.Attribute):
+                return expression.attr in database_receivers or self.references_database(
+                    expression.value
+                )
+            return False
+
+        def assigned_names(self, target: ast.expr) -> set[str]:
+            if isinstance(target, ast.Name):
+                return {target.id}
+            if isinstance(target, (ast.Tuple, ast.List)):
+                return set().union(*(self.assigned_names(item) for item in target.elts))
+            return set()
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            saved_aliases = self.aliases
+            local_aliases = set(saved_aliases)
+            arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+            if node.args.vararg:
+                arguments.append(node.args.vararg)
+            if node.args.kwarg:
+                arguments.append(node.args.kwarg)
+            for argument in arguments:
+                local_aliases.discard(argument.arg)
+                if argument.arg in database_receivers:
+                    local_aliases.add(argument.arg)
+            self.aliases = local_aliases
+            for statement in node.body:
+                self.visit(statement)
+            self.aliases = saved_aliases
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            is_database_alias = self.references_database(node.value)
+            self.visit(node.value)
+            for target in node.targets:
+                for name in self.assigned_names(target):
+                    self.aliases.discard(name)
+                    if is_database_alias:
+                        self.aliases.add(name)
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+            is_database_alias = (
+                node.value is not None and self.references_database(node.value)
+            )
+            if node.value is not None:
+                self.visit(node.value)
+            for name in self.assigned_names(node.target):
+                self.aliases.discard(name)
+                if is_database_alias:
+                    self.aliases.add(name)
+
+        def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+            is_database_alias = self.references_database(node.value)
+            self.visit(node.value)
+            for name in self.assigned_names(node.target):
+                self.aliases.discard(name)
+                if is_database_alias:
+                    self.aliases.add(name)
+
+        def visit_AugAssign(self, node: ast.AugAssign) -> None:
+            self.visit(node.value)
+            for name in self.assigned_names(node.target):
+                self.aliases.discard(name)
+
+        def visit_Delete(self, node: ast.Delete) -> None:
+            for target in node.targets:
+                for name in self.assigned_names(target):
+                    self.aliases.discard(name)
+
+        def visit_If(self, node: ast.If) -> None:
+            self.visit(node.test)
+            before = set(self.aliases)
+            self.aliases = set(before)
+            for statement in node.body:
+                self.visit(statement)
+            body_aliases = set(self.aliases)
+            self.aliases = set(before)
+            for statement in node.orelse:
+                self.visit(statement)
+            else_aliases = set(self.aliases)
+            self.aliases = body_aliases | else_aliases
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if isinstance(node.func, ast.Attribute):
+                method = node.func.attr
+                if method in {"commit", "rollback"} or (
+                    method in direct_database_methods
+                    and self.references_database(node.func.value)
+                ):
+                    offenders.append(f"{path}:{node.lineno} direct database call {method}()")
+            self.generic_visit(node)
+
+    AliasAwareDatabaseCalls().visit(tree)
     return offenders
 
 
@@ -107,6 +192,44 @@ def test_global_router_guard_detects_sql_and_session_mutations_across_modules() 
     for path, mutation in mutations.items():
         violations = _router_boundary_violations(mutation, path)
         assert violations, f"global router guard missed mutation in {path}: {mutation!r}"
+
+
+def test_global_router_guard_tracks_local_and_chained_session_aliases() -> None:
+    mutations = {
+        "app/dashboard/router.py": (
+            "def route(session):\n"
+            "    local_session = session\n"
+            "    chained_session = local_session\n"
+            "    chained_session.execute(statement)\n"
+        ),
+        "app/inventory/router.py": (
+            "def route(db):\n"
+            "    local_db = db\n"
+            "    local_db.add(record)\n"
+        ),
+        "app/users/router.py": (
+            "def route(database):\n"
+            "    local_session = database.session\n"
+            "    chained_session = local_session\n"
+            "    chained_session.commit()\n"
+            "    chained_session.rollback()\n"
+        ),
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, f"global router guard missed alias in {path}: {mutation!r}"
+
+
+def test_router_guard_drops_alias_after_local_reassignment() -> None:
+    source = (
+        "def route(session):\n"
+        "    local_session = session\n"
+        "    local_session = object()\n"
+        "    local_session.execute(statement)\n"
+    )
+
+    assert _router_boundary_violations(source, "app/dashboard/router.py") == []
 
 
 def test_inventory_read_handlers_delegate_queries_and_do_not_manage_transactions() -> None:
