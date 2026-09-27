@@ -445,3 +445,11 @@ npm.cmd run e2e
 
 - Task 12 implementation checkpoint committed as `6b891afe4a404eedbbf33c79fb289ba2b798e178` (`test(rbac): enforce the complete Phase 1 permission matrix`). The worktree was clean immediately after the commit.
 - Task 12 awaits independent review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-27 — Task 12 independent-review correction
+
+- Review found two coverage gaps: router database calls through local aliases could evade the global AST guard, and denied mutation matrix cases did not assert persisted state remained unchanged. Added alias propagation through chained/local assignments and database/session attributes, including reassignment invalidation; synthetic regressions exercise execute, add, commit, and rollback aliases across dashboard, inventory, and users router-shaped sources. The alias regression was run first and failed before the guard was extended.
+- Isolated every route/action case by role. For each denied mutation action, the test snapshots all relevant mapped rows before the request and compares them afterward through a new SQLAlchemy session. Allowed-role cases still perform real mutations with valid payloads and prerequisites. The independent review report was not modified.
+- The disposable test database remains `smart_warehouse_test` at `127.0.0.1:55432`, PostgreSQL 18.3 with timezone UTC. No PostgreSQL 16 result is claimed for this correction.
+- Focused dashboard/RBAC/architecture gate passed serially: `.venv\Scripts\python.exe -m pytest tests/postgres/test_dashboard.py tests/postgres/test_rbac_matrix.py tests/unit/test_architecture.py -q` — 135 passed. Full backend suite passed serially: `.venv\Scripts\python.exe -m pytest -q` — 383 passed. Ruff passed: `.venv\Scripts\python.exe -m ruff check app tests alembic` — all checks passed. `git diff --check` — passed. Pytest emitted only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
+- Test-only correction committed as `60a552cc6d6faa0431b5a42f71a85789c267a500` (`test(rbac): verify denials preserve database state`). Task 12 remains awaiting independent re-review; P1-C01 remains `IN_PROGRESS`.
