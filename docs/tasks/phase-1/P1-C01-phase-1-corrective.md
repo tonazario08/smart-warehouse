@@ -413,3 +413,10 @@ npm.cmd run e2e
 - Re-ran the focused gate serially after database setup: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py tests/postgres/test_inventory_transactions.py tests/postgres/test_inventory_concurrency.py tests/unit/test_architecture.py tests/test_inventory.py -q` — 39 passed, with the existing Starlette/httpx and pytest-asyncio warnings.
 - Full backend suite passed serially: `.venv\Scripts\python.exe -m pytest -q` — 257 passed, with the same existing warnings. `.venv\Scripts\python.exe -m ruff check app tests alembic` and `git diff --check` both passed.
 - This PostgreSQL 18 recovery verification supplements and does not replace the earlier PostgreSQL 16 Task 11 implementation evidence. No concurrency repeat was run because the review correction changes only the architecture guard. P1-C01 remains `IN_PROGRESS` pending independent review disposition.
+
+### 2026-09-27 — Internal Task 11 accepted
+
+- Independent re-review of cumulative diff `2a1aa49..b1e2331` found no remaining Critical, Important, or Minor finding.
+- Reviewer verification passed: architecture suite — 9 passed; Ruff and `git diff --check` — passed. Original PostgreSQL 16 implementation evidence and ten concurrency repetitions remain authoritative; PostgreSQL 18 recovery verification passed focused 39 and full 257 tests for the test-only correction.
+- Task 11 checkpoints are `0a96c17`, `9785fe9`, `de4f99a`, and `b1e2331`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-11-review-report.md`.
+- Internal Task 11 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 12.
