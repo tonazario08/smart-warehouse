@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import type { NavigationItem } from './navigation'
 
 interface AppShellProps {
@@ -13,10 +14,10 @@ export function AppShell({ title, activePath, navigationItems, children, utility
   return (
     <div className="application-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <a className="shell-brand" href="/" aria-label="Smart Warehouse home">
+      <Link className="shell-brand" to="/" aria-label="Smart Warehouse home">
         <span className="brand-mark" aria-hidden="true">SW</span>
         <span>Smart Warehouse</span>
-      </a>
+      </Link>
       <header className="utility-header">
         <h1>{title}</h1>
         <div className="utility-controls">{utility}</div>
@@ -28,9 +29,9 @@ export function AppShell({ title, activePath, navigationItems, children, utility
               const isCurrent = activePath === item.href
               return (
                 <li key={item.href}>
-                  <a className="route-link" href={item.href} aria-current={isCurrent ? 'page' : undefined}>
+                  <Link className="route-link" to={item.href} aria-current={isCurrent ? 'page' : undefined}>
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               )
             })}

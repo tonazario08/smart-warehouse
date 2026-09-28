@@ -101,6 +101,22 @@ td small { margin-top: .25rem; color: var(--quiet-text); }
 .pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; }
 .pagination span { color: var(--muted-text); font-size: .9rem; }
 
+.auth-page { display: grid; min-height: 100vh; place-items: center; padding: clamp(1rem, 4vw, 2.5rem); background: var(--steel-night); }
+.auth-panel { width: min(100%, 31rem); padding: clamp(1.4rem, 5vw, 2.5rem); border: 1px solid var(--aisle-line); border-top: 3px solid var(--safety-amber); background: var(--bay); }
+.auth-panel > p:not(.kicker, .auth-switch, .form-success) { color: var(--muted-text); line-height: 1.55; }
+.auth-panel h1 { font-size: clamp(1.8rem, 5vw, 2.45rem); }
+.auth-form { display: grid; gap: .65rem; margin-top: 1.4rem; }
+.auth-form button { margin-top: .4rem; }
+.auth-switch { margin: 1.3rem 0 0; color: var(--muted-text); font-size: .92rem; }
+.auth-switch a { color: var(--safety-amber); font-weight: 650; }
+.form-error { color: var(--alert-coral); font-size: .86rem; line-height: 1.4; }
+.form-success { margin: .7rem 0; color: var(--status-mint); line-height: 1.5; }
+.auth-state { display: grid; min-height: 100vh; place-items: center; padding: 2rem; color: var(--safety-amber); }
+.current-account { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; color: var(--muted-text); font-size: .88rem; }
+.role-chip { padding: .2rem .4rem; border: 1px solid var(--aisle-line); color: var(--status-mint); font-size: .76rem; text-transform: capitalize; }
+.route-placeholder { max-width: 48rem; padding: clamp(1rem, 3vw, 2rem) 0; }
+.route-placeholder > p:last-child { color: var(--muted-text); line-height: 1.6; }
+
 @media (max-width: 760px) {
   .application-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); }
   .shell-brand { grid-column: 1; grid-row: 1; padding: .7rem .8rem; border-right: 0; }

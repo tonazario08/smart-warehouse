@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { AppShell } from './AppShell'
 
 describe('AppShell', () => {
   it('uses semantic landmarks and marks the active route', () => {
-    render(<AppShell
+    render(<MemoryRouter><AppShell
       title="Warehouse"
       activePath="/stock"
       navigationItems={[
@@ -14,7 +15,7 @@ describe('AppShell', () => {
       ]}
     >
       <p>Stock by warehouse</p>
-    </AppShell>)
+    </AppShell></MemoryRouter>)
 
     expect(screen.getByRole('banner')).toBeInTheDocument()
     expect(screen.getAllByRole('navigation')).toHaveLength(1)
@@ -24,14 +25,14 @@ describe('AppShell', () => {
   })
 
   it('places brand, utility header, navigation, and content in mobile reading order', () => {
-    const { container } = render(<AppShell
+    const { container } = render(<MemoryRouter><AppShell
       title="Warehouse"
       activePath="/stock"
       navigationItems={[{ label: 'Stock', href: '/stock' }]}
       utility={<button type="button">Account</button>}
     >
       <p>Stock by warehouse</p>
-    </AppShell>)
+    </AppShell></MemoryRouter>)
 
     const landmarks = Array.from(container.querySelectorAll('.shell-brand, .utility-header, .route-rail nav, #main-content'))
     expect(landmarks.map((element) => element.matches('nav') ? 'route-rail nav' : element.className)).toEqual([
@@ -45,9 +46,9 @@ describe('AppShell', () => {
 
   it('offers a keyboard reachable skip link to the main content', async () => {
     const user = userEvent.setup()
-    render(<AppShell title="Warehouse" activePath="/stock" navigationItems={[]}>
+    render(<MemoryRouter><AppShell title="Warehouse" activePath="/stock" navigationItems={[]}>
       <p>Stock by warehouse</p>
-    </AppShell>)
+    </AppShell></MemoryRouter>)
 
     const skipLink = screen.getByRole('link', { name: 'Skip to main content' })
     expect(skipLink).toHaveAttribute('href', '#main-content')
