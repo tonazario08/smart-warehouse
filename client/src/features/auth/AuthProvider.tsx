@@ -23,10 +23,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [session, setSession] = useState<Session>(initialSession)
   const revision = useRef(0)
+  const sessionGeneration = useRef(0)
   const hydrationRequest = useRef<Promise<User> | null>(null)
 
   const clearSession = useCallback(() => {
     revision.current += 1
+    sessionGeneration.current += 1
     hydrationRequest.current = null
     localStorage.removeItem(AUTH_TOKEN_KEY)
     queryClient.clear()
@@ -36,7 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [client] = useState(() => new ApiClient(
     undefined,
     () => localStorage.getItem(AUTH_TOKEN_KEY),
-    clearSession,
+    (requestToken, requestGeneration) => {
+      if (
+        requestGeneration === sessionGeneration.current
+        && requestToken === localStorage.getItem(AUTH_TOKEN_KEY)
+      ) clearSession()
+    },
+    () => sessionGeneration.current,
   ))
   const authApi = useMemo(() => createAuthApi(client), [client])
 
@@ -65,16 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await authApi.login(input)
       if (revision.current !== loginRevision) throw new Error('The sign-in attempt is no longer active.')
+      sessionGeneration.current += 1
       localStorage.setItem(AUTH_TOKEN_KEY, result.access_token)
       const user = await authApi.me()
       if (revision.current !== loginRevision) throw new Error('The sign-in attempt is no longer active.')
       setSession({ status: 'authenticated', user })
       return user
     } catch (error) {
-      if (revision.current === loginRevision) {
-        if (error instanceof ApiError && error.status === 403) setSession({ status: 'anonymous', user: null })
-        else if (!(error instanceof ApiError && error.status === 401)) clearSession()
-      }
+      if (revision.current === loginRevision) clearSession()
       throw error
     }
   }, [authApi, clearSession])

@@ -26,10 +26,11 @@ describe('ApiClient', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       detail: { code: 'AUTHENTICATION_REQUIRED', message: 'Sign in again.', fields: null },
     }), { status: 401, headers: { 'Content-Type': 'application/json' } })))
-    const client = new ApiClient('/api/v1', () => 'expired-token', onUnauthorized)
+    const client = new ApiClient('/api/v1', () => 'expired-token', onUnauthorized, () => 11)
 
     await expect(client.request('/users')).rejects.toMatchObject({ status: 401 })
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
+    expect(onUnauthorized).toHaveBeenCalledWith('expired-token', 11)
   })
 
   it('sends JSON requests with the current bearer token', async () => {

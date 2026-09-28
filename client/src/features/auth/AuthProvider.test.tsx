@@ -151,6 +151,84 @@ describe('AuthProvider', () => {
     expect(queryClient.getQueryData(['private-data'])).toBeUndefined()
   })
 
+  it('ignores a delayed 401 from an earlier session even when a later session reuses its token', async () => {
+    const user = userEvent.setup()
+    const nextUser = { id: 8, email: 'new-operator@example.com', role: 'admin', is_active: true }
+    localStorage.setItem(tokenKey, 'reused-token')
+    let finishOldUsersRequest!: (response: Response) => void
+    let meRequestCount = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/auth/me')) {
+        meRequestCount += 1
+        return jsonResponse(meRequestCount === 1 ? currentUser : nextUser)
+      }
+      if (url.endsWith('/auth/login')) {
+        return jsonResponse({ access_token: 'reused-token', token_type: 'bearer', user: currentUser })
+      }
+      if (url.endsWith('/users')) {
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer reused-token')
+        return new Promise<Response>((resolve) => { finishOldUsersRequest = resolve })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const queryClient = new QueryClient()
+
+    renderAuth(queryClient)
+    await screen.findByText('Current user: operator@example.com')
+    await user.click(screen.getByRole('button', { name: 'Request users' }))
+    await waitFor(() => expect(finishOldUsersRequest).toBeTypeOf('function'))
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await screen.findByText('Current user: new-operator@example.com')
+    queryClient.setQueryData(['new-session-data'], ['session B'])
+
+    await act(async () => {
+      finishOldUsersRequest(jsonResponse({
+        detail: { code: 'AUTHENTICATION_REQUIRED', message: 'Old session expired.', fields: null },
+      }, 401))
+    })
+
+    expect(screen.getByText('Session: authenticated')).toBeInTheDocument()
+    expect(screen.getByText('Current user: new-operator@example.com')).toBeInTheDocument()
+    expect(localStorage.getItem(tokenKey)).toBe('reused-token')
+    expect(queryClient.getQueryData(['new-session-data'])).toEqual(['session B'])
+  })
+
+  it('clears the newly issued token and cache when login cannot establish /auth/me', async () => {
+    const user = userEvent.setup()
+    let finishMe!: (response: Response) => void
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/auth/login')) {
+        return jsonResponse({ access_token: 'unverified-token', token_type: 'bearer', user: currentUser })
+      }
+      if (String(input).endsWith('/auth/me')) {
+        return new Promise<Response>((resolve) => { finishMe = resolve })
+      }
+      throw new Error(`Unexpected request: ${String(input)}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const queryClient = new QueryClient()
+
+    renderAuth(queryClient)
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() => expect(localStorage.getItem(tokenKey)).toBe('unverified-token'))
+    queryClient.setQueryData(['unverified-session-data'], ['must be cleared'])
+
+    await act(async () => {
+      finishMe(jsonResponse({
+        detail: { code: 'PERMISSION_DENIED', message: 'Current user is unavailable.', fields: null },
+      }, 403))
+    })
+
+    await waitFor(() => expect(screen.getByText('Session: anonymous')).toBeInTheDocument())
+    expect(screen.getByText('Current user: none')).toBeInTheDocument()
+    expect(localStorage.getItem(tokenKey)).toBeNull()
+    expect(queryClient.getQueryData(['unverified-session-data'])).toBeUndefined()
+  })
+
   it('preserves token, current user, and cached queries when an API request returns 403', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

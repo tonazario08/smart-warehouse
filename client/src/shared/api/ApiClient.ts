@@ -6,11 +6,13 @@ export class ApiClient {
   constructor(
     private readonly baseUrl = defaultBaseUrl,
     private readonly getToken: () => string | null = () => null,
-    private readonly onUnauthorized: () => void = () => undefined,
+    private readonly onUnauthorized: (requestToken: string | null, requestGeneration: number) => void = () => undefined,
+    private readonly getSessionGeneration: () => number = () => 0,
   ) {}
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = this.getToken()
+    const sessionGeneration = this.getSessionGeneration()
     const headers = new Headers(init.headers)
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     if (token) headers.set('Authorization', `Bearer ${token}`)
@@ -24,7 +26,7 @@ export class ApiClient {
 
     if (!response.ok) {
       const error = ApiError.fromResponse(response.status, body)
-      if (response.status === 401) this.onUnauthorized()
+      if (response.status === 401) this.onUnauthorized(token, sessionGeneration)
       throw error
     }
 
