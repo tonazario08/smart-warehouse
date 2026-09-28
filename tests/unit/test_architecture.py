@@ -51,11 +51,11 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
         "conn",
         "engine",
     }
-    database_connection_methods = {
+    database_acquisition_methods = {
         "connect",
         "connection",
         "cursor",
-        "execution_options",
+        "get_bind",
         "raw_connection",
     }
     offenders: list[str] = []
@@ -87,10 +87,7 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
                     expression.value
                 )
             if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Attribute):
-                return (
-                    expression.func.attr in database_connection_methods
-                    and self.references_database(expression.func.value)
-                )
+                return self.references_database(expression.func.value)
             return False
 
         def assigned_names(self, target: ast.expr) -> set[str]:
@@ -174,7 +171,7 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
             if isinstance(node.func, ast.Attribute):
                 method = node.func.attr
                 if method in {"commit", "rollback"} or (
-                    method in direct_database_methods
+                    method in (direct_database_methods | database_acquisition_methods)
                     and self.references_database(node.func.value)
                 ):
                     offenders.append(f"{path}:{node.lineno} direct database call {method}()")
@@ -262,7 +259,7 @@ def test_global_router_guard_tracks_database_connection_calls_and_aliases() -> N
         assert violations, f"global router guard missed connection call in {path}: {mutation!r}"
 
 
-def test_router_guard_drops_connection_alias_after_reassignment_and_ignores_factory_calls() -> None:
+def test_router_guard_drops_connection_alias_after_reassignment() -> None:
     source = (
         "def route(session):\n"
         "    connection = session.connection()\n"
@@ -271,6 +268,79 @@ def test_router_guard_drops_connection_alias_after_reassignment_and_ignores_fact
         "    adapter = make_adapter()\n"
         "    adapter.execute(statement)\n"
         "    adapter.connect().execute(statement)\n"
+    )
+
+    violations = _router_boundary_violations(source, "app/dashboard/router.py")
+    assert len(violations) == 1
+    assert "connection()" in violations[0]
+
+
+def test_global_router_guard_tracks_session_derived_method_chains() -> None:
+    mutations = {
+        "app/dashboard/router.py": (
+            "def route(session):\n"
+            "    session.get_bind().execute(statement)\n"
+        ),
+        "app/inventory/router.py": (
+            "def route(session):\n"
+            "    session.get_bind().connect().exec_driver_sql(statement)\n"
+        ),
+        "app/users/router.py": (
+            "def route(session):\n"
+            "    engine = session.get_bind()\n"
+            "    engine.connect().exec_driver_sql(statement)\n"
+        ),
+        "app/warehouse/router.py": (
+            "def route(session):\n"
+            "    local_session = session\n"
+            "    engine = local_session.get_bind()\n"
+            "    local_engine = engine\n"
+            "    local_engine.connect().execute(statement)\n"
+        ),
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, (
+            f"global router guard missed session-derived chain in {path}: {mutation!r}"
+        )
+
+
+def test_global_router_guard_rejects_session_derived_connection_acquisition() -> None:
+    mutations = {
+        "app/dashboard/router.py": "session.get_bind()\n",
+        "app/inventory/router.py": "session.connection()\n",
+        "app/warehouse/router.py": "session.get_bind().connect()\n",
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, (
+            f"global router guard missed connection acquisition in {path}: {mutation!r}"
+        )
+
+
+def test_router_guard_drops_session_derived_alias_and_ignores_service_calls() -> None:
+    source = (
+        "def route(session):\n"
+        "    engine = session.get_bind()\n"
+        "    engine = make_engine()\n"
+        "    engine.connect().exec_driver_sql(statement)\n"
+        "    _service(session).get()\n"
+        "    make_adapter().connect().execute(statement)\n"
+    )
+
+    violations = _router_boundary_violations(source, "app/dashboard/router.py")
+    assert len(violations) == 1
+    assert "get_bind()" in violations[0]
+
+
+def test_router_guard_ignores_service_and_factory_method_chains() -> None:
+    source = (
+        "def route(session):\n"
+        "    _service(session).get()\n"
+        "    make_adapter().connect().execute(statement)\n"
+        "    make_repository().list()\n"
     )
 
     assert _router_boundary_violations(source, "app/dashboard/router.py") == []
