@@ -29,19 +29,20 @@ h3 { color: #f5f8f9; }
 :focus-visible { outline: 3px solid var(--safety-amber); outline-offset: 3px; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 
-.application-shell { display: grid; min-height: 100vh; grid-template-columns: 14rem minmax(0, 1fr); background: var(--steel-night); }
-.route-rail { display: flex; min-width: 0; flex-direction: column; gap: 2rem; padding: 1.25rem .8rem; border-right: 1px solid var(--aisle-line); background: #122831; }
-.shell-brand { display: flex; align-items: center; gap: .7rem; padding: .25rem .5rem; color: #e7eef1; font-size: .9rem; font-weight: 650; text-decoration: none; }
+.application-shell { display: grid; min-height: 100vh; grid-template-columns: 14rem minmax(0, 1fr); grid-template-rows: 5rem minmax(0, 1fr); background: var(--steel-night); }
+.skip-link { position: fixed; z-index: 10; top: .5rem; left: .5rem; transform: translateY(-200%); padding: .7rem 1rem; background: var(--safety-amber); color: var(--steel-night); font-weight: 700; }
+.skip-link:focus-visible { transform: translateY(0); outline: 3px solid #fff; outline-offset: 2px; }
+.shell-brand { display: flex; grid-column: 1; grid-row: 1; align-items: center; gap: .7rem; padding: 1rem 1.3rem; border-right: 1px solid var(--aisle-line); color: #e7eef1; font-size: .9rem; font-weight: 650; text-decoration: none; }
 .brand-mark { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--aisle-line); color: var(--safety-amber); font-size: .77rem; font-weight: 750; }
+.utility-header { display: flex; grid-column: 2; grid-row: 1; min-width: 0; min-height: 5rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1rem, 3vw, 2.4rem); border-bottom: 1px solid var(--aisle-line); }
+.utility-header h1 { margin: 0; font-size: 1.25rem; letter-spacing: -.01em; }
+.utility-controls { display: flex; align-items: center; gap: .75rem; }
+.route-rail { display: flex; grid-column: 1; grid-row: 2; min-width: 0; flex-direction: column; gap: 2rem; padding: 1.25rem .8rem; border-right: 1px solid var(--aisle-line); background: #122831; }
 .route-rail nav ul { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
 .route-link { position: relative; display: block; padding: .65rem .8rem; border-left: 3px solid transparent; color: var(--muted-text); font-size: .92rem; text-decoration: none; }
 .route-link:hover { background: #1b3741; color: #fff; }
 .route-link[aria-current='page'] { border-left-color: var(--safety-amber); background: #1b3741; color: #fff; }
-.shell-workspace { min-width: 0; }
-.utility-header { display: flex; min-height: 5rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1rem, 3vw, 2.4rem); border-bottom: 1px solid var(--aisle-line); }
-.utility-header h1 { margin: 0; font-size: 1.25rem; letter-spacing: -.01em; }
-.utility-controls { display: flex; align-items: center; gap: .75rem; }
-.shell-content { min-width: 0; padding: clamp(1rem, 3vw, 2.4rem); }
+.shell-content { grid-column: 2; grid-row: 2; min-width: 0; padding: clamp(1rem, 3vw, 2.4rem); }
 
 .app-shell { min-height: 100vh; padding: clamp(1rem, 3vw, 2.4rem); background: var(--steel-night); }
 .login-shell { display: grid; place-items: center; }
@@ -101,13 +102,16 @@ td small { margin-top: .25rem; color: var(--quiet-text); }
 .pagination span { color: var(--muted-text); font-size: .9rem; }
 
 @media (max-width: 760px) {
-  .application-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .application-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); }
+  .shell-brand { grid-column: 1; grid-row: 1; padding: .7rem .8rem; border-right: 0; }
+  .utility-header { grid-column: 1; grid-row: 2; min-height: 4rem; }
   .route-rail { gap: .8rem; padding: .7rem .8rem 0; border-right: 0; border-bottom: 1px solid var(--aisle-line); }
+  .route-rail { grid-column: 1; grid-row: 3; }
   .route-rail nav { overflow-x: auto; }
   .route-rail nav ul { display: flex; width: max-content; min-width: 100%; gap: .2rem; }
   .route-link { border-bottom: 3px solid transparent; border-left: 0; padding: .65rem .75rem; white-space: nowrap; }
   .route-link[aria-current='page'] { border-bottom-color: var(--safety-amber); }
-  .utility-header { min-height: 4rem; }
+  .shell-content { grid-column: 1; grid-row: 4; }
   .workspace > header, .heading { align-items: start; flex-direction: column; }
   .account { justify-content: start; }
   .manager { grid-template-columns: minmax(0, 1fr); }
