@@ -474,3 +474,10 @@ npm.cmd run e2e
 - Test-first RED reproduced both `acquire = session.get_bind; engine = acquire()` and connection method alias bypasses. Regression coverage includes chained aliases, tuple/simple assignments, `execute` and `add` method aliases, safe reassignment, untainted bound factory methods, and `_service(session).get()` false-positive control. Earlier local-session alias, connection-call, router-wide, RBAC persisted-state, and transaction guard coverage remains in place.
 - Verification used the disposable PostgreSQL 18.3 UTC test database `smart_warehouse_test` at `127.0.0.1:55432`; no PostgreSQL 16 result is claimed. Focused dashboard/RBAC/architecture gate passed serially — 144 passed. Full pytest passed serially — 392 passed. Architecture suite passed — 20 passed. Ruff and `git diff --check` passed. Pytest emitted only the existing Starlette/httpx and pytest-asyncio deprecation warnings.
 - Test-only correction committed as `0a806c0dfd6977bdb33dc41b156c8c0a15451036` (`test(architecture): track bound database method aliases`). The review report was not modified. Task 12 awaits independent re-review; P1-C01 remains `IN_PROGRESS`.
+
+### 2026-09-28 — Internal Task 12 accepted
+
+- Independent final re-review of cumulative diff `e74799f..70ce726` found no remaining Critical, Important, or Minor finding.
+- Reviewer verification passed serially against PostgreSQL 18.3 UTC: dashboard, RBAC matrix, and architecture suite — 144 passed; `git diff --check e74799f..70ce726` — passed. The final implementation verification also passed the full backend suite — 392 passed — and Ruff.
+- Task 12 checkpoints are `6b891af`, `a688b0f`, `60a552c`, `0be5d44`, `335347c`, `56f19e0`, `5c69ba2`, `b752c42`, `0a806c0`, and `70ce726`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-12-review-report.md`.
+- Internal Task 12 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 13.
