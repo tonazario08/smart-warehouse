@@ -78,17 +78,56 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
     class AliasAwareDatabaseCalls(ast.NodeVisitor):
         def __init__(self) -> None:
             self.aliases = set(database_receivers)
+            self.bound_callables: dict[str, set[str]] = {}
 
         def references_database(self, expression: ast.expr) -> bool:
             if isinstance(expression, ast.Name):
-                return expression.id in self.aliases
+                return expression.id in self.aliases or expression.id in self.bound_callables
             if isinstance(expression, ast.Attribute):
                 return expression.attr in database_receivers or self.references_database(
                     expression.value
                 )
             if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Attribute):
                 return self.references_database(expression.func.value)
+            if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Name):
+                return expression.func.id in self.bound_callables
             return False
+
+        def bound_method_names(self, expression: ast.expr) -> set[str]:
+            if isinstance(expression, ast.Attribute) and self.references_database(
+                expression.value
+            ):
+                return {expression.attr}
+            if isinstance(expression, ast.Name):
+                return self.bound_callables.get(expression.id, set()).copy()
+            return set()
+
+        def target_bound_methods(
+            self, target: ast.expr, value: ast.expr
+        ) -> dict[str, set[str]]:
+            if isinstance(target, ast.Name):
+                methods = self.bound_method_names(value)
+                return {target.id: methods} if methods else {}
+            if isinstance(target, (ast.Tuple, ast.List)) and isinstance(
+                value, (ast.Tuple, ast.List)
+            ):
+                methods: dict[str, set[str]] = {}
+                for target_item, value_item in zip(target.elts, value.elts, strict=False):
+                    methods.update(self.target_bound_methods(target_item, value_item))
+                return methods
+            return {}
+
+        def assign_aliases(self, target: ast.expr, value: ast.expr) -> None:
+            is_database_alias = self.references_database(value)
+            bound_methods = self.target_bound_methods(target, value)
+            for name in self.assigned_names(target):
+                self.aliases.discard(name)
+                self.bound_callables.pop(name, None)
+                if is_database_alias:
+                    self.aliases.add(name)
+            for name, methods in bound_methods.items():
+                self.aliases.add(name)
+                self.bound_callables[name] = methods
 
         def assigned_names(self, target: ast.expr) -> set[str]:
             if isinstance(target, ast.Name):
@@ -99,7 +138,11 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
             saved_aliases = self.aliases
+            saved_bound_callables = self.bound_callables
             local_aliases = set(saved_aliases)
+            local_bound_callables = {
+                name: methods.copy() for name, methods in saved_bound_callables.items()
+            }
             arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
             if node.args.vararg:
                 arguments.append(node.args.vararg)
@@ -107,65 +150,76 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
                 arguments.append(node.args.kwarg)
             for argument in arguments:
                 local_aliases.discard(argument.arg)
+                local_bound_callables.pop(argument.arg, None)
                 if argument.arg in database_receivers:
                     local_aliases.add(argument.arg)
             self.aliases = local_aliases
+            self.bound_callables = local_bound_callables
             for statement in node.body:
                 self.visit(statement)
             self.aliases = saved_aliases
+            self.bound_callables = saved_bound_callables
 
         visit_AsyncFunctionDef = visit_FunctionDef
 
         def visit_Assign(self, node: ast.Assign) -> None:
-            is_database_alias = self.references_database(node.value)
             self.visit(node.value)
             for target in node.targets:
-                for name in self.assigned_names(target):
-                    self.aliases.discard(name)
-                    if is_database_alias:
-                        self.aliases.add(name)
+                self.assign_aliases(target, node.value)
 
         def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-            is_database_alias = (
-                node.value is not None and self.references_database(node.value)
-            )
             if node.value is not None:
                 self.visit(node.value)
-            for name in self.assigned_names(node.target):
-                self.aliases.discard(name)
-                if is_database_alias:
-                    self.aliases.add(name)
+                self.assign_aliases(node.target, node.value)
 
         def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
-            is_database_alias = self.references_database(node.value)
             self.visit(node.value)
-            for name in self.assigned_names(node.target):
-                self.aliases.discard(name)
-                if is_database_alias:
-                    self.aliases.add(name)
+            self.assign_aliases(node.target, node.value)
 
         def visit_AugAssign(self, node: ast.AugAssign) -> None:
             self.visit(node.value)
             for name in self.assigned_names(node.target):
                 self.aliases.discard(name)
+                self.bound_callables.pop(name, None)
 
         def visit_Delete(self, node: ast.Delete) -> None:
             for target in node.targets:
                 for name in self.assigned_names(target):
                     self.aliases.discard(name)
+                    self.bound_callables.pop(name, None)
 
         def visit_If(self, node: ast.If) -> None:
             self.visit(node.test)
             before = set(self.aliases)
+            before_callables = {
+                name: methods.copy() for name, methods in self.bound_callables.items()
+            }
             self.aliases = set(before)
+            self.bound_callables = {
+                name: methods.copy() for name, methods in before_callables.items()
+            }
             for statement in node.body:
                 self.visit(statement)
             body_aliases = set(self.aliases)
+            body_callables = {
+                name: methods.copy() for name, methods in self.bound_callables.items()
+            }
             self.aliases = set(before)
+            self.bound_callables = {
+                name: methods.copy() for name, methods in before_callables.items()
+            }
             for statement in node.orelse:
                 self.visit(statement)
             else_aliases = set(self.aliases)
+            else_callables = {
+                name: methods.copy() for name, methods in self.bound_callables.items()
+            }
             self.aliases = body_aliases | else_aliases
+            self.bound_callables = {}
+            for name in body_callables.keys() | else_callables.keys():
+                methods = body_callables.get(name, set()) | else_callables.get(name, set())
+                if methods:
+                    self.bound_callables[name] = methods
 
         def visit_Call(self, node: ast.Call) -> None:
             if isinstance(node.func, ast.Attribute):
@@ -175,6 +229,15 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
                     and self.references_database(node.func.value)
                 ):
                     offenders.append(f"{path}:{node.lineno} direct database call {method}()")
+            elif isinstance(node.func, ast.Name):
+                methods = self.bound_callables.get(node.func.id, set())
+                forbidden_methods = methods.intersection(
+                    direct_database_methods | database_acquisition_methods | {"commit", "rollback"}
+                )
+                offenders.extend(
+                    f"{path}:{node.lineno} direct database call {method}()"
+                    for method in sorted(forbidden_methods)
+                )
             self.generic_visit(node)
 
     AliasAwareDatabaseCalls().visit(tree)
@@ -341,6 +404,82 @@ def test_router_guard_ignores_service_and_factory_method_chains() -> None:
         "    _service(session).get()\n"
         "    make_adapter().connect().execute(statement)\n"
         "    make_repository().list()\n"
+    )
+
+    assert _router_boundary_violations(source, "app/dashboard/router.py") == []
+
+
+def test_global_router_guard_tracks_tainted_bound_database_methods() -> None:
+    mutations = {
+        "app/dashboard/router.py": (
+            "def route(session):\n"
+            "    acquire = session.get_bind\n"
+            "    engine = acquire()\n"
+            "    engine.connect().exec_driver_sql(statement)\n"
+        ),
+        "app/inventory/router.py": (
+            "def route(session):\n"
+            "    connect = session.connection\n"
+            "    connection = connect()\n"
+            "    connection.exec_driver_sql(statement)\n"
+        ),
+        "app/users/router.py": (
+            "def route(session):\n"
+            "    db = session\n"
+            "    (acquire,) = (db.connection,)\n"
+            "    connect = acquire\n"
+            "    connection = connect()\n"
+            "    connection.execute(statement)\n"
+        ),
+        "app/warehouse/router.py": (
+            "def route(session):\n"
+            "    (bind, connection) = (session.get_bind, session.connection)\n"
+            "    engine = bind()\n"
+            "    conn = connection()\n"
+            "    engine.connect().execute(statement)\n"
+            "    conn.execute(statement)\n"
+        ),
+        "app/audit/router.py": (
+            "def route(session):\n"
+            "    execute = session.execute\n"
+            "    add = session.add\n"
+            "    execute(statement)\n"
+            "    add(record)\n"
+        ),
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, (
+            f"global router guard missed bound database method in {path}: {mutation!r}"
+        )
+
+
+def test_router_guard_tracks_bound_methods_until_safe_reassignment() -> None:
+    source = (
+        "def route(session):\n"
+        "    acquire = session.connection\n"
+        "    safe_acquire = acquire\n"
+        "    acquire = make_connection\n"
+        "    safe_adapter = acquire()\n"
+        "    safe_adapter.execute(statement)\n"
+        "    connection = safe_acquire()\n"
+        "    connection.execute(statement)\n"
+    )
+
+    violations = _router_boundary_violations(source, "app/dashboard/router.py")
+    assert len(violations) == 2
+    assert all("connection()" in violation or "execute()" in violation for violation in violations)
+
+
+def test_router_guard_ignores_untainted_bound_factory_methods() -> None:
+    source = (
+        "def route(session):\n"
+        "    adapter = make_adapter()\n"
+        "    connect = adapter.connect\n"
+        "    connection = connect()\n"
+        "    connection.execute(statement)\n"
+        "    _service(session).get()\n"
     )
 
     assert _router_boundary_violations(source, "app/dashboard/router.py") == []
