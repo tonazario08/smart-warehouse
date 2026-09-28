@@ -31,6 +31,7 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
     direct_database_methods = {
         "get",
         "execute",
+        "exec_driver_sql",
         "scalars",
         "scalar",
         "query",
@@ -49,6 +50,13 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
         "connection",
         "conn",
         "engine",
+    }
+    database_connection_methods = {
+        "connect",
+        "connection",
+        "cursor",
+        "execution_options",
+        "raw_connection",
     }
     offenders: list[str] = []
 
@@ -77,6 +85,11 @@ def _router_boundary_violations(source: str, path: str) -> list[str]:
             if isinstance(expression, ast.Attribute):
                 return expression.attr in database_receivers or self.references_database(
                     expression.value
+                )
+            if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Attribute):
+                return (
+                    expression.func.attr in database_connection_methods
+                    and self.references_database(expression.func.value)
                 )
             return False
 
@@ -219,6 +232,48 @@ def test_global_router_guard_tracks_local_and_chained_session_aliases() -> None:
     for path, mutation in mutations.items():
         violations = _router_boundary_violations(mutation, path)
         assert violations, f"global router guard missed alias in {path}: {mutation!r}"
+
+
+def test_global_router_guard_tracks_database_connection_calls_and_aliases() -> None:
+    mutations = {
+        "app/dashboard/router.py": (
+            "def route(session):\n"
+            "    session.connection().execute(statement)\n"
+        ),
+        "app/inventory/router.py": (
+            "def route(session):\n"
+            "    session.connection().exec_driver_sql(statement)\n"
+        ),
+        "app/users/router.py": (
+            "def route(session):\n"
+            "    db = session\n"
+            "    connection = db.connection()\n"
+            "    local_connection = connection\n"
+            "    local_connection.execute(statement)\n"
+        ),
+        "app/warehouse/router.py": (
+            "def route(engine):\n"
+            "    engine.connect().exec_driver_sql(statement)\n"
+        ),
+    }
+
+    for path, mutation in mutations.items():
+        violations = _router_boundary_violations(mutation, path)
+        assert violations, f"global router guard missed connection call in {path}: {mutation!r}"
+
+
+def test_router_guard_drops_connection_alias_after_reassignment_and_ignores_factory_calls() -> None:
+    source = (
+        "def route(session):\n"
+        "    connection = session.connection()\n"
+        "    connection = make_client()\n"
+        "    connection.execute(statement)\n"
+        "    adapter = make_adapter()\n"
+        "    adapter.execute(statement)\n"
+        "    adapter.connect().execute(statement)\n"
+    )
+
+    assert _router_boundary_violations(source, "app/dashboard/router.py") == []
 
 
 def test_router_guard_drops_alias_after_local_reassignment() -> None:
