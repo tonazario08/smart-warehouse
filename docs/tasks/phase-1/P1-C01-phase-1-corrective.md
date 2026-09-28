@@ -481,3 +481,19 @@ npm.cmd run e2e
 - Reviewer verification passed serially against PostgreSQL 18.3 UTC: dashboard, RBAC matrix, and architecture suite — 144 passed; `git diff --check e74799f..70ce726` — passed. The final implementation verification also passed the full backend suite — 392 passed — and Ruff.
 - Task 12 checkpoints are `6b891af`, `a688b0f`, `60a552c`, `0be5d44`, `335347c`, `56f19e0`, `5c69ba2`, `b752c42`, `0a806c0`, and `70ce726`. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-12-review-report.md`.
 - Internal Task 12 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 13.
+
+## Internal Task 13 Evidence (append-only)
+
+### 2026-09-28 — Internal Task 13 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 12 is accepted at `7a1399b`, and the approved Phase 1 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-13-brief.md` authorize this internal scope.
+- Added the frontend test/typecheck toolchain, shared API error/client contracts, query and application providers, accessible async and pagination primitives, role-ready navigation, and a responsive dark-industrial application shell while preserving the existing application for the Task 14 migration.
+- Test-first evidence covered missing API client and async-state modules, exact-once 401 handling, backend error-detail preservation, retry boundaries, async accessibility, pagination boundaries, shell semantics, mobile order, and keyboard skip navigation. The two independent-review findings were reproduced with failing shell tests before correction.
+- Final serial verification from `client`: `npm.cmd test -- --run` — 5 files and 12 tests passed; `npm.cmd run typecheck` — passed; `npm.cmd run build` — passed with 64 modules; `git diff --check` — passed.
+- Implementation checkpoints are `8828f5d` (`feat(web): add feature-ready application foundation`) and `7b0d814` (`fix(web): improve shell keyboard and mobile order`). Detailed implementation evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-13-implementer-report.md`.
+
+### 2026-09-28 — Internal Task 13 accepted
+
+- Independent review of cumulative diff `7a1399b..7b0d814` found the initial mobile utility/navigation order and missing keyboard skip link; both were corrected test-first and independently re-reviewed.
+- Final re-review found no remaining Critical, Important, or Minor finding. Focused AppShell tests — 3 passed; full frontend suite — 12 passed; typecheck, build, and cumulative diff check — passed.
+- The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-13-review-report.md`. Internal Task 13 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 14.
