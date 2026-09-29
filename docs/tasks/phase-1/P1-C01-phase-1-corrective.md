@@ -497,3 +497,20 @@ npm.cmd run e2e
 - Independent review of cumulative diff `7a1399b..7b0d814` found the initial mobile utility/navigation order and missing keyboard skip link; both were corrected test-first and independently re-reviewed.
 - Final re-review found no remaining Critical, Important, or Minor finding. Focused AppShell tests — 3 passed; full frontend suite — 12 passed; typecheck, build, and cumulative diff check — passed.
 - The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-13-review-report.md`. Internal Task 13 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 14.
+
+## Internal Task 14 Evidence (append-only)
+
+### 2026-09-28 — Internal Task 14 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 13 is accepted at `4c3ae5b`, and the approved Phase 1 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-14-brief.md` authorize this internal scope.
+- Replaced the legacy monolithic frontend with strict public registration, login, current-user hydration from `/auth/me`, logout, query-cache invalidation, protected/role-aware routing, and typed role-derived navigation under the Task 13 application shell. Task 15–17 screens remain explicitly labelled placeholders.
+- Test-first coverage verifies registration cannot submit a role, backend field mapping, token lifecycle, startup loading, missing-token behavior, authoritative current user, public/protected/role redirects, navigation visibility, `401` cleanup, ordinary authenticated `403` preservation, and shell accessibility.
+- Independent review found two stale-session paths. Corrections bind unauthorized callbacks to the originating request/session generation, including token reuse, and clear a newly issued token/cache when login cannot establish `/auth/me`, while preserving an existing authenticated session on ordinary `403`.
+- Final serial verification from `client`: focused auth/API/app suite — 6 files and 29 tests passed; full frontend suite — 8 files and 34 tests passed; typecheck — passed; production build — passed with 180 modules; cumulative `git diff --check` — passed.
+- Implementation checkpoints are `9b1b4a9` (`feat(web): add secure authentication and role-aware routes`) and `892e2b1` (`fix(web): bind auth invalidation to session generation`). Detailed implementation evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-14-implementer-report.md`.
+
+### 2026-09-28 — Internal Task 14 accepted
+
+- Independent final re-review of cumulative diff `4c3ae5b..892e2b1` found no remaining Critical, Important, or Minor finding. Login, hydration, logout, late-response, reused-token, `401`, and `403` paths were reviewed against the frozen contract.
+- Reviewer verification passed: focused suite — 29 passed; full frontend suite — 34 passed; typecheck, build, and cumulative diff check — passed.
+- The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-14-review-report.md`. Internal Task 14 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 15.
