@@ -63,6 +63,17 @@ describe('role-aware application routes', () => {
     expect(screen.getByText(/do not have permission/i)).toBeInTheDocument()
   })
 
+  it('hides and denies the supplier route to clients', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/auth/me')) return Promise.resolve(new Response(JSON.stringify({ id: 2, email: 'client@example.com', role: 'client', is_active: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      throw new Error(`Unexpected request: ${String(input)}`)
+    })
+    renderRoute('/suppliers', 'client', fetchMock)
+    expect(await screen.findByRole('heading', { name: 'Permission required' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Suppliers' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/suppliers?'))).toBe(false)
+  })
+
   it.each(['warehouse', 'client'] as const)('denies %s users on every admin page', async (role) => {
     for (const path of ['/dashboard', '/users', '/audit']) {
       const view = renderRoute(path, role)

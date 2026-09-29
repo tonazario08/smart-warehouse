@@ -10,8 +10,12 @@ import { RegisterPage } from '../features/auth/RegisterPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { UsersPage } from '../features/users/UsersPage'
 import { AuditPage } from '../features/audit/AuditPage'
+import { CategoriesPage } from '../features/categories/CategoriesPage'
+import { SuppliersPage } from '../features/suppliers/SuppliersPage'
+import { ProductsPage } from '../features/products/ProductsPage'
+import { WarehousesPage } from '../features/warehouses/WarehousesPage'
 
-const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit'].includes(item.href)).map((item) => ({
+const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit', '/categories', '/suppliers', '/products', '/warehouses'].includes(item.href)).map((item) => ({
   path: item.href,
   label: item.label,
   roles: item.roles,
@@ -91,6 +95,10 @@ export function AppRouter() {
           <Route path="/dashboard" element={<RequireRole allow={['admin']}><DashboardPage /></RequireRole>} />
           <Route path="/users" element={<RequireRole allow={['admin']}><UsersPage /></RequireRole>} />
           <Route path="/audit" element={<RequireRole allow={['admin']}><AuditPage /></RequireRole>} />
+          <Route path="/categories" element={<RequireRole allow={['admin', 'warehouse', 'client']}><CategoriesPage /></RequireRole>} />
+          <Route path="/products" element={<RequireRole allow={['admin', 'warehouse', 'client']}><ProductsPage /></RequireRole>} />
+          <Route path="/suppliers" element={<RequireRole allow={['admin', 'warehouse']}><SuppliersPage /></RequireRole>} />
+          <Route path="/warehouses" element={<RequireRole allow={['admin', 'warehouse', 'client']}><WarehousesPage /></RequireRole>} />
           {featureRoutes.map((route) => (
             <Route key={route.path} path={route.path} element={
               <RequireRole allow={route.roles}>
