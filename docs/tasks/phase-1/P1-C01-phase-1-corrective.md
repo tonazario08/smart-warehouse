@@ -514,3 +514,19 @@ npm.cmd run e2e
 - Independent final re-review of cumulative diff `4c3ae5b..892e2b1` found no remaining Critical, Important, or Minor finding. Login, hydration, logout, late-response, reused-token, `401`, and `403` paths were reviewed against the frozen contract.
 - Reviewer verification passed: focused suite — 29 passed; full frontend suite — 34 passed; typecheck, build, and cumulative diff check — passed.
 - The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-14-review-report.md`. Internal Task 14 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 15.
+
+## Internal Task 15 Evidence (append-only)
+
+### 2026-09-29 — Internal Task 15 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 14 is accepted at `323ff55`, and the approved Phase 1 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-15-brief.md` authorize this internal scope.
+- Added the admin-only operational dashboard, managed-user roster/create/role/status flows, and append-only audit ledger. The audit list gained optional exact `action`, `target_type`, and positive `target_id` filters because the plan requires API-backed filtering; items and count share identical predicates and existing ordering.
+- Test-first coverage verifies dashboard loading/error/retry/metrics, managed-role limits, user pagination and confirmations, domain/field errors, mutation invalidation, safe audit rendering/filtering/pagination, admin-only routes, and authenticated `403` session preservation.
+- Independent review found stale alternate-role state after same-key roster refetch and two coverage gaps. The correction derives the next role from the latest user prop when confirmation opens without clobbering an in-progress choice, adds consecutive role changes and users/audit invalidation evidence, and verifies accessible server field errors with the root domain message retained.
+- Fresh final verification against disposable PostgreSQL 18.3 UTC: full backend suite — 397 passed with two existing dependency deprecation warnings; Ruff — passed. Full frontend suite — 11 files and 45 tests passed; typecheck and production build with 191 modules — passed; cumulative diff check — passed.
+- Implementation checkpoints are `e0679fa` (`feat(web): add dashboard and audited user administration`) and `e50f1ba` (`fix(web): correct user mutation confirmation state`). Detailed evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-15-report.md`.
+
+### 2026-09-29 — Internal Task 15 accepted
+
+- Independent scoped re-review found all original findings resolved and no remaining Critical, Important, or Minor finding. Spec compliance and task quality are approved for cumulative diff `323ff55..e50f1ba`.
+- The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-15-review-report.md`. Internal Task 15 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 16.
