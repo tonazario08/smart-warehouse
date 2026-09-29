@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { jsonResponse, productRow, categoryRow, supplierRow, renderRoleRoute } from '../../test/renderRoleRoute'
 
@@ -15,8 +15,18 @@ it.each(['warehouse', 'client'] as const)('shows products to %s without mutation
 
 it('keeps the authenticated session when the catalogue API returns 403', async () => {
   renderRoleRoute('/products', 'client', () => jsonResponse({ detail: { code: 'CATALOG_DENIED', message: 'Catalogue access is restricted.', fields: null } }, 403))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Catalogue access is restricted.')
+  expect((await screen.findAllByRole('alert')).some((alert) => alert.textContent?.includes('Catalogue access is restricted.'))).toBe(true)
   expect(localStorage.getItem('smart-warehouse-token')).toBe('client-token')
+})
+
+it('does not request supplier lookups for clients', async () => {
+  const { fetchMock } = renderRoleRoute('/products', 'client', (url) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 20 })
+    return jsonResponse({})
+  })
+  expect(await screen.findByText('SKU-001')).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/suppliers?'))).toBe(false)
 })
 
 it('filters by supported fields and resets to the first page', async () => {
@@ -79,4 +89,191 @@ it('loads product relationships, normalizes SKU, validates, creates, edits, and 
   expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
   await user.click(screen.getByRole('button', { name: 'Confirm delete product' }))
   expect(await screen.findByText('Product deleted.')).toBeInTheDocument()
+})
+
+it('associates every remaining product backend field error with its control', async () => {
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 20 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 20 })
+    if (url.endsWith('/products') && init?.method === 'POST') return jsonResponse({ detail: { code: 'PRODUCT_FIELDS_INVALID', message: 'Product values were rejected.', fields: {
+      description: ['Description is not accepted.'], supplier_id: ['Supplier is not approved.'], unit: ['Unit is not supported.'],
+      reorder_level: ['Reorder level exceeds policy.'], is_active: ['Status cannot be changed.'],
+    } } }, 422)
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('SKU-001')
+  await user.click(screen.getByRole('button', { name: /create product/i }))
+  await screen.findByLabelText('Category')
+  await user.type(screen.getByLabelText('SKU'), 'NEW-01')
+  await user.type(screen.getByLabelText('Name'), 'New part')
+  await user.type(screen.getByLabelText('Description'), 'Description')
+  await user.selectOptions(screen.getByLabelText('Category'), '4')
+  await user.selectOptions(screen.getByLabelText('Supplier'), '5')
+  await user.type(screen.getByLabelText('Unit'), 'box')
+  await user.click(screen.getByRole('button', { name: 'Save product' }))
+  expect(await screen.findByText('Product values were rejected.')).toBeInTheDocument()
+  const editor = within(screen.getByRole('form', { name: 'Create product' }))
+  for (const [label, message] of [
+    ['Description', 'Description is not accepted.'], ['Supplier', 'Supplier is not approved.'], ['Unit', 'Unit is not supported.'],
+    ['Reorder level', 'Reorder level exceeds policy.'], ['Active', 'Status cannot be changed.'],
+  ]) {
+    const control = editor.getByLabelText(new RegExp(`^${label}`))
+    expect(control).toHaveAttribute('aria-invalid', 'true')
+    expect(control).toHaveAccessibleDescription(message)
+  }
+})
+
+it('disables product submission and prevents a second create while pending', async () => {
+  let resolveCreate: (() => void) | undefined
+  let posts = 0
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 20 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 20 })
+    if (url.endsWith('/products') && init?.method === 'POST') {
+      posts += 1
+      return new Promise((resolve) => { resolveCreate = () => resolve(jsonResponse(productRow, 201)) })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('SKU-001')
+  await user.click(screen.getByRole('button', { name: /create product/i }))
+  await user.type(screen.getByLabelText('SKU'), 'NEW-02')
+  await user.type(screen.getByLabelText('Name'), 'New part')
+  await user.selectOptions(screen.getByLabelText('Category'), '4')
+  await user.type(screen.getByLabelText('Unit'), 'box')
+  await user.click(screen.getByRole('button', { name: 'Save product' }))
+  const saving = await screen.findByRole('button', { name: /saving/i })
+  expect(saving).toBeDisabled()
+  await user.click(saving)
+  expect(posts).toBe(1)
+  resolveCreate?.()
+})
+
+it('shows category and supplier lookup loading and retry states, and blocks submit when categories fail', async () => {
+  let failCategories = true
+  let failSuppliers = true
+  let categoryReads = 0
+  let supplierReads = 0
+  renderRoleRoute('/products', 'admin', (url) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) {
+      categoryReads += 1
+      return failCategories ? jsonResponse({ detail: { code: 'CATEGORY_LOOKUP_FAILED', message: 'Categories are unavailable.', fields: null } }, 503) : jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    }
+    if (url.includes('/suppliers?')) {
+      supplierReads += 1
+      return failSuppliers ? jsonResponse({ detail: { code: 'SUPPLIER_LOOKUP_FAILED', message: 'Suppliers are unavailable.', fields: null } }, 503) : jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('SKU-001')
+  expect(await screen.findByText('Categories are unavailable.')).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: /retry categories/i })).toBeInTheDocument()
+  expect(screen.getByText('Suppliers are unavailable.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /retry suppliers/i })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /create product/i }))
+  expect(screen.getByRole('button', { name: 'Save product' })).toBeDisabled()
+  expect(categoryReads).toBe(1)
+  failCategories = false
+  await user.click(screen.getByRole('button', { name: /retry categories/i }))
+  expect(await within(screen.getByRole('form', { name: 'Create product' })).findByRole('option', { name: 'Hardware' })).toBeInTheDocument()
+  expect(categoryReads).toBe(2)
+  failSuppliers = false
+  await user.click(screen.getByRole('button', { name: /retry suppliers/i }))
+  expect(await within(screen.getByRole('form', { name: 'Create product' })).findByRole('option', { name: 'Northwind' })).toBeInTheDocument()
+  expect(supplierReads).toBe(2)
+})
+
+it('announces pending category and supplier relationship lookups', async () => {
+  let resolveCategories: ((response: Response) => void) | undefined
+  let resolveSuppliers: ((response: Response) => void) | undefined
+  renderRoleRoute('/products', 'admin', (url) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return new Promise((resolve) => { resolveCategories = resolve })
+    if (url.includes('/suppliers?')) return new Promise((resolve) => { resolveSuppliers = resolve })
+    throw new Error(`Unexpected request ${url}`)
+  })
+
+  await screen.findByText('SKU-001')
+  expect(screen.getByRole('status', { name: /category options/i })).toHaveTextContent('Loading category options')
+  expect(screen.getByRole('status', { name: /supplier options/i })).toHaveTextContent('Loading supplier options')
+
+  resolveCategories?.(jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 }))
+  resolveSuppliers?.(jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 }))
+  expect(await screen.findByRole('option', { name: 'Hardware' })).toBeInTheDocument()
+})
+
+it.each(['admin', 'warehouse'] as const)('shows and retries supplier lookup failures for %s', async (role) => {
+  let supplierReads = 0
+  renderRoleRoute('/products', role, (url) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) {
+      supplierReads += 1
+      return supplierReads === 1
+        ? jsonResponse({ detail: { code: 'SUPPLIER_LOOKUP_FAILED', message: 'Supplier options failed to load.', fields: null } }, 503)
+        : jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+
+  await screen.findByText('SKU-001')
+  expect(await screen.findByText('Supplier options failed to load.')).toBeInTheDocument()
+  expect(supplierReads).toBe(1)
+  await userEvent.setup().click(screen.getByRole('button', { name: /retry suppliers/i }))
+  expect(await screen.findByRole('option', { name: 'Northwind' })).toBeInTheDocument()
+  expect(supplierReads).toBe(2)
+})
+
+it('explains an empty required category lookup and prevents product submission', async () => {
+  let productCreates = 0
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page([], 0))
+    if (url.includes('/categories?')) return jsonResponse({ items: [], total: 0, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 })
+    if (url.endsWith('/products') && init?.method === 'POST') {
+      productCreates += 1
+      return jsonResponse(productRow, 201)
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+
+  await screen.findByText('No products match these filters.')
+  expect(await screen.findByText(/no categories available/i)).toBeInTheDocument()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /create product/i }))
+  expect(screen.getByRole('button', { name: 'Save product' })).toBeDisabled()
+  expect(productCreates).toBe(0)
+})
+
+it('reports empty relationship lookups and keeps supplier optional', async () => {
+  let createdInput: Record<string, unknown> | undefined
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page([], 0))
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [], total: 0, page: 1, page_size: 100 })
+    if (url.endsWith('/products') && init?.method === 'POST') {
+      createdInput = JSON.parse(String(init.body)) as Record<string, unknown>
+      return jsonResponse(productRow, 201)
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  await screen.findByText('No products match these filters.')
+  expect(await screen.findByRole('option', { name: 'Hardware' })).toBeInTheDocument()
+  expect(screen.getByText(/supplier is optional/i)).toBeInTheDocument()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /create product/i }))
+  await user.type(screen.getByLabelText('SKU'), 'NEW-03')
+  await user.type(screen.getByLabelText('Name'), 'Optional source')
+  await user.selectOptions(within(screen.getByRole('form', { name: 'Create product' })).getByLabelText('Category'), '4')
+  await user.type(screen.getByLabelText('Unit'), 'box')
+  expect(screen.getByRole('button', { name: 'Save product' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Save product' }))
+  expect(await screen.findByText('Product created.')).toBeInTheDocument()
+  expect(createdInput?.supplier_id).toBeNull()
 })

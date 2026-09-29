@@ -60,3 +60,43 @@ it('paginates categories and offers retry after a failed read', async () => {
   expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument()
   expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/categories?page=2&page_size=20'))).toBe(true)
 })
+
+it('associates backend parent_id errors with the parent selector and keeps the domain error visible', async () => {
+  renderRoleRoute('/categories', 'admin', (url, init) => {
+    if (url.includes('/categories?')) return jsonResponse(page([categoryRow]))
+    if (url.endsWith('/categories') && init?.method === 'POST') return jsonResponse({ detail: { code: 'CATEGORY_PARENT_INVALID', message: 'Parent category was rejected.', fields: { parent_id: ['Select an existing parent.'] } } }, 422)
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('Hardware')
+  await user.click(screen.getByRole('button', { name: /create category/i }))
+  await user.type(screen.getByLabelText('Name'), 'Child')
+  await user.selectOptions(screen.getByLabelText('Parent category'), '4')
+  await user.click(screen.getByRole('button', { name: 'Save category' }))
+  expect(await screen.findByText('Parent category was rejected.')).toBeInTheDocument()
+  expect(screen.getByLabelText(/^Parent category/)).toHaveAttribute('aria-invalid', 'true')
+  expect(screen.getByLabelText(/^Parent category/)).toHaveAccessibleDescription('Select an existing parent.')
+})
+
+it('disables category submission and ignores a second click while create is pending', async () => {
+  let resolveCreate: (() => void) | undefined
+  let posts = 0
+  renderRoleRoute('/categories', 'admin', (url, init) => {
+    if (url.includes('/categories?')) return jsonResponse(page([categoryRow]))
+    if (url.endsWith('/categories') && init?.method === 'POST') {
+      posts += 1
+      return new Promise((resolve) => { resolveCreate = () => resolve(jsonResponse({ ...categoryRow, name: 'Bolts' }, 201)) })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('Hardware')
+  await user.click(screen.getByRole('button', { name: /create category/i }))
+  await user.type(screen.getByLabelText('Name'), 'Bolts')
+  await user.click(screen.getByRole('button', { name: 'Save category' }))
+  const saving = await screen.findByRole('button', { name: /saving/i })
+  expect(saving).toBeDisabled()
+  await user.click(saving)
+  expect(posts).toBe(1)
+  resolveCreate?.()
+})

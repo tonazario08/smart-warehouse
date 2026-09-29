@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../shared/api/ApiError'
 import { AsyncState } from '../../shared/ui/AsyncState'
+import { FormFieldError } from '../../shared/ui/FormFieldError'
 import { Pagination } from '../../shared/ui/Pagination'
 import { useAuth } from '../auth/useAuth'
 import { createWarehousesApi, warehouseKeys } from './api'
@@ -36,11 +37,31 @@ function WarehouseEditor({ warehouse, pending, save, close }: { warehouse: Wareh
   return <form className="admin-inline-form resource-editor" aria-label={warehouse ? 'Edit warehouse' : 'Create warehouse'} noValidate onSubmit={form.handleSubmit(submit)}>
     <h3>{warehouse ? `Edit ${warehouse.code}` : 'Create warehouse'}</h3>
     <div className="admin-form-fields">
-      <label>Code<input {...form.register('code')} aria-invalid={Boolean(form.formState.errors.code)} onChange={(event) => form.setValue('code', event.target.value.toUpperCase(), { shouldValidate: true })} />{form.formState.errors.code?.message && <small className="form-error">{form.formState.errors.code.message}</small>}</label>
-      <label>Name<input {...form.register('name')} />{form.formState.errors.name?.message && <small className="form-error">{form.formState.errors.name.message}</small>}</label>
-      <label>Address<input {...form.register('address')} />{form.formState.errors.address?.message && <small className="form-error">{form.formState.errors.address.message}</small>}</label>
-      <label>Latitude<input inputMode="decimal" {...form.register('latitude')} aria-invalid={Boolean(latitudeError)} aria-describedby={latitudeError ? 'warehouse-coordinate-error' : undefined} />{latitudeError && <small id="warehouse-coordinate-error" className="form-error">{latitudeError}</small>}</label>
-      <label>Longitude<input inputMode="decimal" {...form.register('longitude')} aria-invalid={Boolean(longitudeError)} aria-describedby={longitudeError ? 'warehouse-coordinate-error-longitude' : undefined} />{longitudeError && <small id="warehouse-coordinate-error-longitude" className="form-error">{longitudeError}</small>}</label>
+      <label>
+        Code
+        <input {...form.register('code')} aria-invalid={Boolean(form.formState.errors.code)} aria-describedby={form.formState.errors.code ? 'warehouse-code-error' : undefined} onChange={(event) => form.setValue('code', event.target.value.toUpperCase(), { shouldValidate: true })} />
+        <FormFieldError id="warehouse-code-error" message={form.formState.errors.code?.message} />
+      </label>
+      <label>
+        Name
+        <input aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'warehouse-name-error' : undefined} {...form.register('name')} />
+        <FormFieldError id="warehouse-name-error" message={form.formState.errors.name?.message} />
+      </label>
+      <label>
+        Address
+        <input aria-invalid={Boolean(form.formState.errors.address)} aria-describedby={form.formState.errors.address ? 'warehouse-address-error' : undefined} {...form.register('address')} />
+        <FormFieldError id="warehouse-address-error" message={form.formState.errors.address?.message} />
+      </label>
+      <label>
+        Latitude
+        <input inputMode="decimal" {...form.register('latitude')} aria-invalid={Boolean(latitudeError)} aria-describedby={latitudeError ? 'warehouse-coordinate-error' : undefined} />
+        <FormFieldError id="warehouse-coordinate-error" message={latitudeError} />
+      </label>
+      <label>
+        Longitude
+        <input inputMode="decimal" {...form.register('longitude')} aria-invalid={Boolean(longitudeError)} aria-describedby={longitudeError ? 'warehouse-coordinate-error-longitude' : undefined} />
+        <FormFieldError id="warehouse-coordinate-error-longitude" message={longitudeError} />
+      </label>
     </div>
     {form.formState.errors.root?.message && <p role="alert" className="form-error">{form.formState.errors.root.message}</p>}
     <div className="resource-actions"><button type="submit" disabled={pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save warehouse'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
@@ -73,7 +94,46 @@ export function WarehousesPage() {
     {message && <p role="status" className="form-success">{message}</p>}{failure && <p role="alert" className="form-error">{failure}</p>}
     {admin && selection === 'new' && <WarehouseEditor key="new" warehouse={null} pending={save.isPending} save={submit} close={() => setSelection(null)} />}
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading warehouses…" emptyMessage="No warehouses match this search." error={<>{query.error instanceof Error ? query.error.message : 'Warehouses could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry</button></>}>
-      <div className="table-wrap"><table className="admin-table resource-table warehouse-table"><caption>Warehouse ledger</caption><thead><tr><th scope="col">Code / Site</th><th scope="col">Address</th><th scope="col">Coordinates</th><th scope="col">Updated</th>{admin && <th scope="col">Actions</th>}</tr></thead><tbody>{query.data?.items.map((row) => <Fragment key={row.id}><tr><td data-label="Code / Site"><strong className="scan-code">{row.code}</strong><small>{row.name}</small></td><td data-label="Address">{row.address}</td><td data-label="Coordinates">{row.latitude == null || row.longitude == null ? 'Not set' : `${row.latitude}, ${row.longitude}`}</td><td data-label="Updated"><time dateTime={row.updated_at}>{localTime.format(new Date(row.updated_at))}</time></td>{admin && <td data-label="Actions"><div className="resource-actions"><button type="button" className="quiet" aria-label={`Edit warehouse ${row.code}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button><button type="button" className="quiet" aria-label={`Delete warehouse ${row.code}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button></div></td>}</tr>{admin && selection !== 'new' && selection?.id === row.id && <tr><td colSpan={5}><WarehouseEditor key={row.id} warehouse={row} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td></tr>}{admin && deleting?.id === row.id && <tr><td colSpan={5}><p role="alert">Delete warehouse {row.code}? This cannot be undone.</p><button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete warehouse'}</button><button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button></td></tr>}</Fragment>)}</tbody></table></div>
+      <div className="table-wrap">
+        <table className="admin-table resource-table warehouse-table">
+          <caption>Warehouse ledger</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code / Site</th>
+              <th scope="col">Address</th>
+              <th scope="col">Coordinates</th>
+              <th scope="col">Updated</th>
+              {admin && <th scope="col">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {query.data?.items.map((row) => <Fragment key={row.id}>
+              <tr>
+                <td data-label="Code / Site"><strong className="scan-code">{row.code}</strong><small>{row.name}</small></td>
+                <td data-label="Address">{row.address}</td>
+                <td data-label="Coordinates">{row.latitude == null || row.longitude == null ? 'Not set' : `${row.latitude}, ${row.longitude}`}</td>
+                <td data-label="Updated"><time dateTime={row.updated_at}>{localTime.format(new Date(row.updated_at))}</time></td>
+                {admin && <td data-label="Actions">
+                  <div className="resource-actions">
+                    <button type="button" className="quiet" aria-label={`Edit warehouse ${row.code}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button>
+                    <button type="button" className="quiet" aria-label={`Delete warehouse ${row.code}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button>
+                  </div>
+                </td>}
+              </tr>
+              {admin && selection !== 'new' && selection?.id === row.id && <tr>
+                <td colSpan={5}><WarehouseEditor key={row.id} warehouse={row} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td>
+              </tr>}
+              {admin && deleting?.id === row.id && <tr>
+                <td colSpan={5}>
+                  <p role="alert">Delete warehouse {row.code}? This cannot be undone.</p>
+                  <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete warehouse'}</button>
+                  <button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button>
+                </td>
+              </tr>}
+            </Fragment>)}
+          </tbody>
+        </table>
+      </div>
     </AsyncState>
     {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
   </section>

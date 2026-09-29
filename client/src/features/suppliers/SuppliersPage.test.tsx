@@ -67,3 +67,24 @@ it('applies search, resets pagination, and shows backend conflict details', asyn
   expect(await screen.findByText('Supplier email already exists.')).toBeInTheDocument()
   expect(screen.getByLabelText(/^Email/)).toHaveAccessibleDescription('Email already exists.')
 })
+
+it('associates supplier phone and address errors with their controls', async () => {
+  renderRoleRoute('/suppliers', 'admin', (url, init) => {
+    if (url.includes('/suppliers?')) return jsonResponse(page([]))
+    if (url.endsWith('/suppliers') && init?.method === 'POST') return jsonResponse({ detail: { code: 'SUPPLIER_FIELDS_INVALID', message: 'Supplier details were rejected.', fields: { phone: ['Phone format is not supported.'], address: ['Address is required by this partner.'] } } }, 422)
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('No suppliers match this search.')
+  await user.click(screen.getByRole('button', { name: /create supplier/i }))
+  await user.type(screen.getByLabelText('Name'), 'Contoso')
+  await user.type(screen.getByLabelText('Phone'), 'not a number')
+  await user.type(screen.getByLabelText('Address'), 'Test Road')
+  await user.click(screen.getByRole('button', { name: 'Save supplier' }))
+  expect(await screen.findByText('Supplier details were rejected.')).toBeInTheDocument()
+  for (const [label, message] of [['Phone', 'Phone format is not supported.'], ['Address', 'Address is required by this partner.']]) {
+    const control = screen.getByLabelText(new RegExp(`^${label}`))
+    expect(control).toHaveAttribute('aria-invalid', 'true')
+    expect(control).toHaveAccessibleDescription(message)
+  }
+})

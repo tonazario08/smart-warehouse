@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../shared/api/ApiError'
 import { AsyncState } from '../../shared/ui/AsyncState'
+import { FormFieldError } from '../../shared/ui/FormFieldError'
 import { Pagination } from '../../shared/ui/Pagination'
 import { useAuth } from '../auth/useAuth'
 import { categoryKeys, createCategoriesApi } from './api'
@@ -36,8 +37,19 @@ function CategoryEditor({ category, rows, pending, save, close }: {
   return <form className="admin-inline-form resource-editor" aria-label={category ? 'Edit category' : 'Create category'} noValidate onSubmit={form.handleSubmit(submit)}>
     <h3>{category ? `Edit ${category.name}` : 'Create category'}</h3>
     <div className="admin-form-fields">
-      <label>Name<input aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'category-name-error' : undefined} {...form.register('name')} />{form.formState.errors.name?.message && <small id="category-name-error" className="form-error">{form.formState.errors.name.message}</small>}</label>
-      <label>Parent category<select {...form.register('parent_id')}><option value="">No parent</option>{rows.filter((row) => row.id !== category?.id).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+      <label>
+        Name
+        <input aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'category-name-error' : undefined} {...form.register('name')} />
+        <FormFieldError id="category-name-error" message={form.formState.errors.name?.message} />
+      </label>
+      <label>
+        Parent category
+        <select aria-invalid={Boolean(form.formState.errors.parent_id)} aria-describedby={form.formState.errors.parent_id ? 'category-parent-error' : undefined} {...form.register('parent_id')}>
+          <option value="">No parent</option>
+          {rows.filter((row) => row.id !== category?.id).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+        </select>
+        <FormFieldError id="category-parent-error" message={form.formState.errors.parent_id?.message} />
+      </label>
     </div>
     {form.formState.errors.root?.message && <p role="alert" className="form-error">{form.formState.errors.root.message}</p>}
     <div className="resource-actions"><button type="submit" disabled={pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save category'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
@@ -69,7 +81,42 @@ export function CategoriesPage() {
     {message && <p className="form-success" role="status">{message}</p>}{failure && <p className="form-error" role="alert">{failure}</p>}
     {admin && selection === 'new' && <CategoryEditor key="new" category={null} rows={categoryRows} pending={save.isPending} save={submit} close={() => setSelection(null)} />}
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading categories…" emptyMessage="No categories found." error={<>{query.error instanceof Error ? query.error.message : 'Categories could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry</button></>}>
-      <div className="table-wrap"><table className="admin-table resource-table"><caption>Category ledger</caption><thead><tr><th scope="col">Category</th><th scope="col">Parent</th>{admin && <th scope="col">Actions</th>}</tr></thead><tbody>{query.data?.items.map((row) => <Fragment key={row.id}><tr><td data-label="Category"><strong>{row.name}</strong></td><td data-label="Parent">{categoryRows.find((parent) => parent.id === row.parent_id)?.name ?? '—'}</td>{admin && <td data-label="Actions"><div className="resource-actions"><button type="button" className="quiet" aria-label={`Edit category ${row.name}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button><button type="button" className="quiet" aria-label={`Delete category ${row.name}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button></div></td>}</tr>{admin && selection !== 'new' && selection?.id === row.id && <tr><td colSpan={3}><CategoryEditor key={row.id} category={row} rows={categoryRows} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td></tr>}{admin && deleting?.id === row.id && <tr><td colSpan={3}><p role="alert">Delete category {row.name}? This cannot be undone.</p><button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete category'}</button><button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button></td></tr>}</Fragment>)}</tbody></table></div>
+      <div className="table-wrap">
+        <table className="admin-table resource-table">
+          <caption>Category ledger</caption>
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">Parent</th>
+              {admin && <th scope="col">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {query.data?.items.map((row) => <Fragment key={row.id}>
+              <tr>
+                <td data-label="Category"><strong>{row.name}</strong></td>
+                <td data-label="Parent">{categoryRows.find((parent) => parent.id === row.parent_id)?.name ?? '—'}</td>
+                {admin && <td data-label="Actions">
+                  <div className="resource-actions">
+                    <button type="button" className="quiet" aria-label={`Edit category ${row.name}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button>
+                    <button type="button" className="quiet" aria-label={`Delete category ${row.name}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button>
+                  </div>
+                </td>}
+              </tr>
+              {admin && selection !== 'new' && selection?.id === row.id && <tr>
+                <td colSpan={3}><CategoryEditor key={row.id} category={row} rows={categoryRows} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td>
+              </tr>}
+              {admin && deleting?.id === row.id && <tr>
+                <td colSpan={3}>
+                  <p role="alert">Delete category {row.name}? This cannot be undone.</p>
+                  <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete category'}</button>
+                  <button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button>
+                </td>
+              </tr>}
+            </Fragment>)}
+          </tbody>
+        </table>
+      </div>
     </AsyncState>
     {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
   </section>

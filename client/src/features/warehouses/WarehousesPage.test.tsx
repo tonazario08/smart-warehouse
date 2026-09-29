@@ -83,3 +83,57 @@ it('normalizes code, creates and edits warehouses, confirms delete, and surfaces
   await user.click(screen.getByRole('button', { name: 'Confirm delete warehouse' }))
   expect(await screen.findByText('Warehouse contains historical inventory.')).toBeInTheDocument()
 })
+
+it('associates backend warehouse field errors with each affected control', async () => {
+  renderRoleRoute('/warehouses', 'admin', (url, init) => {
+    if (url.includes('/warehouses?')) return jsonResponse(page())
+    if (url.endsWith('/warehouses') && init?.method === 'POST') return jsonResponse({ detail: { code: 'WAREHOUSE_FIELDS_INVALID', message: 'Warehouse values were rejected.', fields: {
+      code: ['Code is already assigned.'], name: ['Name conflicts with another site.'], address: ['Address failed validation.'],
+      latitude: ['Latitude was rejected.'], longitude: ['Longitude was rejected.'],
+    } } }, 422)
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('WH-01')
+  await user.click(screen.getByRole('button', { name: /create warehouse/i }))
+  await user.type(screen.getByLabelText('Code'), 'WH-02')
+  await user.type(screen.getByLabelText('Name'), 'Second')
+  await user.type(screen.getByLabelText('Address'), '2 Bay')
+  await user.type(screen.getByLabelText('Latitude'), '10')
+  await user.type(screen.getByLabelText('Longitude'), '20')
+  await user.click(screen.getByRole('button', { name: 'Save warehouse' }))
+  expect(await screen.findByText('Warehouse values were rejected.')).toBeInTheDocument()
+  for (const [label, message] of [
+    ['Code', 'Code is already assigned.'], ['Name', 'Name conflicts with another site.'], ['Address', 'Address failed validation.'],
+    ['Latitude', 'Latitude was rejected.'], ['Longitude', 'Longitude was rejected.'],
+  ]) {
+    const control = screen.getByLabelText(new RegExp(`^${label}`))
+    expect(control).toHaveAttribute('aria-invalid', 'true')
+    expect(control).toHaveAccessibleDescription(message)
+  }
+})
+
+it('disables warehouse submission and prevents a second create while pending', async () => {
+  let resolveCreate: (() => void) | undefined
+  let posts = 0
+  renderRoleRoute('/warehouses', 'admin', (url, init) => {
+    if (url.includes('/warehouses?')) return jsonResponse(page())
+    if (url.endsWith('/warehouses') && init?.method === 'POST') {
+      posts += 1
+      return new Promise((resolve) => { resolveCreate = () => resolve(jsonResponse(warehouseRow, 201)) })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('WH-01')
+  await user.click(screen.getByRole('button', { name: /create warehouse/i }))
+  await user.type(screen.getByLabelText('Code'), 'WH-02')
+  await user.type(screen.getByLabelText('Name'), 'Second')
+  await user.type(screen.getByLabelText('Address'), '2 Bay')
+  await user.click(screen.getByRole('button', { name: 'Save warehouse' }))
+  const saving = await screen.findByRole('button', { name: /saving/i })
+  expect(saving).toBeDisabled()
+  await user.click(saving)
+  expect(posts).toBe(1)
+  resolveCreate?.()
+})

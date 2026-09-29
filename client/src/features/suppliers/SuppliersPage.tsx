@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../shared/api/ApiError'
 import { AsyncState } from '../../shared/ui/AsyncState'
+import { FormFieldError } from '../../shared/ui/FormFieldError'
 import { Pagination } from '../../shared/ui/Pagination'
 import { useAuth } from '../auth/useAuth'
 import { createSuppliersApi, supplierKeys } from './api'
@@ -30,9 +31,26 @@ function SupplierEditor({ supplier, pending, save, close }: { supplier: Supplier
   return <form className="admin-inline-form resource-editor" aria-label={supplier ? 'Edit supplier' : 'Create supplier'} noValidate onSubmit={form.handleSubmit(submit)}>
     <h3>{supplier ? `Edit ${supplier.name}` : 'Create supplier'}</h3>
     <div className="admin-form-fields">
-      <label>Name<input {...form.register('name')} aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'supplier-name-error' : undefined} />{form.formState.errors.name?.message && <small id="supplier-name-error" className="form-error">{form.formState.errors.name.message}</small>}</label>
-      <label>Email<input type="email" {...form.register('email')} aria-invalid={Boolean(form.formState.errors.email)} aria-describedby={form.formState.errors.email ? 'supplier-email-error' : undefined} />{form.formState.errors.email?.message && <small id="supplier-email-error" className="form-error">{form.formState.errors.email.message}</small>}</label>
-      <label>Phone<input {...form.register('phone')} /></label><label>Address<input {...form.register('address')} /></label>
+      <label>
+        Name
+        <input {...form.register('name')} aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'supplier-name-error' : undefined} />
+        <FormFieldError id="supplier-name-error" message={form.formState.errors.name?.message} />
+      </label>
+      <label>
+        Email
+        <input type="email" {...form.register('email')} aria-invalid={Boolean(form.formState.errors.email)} aria-describedby={form.formState.errors.email ? 'supplier-email-error' : undefined} />
+        <FormFieldError id="supplier-email-error" message={form.formState.errors.email?.message} />
+      </label>
+      <label>
+        Phone
+        <input aria-invalid={Boolean(form.formState.errors.phone)} aria-describedby={form.formState.errors.phone ? 'supplier-phone-error' : undefined} {...form.register('phone')} />
+        <FormFieldError id="supplier-phone-error" message={form.formState.errors.phone?.message} />
+      </label>
+      <label>
+        Address
+        <input aria-invalid={Boolean(form.formState.errors.address)} aria-describedby={form.formState.errors.address ? 'supplier-address-error' : undefined} {...form.register('address')} />
+        <FormFieldError id="supplier-address-error" message={form.formState.errors.address?.message} />
+      </label>
     </div>
     {form.formState.errors.root?.message && <p role="alert" className="form-error">{form.formState.errors.root.message}</p>}
     <div className="resource-actions"><button type="submit" disabled={pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save supplier'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
@@ -65,7 +83,44 @@ export function SuppliersPage() {
     {message && <p role="status" className="form-success">{message}</p>}{failure && <p role="alert" className="form-error">{failure}</p>}
     {admin && selection === 'new' && <SupplierEditor key="new" supplier={null} pending={save.isPending} save={submit} close={() => setSelection(null)} />}
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading suppliers…" emptyMessage="No suppliers match this search." error={<>{query.error instanceof Error ? query.error.message : 'Suppliers could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry</button></>}>
-      <div className="table-wrap"><table className="admin-table resource-table"><caption>Supplier ledger</caption><thead><tr><th scope="col">Supplier</th><th scope="col">Contact</th><th scope="col">Address</th>{admin && <th scope="col">Actions</th>}</tr></thead><tbody>{query.data?.items.map((row) => <Fragment key={row.id}><tr><td data-label="Supplier"><strong>{row.name}</strong></td><td data-label="Contact">{row.email ?? '—'}{row.phone && <small>{row.phone}</small>}</td><td data-label="Address">{row.address ?? '—'}</td>{admin && <td data-label="Actions"><div className="resource-actions"><button type="button" className="quiet" aria-label={`Edit supplier ${row.name}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button><button type="button" className="quiet" aria-label={`Delete supplier ${row.name}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button></div></td>}</tr>{admin && selection !== 'new' && selection?.id === row.id && <tr><td colSpan={4}><SupplierEditor key={row.id} supplier={row} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td></tr>}{admin && deleting?.id === row.id && <tr><td colSpan={4}><p role="alert">Delete supplier {row.name}? This cannot be undone.</p><button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete supplier'}</button><button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button></td></tr>}</Fragment>)}</tbody></table></div>
+      <div className="table-wrap">
+        <table className="admin-table resource-table">
+          <caption>Supplier ledger</caption>
+          <thead>
+            <tr>
+              <th scope="col">Supplier</th>
+              <th scope="col">Contact</th>
+              <th scope="col">Address</th>
+              {admin && <th scope="col">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {query.data?.items.map((row) => <Fragment key={row.id}>
+              <tr>
+                <td data-label="Supplier"><strong>{row.name}</strong></td>
+                <td data-label="Contact">{row.email ?? '—'}{row.phone && <small>{row.phone}</small>}</td>
+                <td data-label="Address">{row.address ?? '—'}</td>
+                {admin && <td data-label="Actions">
+                  <div className="resource-actions">
+                    <button type="button" className="quiet" aria-label={`Edit supplier ${row.name}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button>
+                    <button type="button" className="quiet" aria-label={`Delete supplier ${row.name}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button>
+                  </div>
+                </td>}
+              </tr>
+              {admin && selection !== 'new' && selection?.id === row.id && <tr>
+                <td colSpan={4}><SupplierEditor key={row.id} supplier={row} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td>
+              </tr>}
+              {admin && deleting?.id === row.id && <tr>
+                <td colSpan={4}>
+                  <p role="alert">Delete supplier {row.name}? This cannot be undone.</p>
+                  <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete supplier'}</button>
+                  <button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button>
+                </td>
+              </tr>}
+            </Fragment>)}
+          </tbody>
+        </table>
+      </div>
     </AsyncState>
     {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
   </section>
