@@ -20,8 +20,8 @@ const pageSize = 20
 type Selection = Product | 'new' | null
 const blankFilters: ProductFilters = { page: 1, pageSize, search: '', categoryId: '', supplierId: '', isActive: '' }
 
-function ProductEditor({ product, categories, suppliers, categoriesReady, pending, save, close }: {
-  product: Product | null; categories: Category[]; suppliers: Supplier[]; categoriesReady: boolean; pending: boolean
+function ProductEditor({ product, categories, suppliers, categoriesReady, supplierSelectionReady, pending, save, close }: {
+  product: Product | null; categories: Category[]; suppliers: Supplier[]; categoriesReady: boolean; supplierSelectionReady: boolean; pending: boolean
   save: (id: number | null, input: ProductInput) => Promise<void>; close: () => void
 }) {
   const form = useForm<ProductForm, unknown, ProductInput>({ resolver: zodResolver(productSchema), defaultValues: {
@@ -29,6 +29,8 @@ function ProductEditor({ product, categories, suppliers, categoriesReady, pendin
     category_id: product ? String(product.category_id) : '', supplier_id: product?.supplier_id ? String(product.supplier_id) : '',
     unit: product?.unit ?? '', reorder_level: String(product?.reorder_level ?? 0), is_active: product?.is_active ?? true,
   } })
+  const currentSupplierId = product?.supplier_id ?? null
+  const currentSupplierMissing = currentSupplierId !== null && !suppliers.some((row) => row.id === currentSupplierId)
   async function submit(values: ProductInput) {
     form.clearErrors()
     try { await save(product?.id ?? null, values) } catch (error) {
@@ -70,6 +72,7 @@ function ProductEditor({ product, categories, suppliers, categoriesReady, pendin
         Supplier
         <select aria-invalid={Boolean(form.formState.errors.supplier_id)} aria-describedby={form.formState.errors.supplier_id ? 'product-supplier-error' : undefined} {...form.register('supplier_id')}>
           <option value="">No supplier</option>
+          {currentSupplierMissing && <option value={currentSupplierId}>Current supplier #{currentSupplierId}</option>}
           {suppliers.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
         </select>
         <FormFieldError id="product-supplier-error" message={form.formState.errors.supplier_id?.message} />
@@ -91,7 +94,7 @@ function ProductEditor({ product, categories, suppliers, categoriesReady, pendin
       </label>
     </div>
     {form.formState.errors.root?.message && <p role="alert" className="form-error">{form.formState.errors.root.message}</p>}
-    <div className="resource-actions"><button type="submit" disabled={!categoriesReady || pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save product'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
+    <div className="resource-actions"><button type="submit" disabled={!categoriesReady || !supplierSelectionReady || pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save product'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
   </form>
 }
 
@@ -122,6 +125,7 @@ export function ProductsPage() {
   const categoryRows = categories.data?.items ?? []
   const supplierRows = suppliers.data?.items ?? []
   const categoriesReady = !categories.isPending && !categories.isError && categoryRows.length > 0
+  const suppliersReady = !suppliers.isPending && !suppliers.isError
 
   return <section className="admin-workspace" aria-labelledby="products-heading">
     <header className="admin-heading"><div><h2 id="products-heading">Products</h2><p>Catalogue and replenishment thresholds</p></div><div className="resource-actions"><button type="button" className="quiet" onClick={() => void query.refetch()}>Refresh products</button>{admin && <button type="button" onClick={() => { setSelection('new'); setDeleting(null); setMessage(null) }}>Create product</button>}</div></header>
@@ -139,7 +143,7 @@ export function ProductsPage() {
     {canReadSuppliers && suppliers.isPending && <p className="async-state" role="status" aria-label="Supplier options" aria-live="polite">Loading supplier options…</p>}
     {canReadSuppliers && suppliers.isError && <p className="async-state async-state-error" role="alert">{suppliers.error instanceof Error ? suppliers.error.message : 'Supplier options could not be loaded.'} <button type="button" className="quiet" onClick={() => void suppliers.refetch()}>Retry suppliers</button></p>}
     {canReadSuppliers && !suppliers.isPending && !suppliers.isError && supplierRows.length === 0 && <p className="async-state async-state-empty" role="status">No suppliers available. Supplier is optional.</p>}
-    {admin && selection === 'new' && <ProductEditor key="new" product={null} categories={categoryRows} suppliers={supplierRows} categoriesReady={categoriesReady} pending={save.isPending} save={submit} close={() => setSelection(null)} />}
+    {admin && selection === 'new' && <ProductEditor key="new" product={null} categories={categoryRows} suppliers={supplierRows} categoriesReady={categoriesReady} supplierSelectionReady pending={save.isPending} save={submit} close={() => setSelection(null)} />}
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading products…" emptyMessage="No products match these filters." error={<>{query.error instanceof Error ? query.error.message : 'Products could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry</button></>}>
       <div className="table-wrap">
         <table className="admin-table resource-table">
@@ -156,7 +160,7 @@ export function ProductsPage() {
                 <td data-label="Status">{row.is_active ? 'Active' : 'Inactive'}</td>
                 {admin && <td data-label="Actions"><div className="resource-actions"><button type="button" className="quiet" aria-label={`Edit product ${row.sku}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button><button type="button" className="quiet" aria-label={`Delete product ${row.sku}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button></div></td>}
               </tr>
-              {admin && selection !== 'new' && selection?.id === row.id && <tr><td colSpan={5}><ProductEditor key={row.id} product={row} categories={categoryRows} suppliers={supplierRows} categoriesReady={categoriesReady} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td></tr>}
+              {admin && selection !== 'new' && selection?.id === row.id && <tr><td colSpan={5}><ProductEditor key={row.id} product={row} categories={categoryRows} suppliers={supplierRows} categoriesReady={categoriesReady} supplierSelectionReady={row.supplier_id === null || suppliersReady} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td></tr>}
               {admin && deleting?.id === row.id && <tr><td colSpan={5}><p role="alert">Delete product {row.sku}? This cannot be undone.</p><button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete product'}</button><button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button></td></tr>}
             </Fragment>)}
           </tbody>

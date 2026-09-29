@@ -277,3 +277,85 @@ it('reports empty relationship lookups and keeps supplier optional', async () =>
   expect(await screen.findByText('Product created.')).toBeInTheDocument()
   expect(createdInput?.supplier_id).toBeNull()
 })
+
+it('blocks editing a product with a supplier until a failed lookup is retried successfully', async () => {
+  let supplierReads = 0
+  let resolveInitialLookup: ((response: Response) => void) | undefined
+  renderRoleRoute('/products', 'admin', (url) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) {
+      supplierReads += 1
+      if (supplierReads === 1) return new Promise((resolve) => { resolveInitialLookup = resolve })
+      return jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+
+  await screen.findByText('SKU-001')
+  expect(screen.getByRole('status', { name: /supplier options/i })).toHaveTextContent('Loading supplier options')
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /edit product sku-001/i }))
+  const editor = within(screen.getByRole('form', { name: 'Edit product' }))
+  expect(editor.getByRole('button', { name: 'Save product' })).toBeDisabled()
+
+  resolveInitialLookup?.(jsonResponse({ detail: { code: 'SUPPLIER_LOOKUP_FAILED', message: 'Supplier lookup is temporarily unavailable.', fields: null } }, 503))
+  expect(await screen.findByText('Supplier lookup is temporarily unavailable.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /retry suppliers/i })).toBeInTheDocument()
+  expect(editor.getByRole('button', { name: 'Save product' })).toBeDisabled()
+
+  await user.click(screen.getByRole('button', { name: /retry suppliers/i }))
+  expect(await editor.findByRole('option', { name: 'Northwind' })).toBeInTheDocument()
+  expect(editor.getByRole('button', { name: 'Save product' })).toBeEnabled()
+  expect(supplierReads).toBe(2)
+})
+
+it('preserves the current supplier when its id is missing from lookup results', async () => {
+  let updatedInput: Record<string, unknown> | undefined
+  const otherSupplier = { ...supplierRow, id: 9, name: 'Eastwind' }
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [otherSupplier], total: 1, page: 1, page_size: 100 })
+    if (url.endsWith('/products/6') && init?.method === 'PUT') {
+      updatedInput = JSON.parse(String(init.body)) as Record<string, unknown>
+      return jsonResponse(productRow)
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('SKU-001')
+  await user.click(screen.getByRole('button', { name: /edit product sku-001/i }))
+  const editor = within(screen.getByRole('form', { name: 'Edit product' }))
+  const supplier = editor.getByLabelText('Supplier')
+  expect(await editor.findByRole('option', { name: 'Current supplier #5' })).toBeInTheDocument()
+  expect(supplier).toHaveValue('5')
+  await user.click(editor.getByRole('button', { name: 'Save product' }))
+  expect(await screen.findByText('Product updated.')).toBeInTheDocument()
+  expect(updatedInput?.supplier_id).toBe(5)
+})
+
+it('removes an existing supplier only after the admin chooses no supplier', async () => {
+  let updatedInput: Record<string, unknown> | undefined
+  renderRoleRoute('/products', 'admin', (url, init) => {
+    if (url.includes('/products?')) return jsonResponse(page())
+    if (url.includes('/categories?')) return jsonResponse({ items: [categoryRow], total: 1, page: 1, page_size: 100 })
+    if (url.includes('/suppliers?')) return jsonResponse({ items: [supplierRow], total: 1, page: 1, page_size: 100 })
+    if (url.endsWith('/products/6') && init?.method === 'PUT') {
+      updatedInput = JSON.parse(String(init.body)) as Record<string, unknown>
+      return jsonResponse({ ...productRow, supplier_id: null })
+    }
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('SKU-001')
+  await user.click(screen.getByRole('button', { name: /edit product sku-001/i }))
+  const editor = within(screen.getByRole('form', { name: 'Edit product' }))
+  const supplier = await editor.findByLabelText('Supplier')
+  expect(supplier).toHaveValue('5')
+  await user.selectOptions(supplier, '')
+  expect(supplier).toHaveValue('')
+  await user.click(editor.getByRole('button', { name: 'Save product' }))
+  expect(await screen.findByText('Product updated.')).toBeInTheDocument()
+  expect(updatedInput?.supplier_id).toBeNull()
+})
