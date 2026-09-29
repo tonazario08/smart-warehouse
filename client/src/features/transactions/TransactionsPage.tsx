@@ -4,7 +4,7 @@ import { AsyncState } from '../../shared/ui/AsyncState'
 import { Pagination } from '../../shared/ui/Pagination'
 import { useAuth } from '../auth/useAuth'
 import { InventoryFiltersForm } from '../inventory/InventoryFilters'
-import { ProductIdentity, useInventoryLabels, WarehouseIdentity } from '../inventory/InventoryLabels'
+import { InventoryLabelStatus, ProductIdentity, useInventoryLabels, WarehouseIdentity } from '../inventory/InventoryLabels'
 import type { TransactionFilters } from '../inventory/types'
 import { createTransactionsApi, transactionKeys } from './api'
 
@@ -38,6 +38,7 @@ export function TransactionsPage() {
     <header className="admin-heading"><div><h2 id="transactions-heading">Transactions</h2><p>Immutable chronological record of stock movement</p></div></header>
     <InventoryFiltersForm client={client} filters={draft} onChange={(next) => { setDraft(next as TransactionFilters); setRangeError(null) }} onTypeChange={(type) => { setDraft((current) => ({ ...current, type })); setRangeError(null) }} showType onApply={apply} />
     {rangeError && <p className="form-error" role="alert">{rangeError}</p>}
+    <InventoryLabelStatus lookup={labels} subject="transaction history" />
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading transactions…" emptyMessage="No transactions match these filters." error={<>{query.error instanceof Error ? query.error.message : 'Transactions could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry transactions</button></>}>
       <div className="table-wrap">
         <table className="admin-table resource-table inventory-table transaction-ledger">

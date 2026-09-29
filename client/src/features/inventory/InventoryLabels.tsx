@@ -83,15 +83,15 @@ export function useInventoryLabels(client: ApiClient, productIds: number[], ware
   return {
     product: (id: number) => ({
       record: productMap.get(id),
-      loading: products.isPending || (missingProductIds.includes(id) && resolver.isPending),
+      loading: products.isPending || (missingProductIds.includes(id) && resolver.isFetching && !productMap.has(id)),
       error: Boolean(products.error || resolver.data?.failures.has(`product:${id}`)),
     }),
     warehouse: (id: number) => ({
       record: warehouseMap.get(id),
-      loading: warehouses.isPending || (missingWarehouseIds.includes(id) && resolver.isPending),
+      loading: warehouses.isPending || (missingWarehouseIds.includes(id) && resolver.isFetching && !warehouseMap.has(id)),
       error: Boolean(warehouses.error || resolver.data?.failures.has(`warehouse:${id}`)),
     }),
-    loading: products.isPending || warehouses.isPending || (hasMissingLabels && resolver.isPending),
+    loading: products.isPending || warehouses.isPending || (hasMissingLabels && resolver.isFetching),
     error: lookupError,
     retry: () => {
       if (products.error || warehouses.error) {
@@ -100,6 +100,21 @@ export function useInventoryLabels(client: ApiClient, productIds: number[], ware
       return resolver.refetch()
     },
   }
+}
+
+export function InventoryLabelStatus({
+  lookup,
+  subject,
+}: {
+  lookup: ReturnType<typeof useInventoryLabels>
+  subject: 'stock ledger' | 'movement history' | 'transaction history'
+}) {
+  if (lookup.loading) return <p className="async-state" role="status">Resolving product and warehouse labels for {subject}…</p>
+  if (!lookup.error) return null
+  return <p className="async-state async-state-error" role="alert">
+    {subject} labels could not be resolved: {lookup.error instanceof Error ? lookup.error.message : 'Lookup failed.'}
+    {' '}<button type="button" className="quiet" onClick={() => void lookup.retry()}>Retry label lookup</button>
+  </p>
 }
 
 export function ProductIdentity({ id, lookup }: { id: number; lookup: ReturnType<typeof useInventoryLabels> }) {

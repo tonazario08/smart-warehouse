@@ -43,6 +43,46 @@ it('resolves labels by ID when product and warehouse are outside lookup pages', 
   expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/warehouses/7'))).toBe(true)
 })
 
+it('retains transaction details while retrying only a failed warehouse label', async () => {
+  let productRequests = 0
+  let warehouseRequests = 0
+  let resolveRetry: ((response: Response) => void) | undefined
+  const warehouse = { ...warehouseRow, id: 7, code: 'WH-01', name: 'Main warehouse' }
+  const { fetchMock } = renderRoleRoute('/transactions', 'admin', (url) => {
+    if (url.includes('/transactions?')) return jsonResponse(page())
+    if (url.includes('/products?')) return jsonResponse({ items: [{ ...product, id: 2, sku: 'SKU-OTHER', name: 'Other item' }], total: 121, page: 1, page_size: 100 })
+    if (url.includes('/warehouses?')) return jsonResponse({ items: [{ ...warehouse, id: 3, code: 'WH-OTHER' }], total: 44, page: 1, page_size: 100 })
+    if (url.endsWith('/products/6')) {
+      productRequests += 1
+      return jsonResponse(product)
+    }
+    if (url.endsWith('/warehouses/7')) {
+      warehouseRequests += 1
+      if (warehouseRequests === 1) return jsonResponse({ detail: { code: 'LOOKUP_DOWN', message: 'Warehouse detail unavailable.', fields: null } }, 503)
+      return new Promise<Response>((resolve) => { resolveRetry = resolve })
+    }
+    return jsonResponse({})
+  })
+
+  expect(await screen.findByText('SKU-001')).toBeInTheDocument()
+  expect(await screen.findByText('Warehouse #7')).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Warehouse detail unavailable.')
+  expect(screen.getByText('Actor 12')).toBeInTheDocument()
+  expect(screen.getByText('Inbound #30')).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Retry label lookup' }))
+  expect(await screen.findByText('Resolving product and warehouse labels for transaction history…')).toHaveAttribute('role', 'status')
+  expect(screen.getByText('SKU-001')).toBeInTheDocument()
+  expect(screen.getByText('Actor 12')).toBeInTheDocument()
+  expect(screen.getByText('Inbound #30')).toBeInTheDocument()
+  expect(productRequests).toBe(1)
+  expect(warehouseRequests).toBe(2)
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/products/6'))).toHaveLength(1)
+
+  resolveRetry?.(jsonResponse(warehouse))
+  expect(await screen.findByText('WH-01')).toBeInTheDocument()
+})
+
 it('filters transaction type and timezone-aware date range and resets pagination', async () => {
   const { fetchMock } = renderRoleRoute('/transactions', 'warehouse', (url) => {
     if (url.includes('/transactions?')) return jsonResponse(page([event], 41, url.includes('page=2') ? 2 : 1))

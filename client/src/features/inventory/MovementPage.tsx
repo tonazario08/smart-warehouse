@@ -5,7 +5,7 @@ import { Pagination } from '../../shared/ui/Pagination'
 import { useAuth } from '../auth/useAuth'
 import { createInventoryApi, inboundKeys, outboundKeys } from './api'
 import { InventoryFiltersForm } from './InventoryFilters'
-import { ProductIdentity, useInventoryLabels, WarehouseIdentity } from './InventoryLabels'
+import { InventoryLabelStatus, ProductIdentity, useInventoryLabels, WarehouseIdentity } from './InventoryLabels'
 import { MovementForm, type MovementDirection } from './MovementForm'
 import type { InventoryFilters } from './types'
 
@@ -44,6 +44,7 @@ export function MovementPage({ direction }: { direction: MovementDirection }) {
     <MovementForm direction={direction} />
     <InventoryFiltersForm client={client} filters={draft} onChange={(next) => { setDraft(next as InventoryFilters); setRangeError(null) }} onApply={apply} showLookupStatus={false} />
     {rangeError && <p className="form-error" role="alert">{rangeError}</p>}
+    <InventoryLabelStatus lookup={labels} subject="movement history" />
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage={`Loading ${direction} history…`} emptyMessage={`No ${direction} records match these filters.`} error={<>{query.error instanceof Error ? query.error.message : `${name} history could not be loaded.`} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry {direction} history</button></>}>
       <div className="table-wrap">
         <table className={`admin-table resource-table inventory-table movement-history movement-history-${direction}`}>
