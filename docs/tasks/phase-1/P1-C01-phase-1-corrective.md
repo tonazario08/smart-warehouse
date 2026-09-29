@@ -530,3 +530,19 @@ npm.cmd run e2e
 
 - Independent scoped re-review found all original findings resolved and no remaining Critical, Important, or Minor finding. Spec compliance and task quality are approved for cumulative diff `323ff55..e50f1ba`.
 - The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-15-review-report.md`. Internal Task 15 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 16.
+
+## Internal Task 16 Evidence (append-only)
+
+### 2026-09-29 — Internal Task 16 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 15 is accepted at `2a5107d`, and the approved Phase 1 plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-16-brief.md` authorize this internal scope.
+- Added role-aware category, supplier, product, and warehouse pages with domain-specific types/schemas/APIs, bounded pagination and supported filters, accessible async states, admin CRUD flows, delete confirmation, pending guards, query invalidation, normalization, paired coordinate validation, and local warehouse timestamps.
+- Review corrections render and associate every backend field error, add product relationship lookup loading/error/empty/retry states, strengthen independent pending guards, and reflow compressed JSX through only a narrow field-error helper.
+- A second review identified edit risk when the supplier lookup was unavailable or omitted the current supplier. Product edit now blocks save while a current relationship cannot be validated, supports retry, and renders a non-lossy current-supplier fallback when the lookup page omits its ID; explicit removal still sends `null`.
+- Fresh final frontend verification: 15 files and 81 tests passed; typecheck passed; production build passed with 204 modules; cumulative diff check passed. Vitest printed only its informational jsdom startup-time note.
+- Implementation checkpoints are `e8f4524` (`feat(web): add master-data and warehouse workflows`), `97f34b9` (`fix(web): expose field and product lookup errors`), and `5fbcc90` (`fix(web): preserve supplier on product edits`). Detailed evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-16-report.md`.
+
+### 2026-09-29 — Internal Task 16 accepted
+
+- Independent final re-review approved both spec compliance and task quality with no remaining Critical, Important, or Minor finding for cumulative diff `2a5107d..5fbcc90`.
+- The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-16-review-report.md`. Internal Task 16 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 17.
