@@ -12,9 +12,14 @@ const tokenKey = 'smart-warehouse-token'
 function renderRoute(
   path: string,
   role?: 'admin' | 'warehouse' | 'client',
-  fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    id: 12, email: 'user@example.com', role, is_active: true,
-  }), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+  fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    const page = { items: [], total: 0, page: 1, page_size: 20 }
+    const body = url.endsWith('/auth/me')
+      ? { id: 12, email: 'user@example.com', role, is_active: true }
+      : page
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  }),
 ) {
   if (role) localStorage.setItem(tokenKey, 'route-token')
   vi.stubGlobal('fetch', fetchMock)
@@ -42,13 +47,12 @@ describe('role-aware application routes', () => {
   })
 
   it.each([
-    ['warehouse', '/inbound', 'Inbound'],
+    ['warehouse', '/inbounds', 'Inbound'],
     ['client', '/stock', 'Stock'],
   ] as const)('renders the %s role route at %s inside the accessible shell', async (role, path, navLabel) => {
     renderRoute(path, role)
 
     expect(await screen.findByRole('heading', { name: navLabel })).toBeInTheDocument()
-    expect(screen.getByText(/later phase 1 workstream/i)).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: navLabel })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content')
@@ -74,6 +78,12 @@ describe('role-aware application routes', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/suppliers?'))).toBe(false)
   })
 
+  it.each(['/inbounds', '/outbounds', '/transactions'] as const)('denies clients from %s and hides its navigation link', async (path) => {
+    renderRoute(path, 'client')
+    expect(await screen.findByRole('heading', { name: 'Permission required' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /inbound|outbound|transactions/i })).not.toBeInTheDocument()
+  })
+
   it.each(['warehouse', 'client'] as const)('denies %s users on every admin page', async (role) => {
     for (const path of ['/dashboard', '/users', '/audit']) {
       const view = renderRoute(path, role)
@@ -91,10 +101,10 @@ describe('role-aware application routes', () => {
 
   it('derives navigation only from the current role permission lists', () => {
     expect(navigationForRole('admin').map((item) => item.href)).toEqual([
-      '/dashboard', '/users', '/audit', '/categories', '/products', '/suppliers', '/warehouses', '/stock', '/inbound', '/outbound', '/transactions',
+      '/dashboard', '/users', '/audit', '/categories', '/products', '/suppliers', '/warehouses', '/stock', '/inbounds', '/outbounds', '/transactions',
     ])
     expect(navigationForRole('warehouse').map((item) => item.href)).toEqual([
-      '/categories', '/products', '/suppliers', '/warehouses', '/stock', '/inbound', '/outbound', '/transactions',
+      '/categories', '/products', '/suppliers', '/warehouses', '/stock', '/inbounds', '/outbounds', '/transactions',
     ])
     expect(navigationForRole('client').map((item) => item.href)).toEqual([
       '/categories', '/products', '/warehouses', '/stock',
@@ -123,7 +133,7 @@ describe('role-aware application routes', () => {
       }
       throw new Error(`Unexpected request: ${String(input)}`)
     })
-    renderRoute('/inbound', undefined, fetchMock)
+    renderRoute('/inbounds', undefined, fetchMock)
 
     await user.type(await screen.findByLabelText('Email'), 'user@example.com')
     await user.type(screen.getByLabelText('Password'), 'correct-password')

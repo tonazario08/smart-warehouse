@@ -22,8 +22,8 @@ export const navigationItems: readonly RoleNavigationItem[] = [
   { label: 'Suppliers', href: '/suppliers', roles: adminAndWarehouse },
   { label: 'Warehouses', href: '/warehouses', roles: allRoles },
   { label: 'Stock', href: '/stock', roles: allRoles },
-  { label: 'Inbound', href: '/inbound', roles: adminAndWarehouse },
-  { label: 'Outbound', href: '/outbound', roles: adminAndWarehouse },
+  { label: 'Inbound', href: '/inbounds', roles: adminAndWarehouse },
+  { label: 'Outbound', href: '/outbounds', roles: adminAndWarehouse },
   { label: 'Transactions', href: '/transactions', roles: adminAndWarehouse },
 ]
 

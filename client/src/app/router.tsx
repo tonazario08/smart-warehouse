@@ -14,8 +14,12 @@ import { CategoriesPage } from '../features/categories/CategoriesPage'
 import { SuppliersPage } from '../features/suppliers/SuppliersPage'
 import { ProductsPage } from '../features/products/ProductsPage'
 import { WarehousesPage } from '../features/warehouses/WarehousesPage'
+import { InboundPage } from '../features/inventory/InboundPage'
+import { OutboundPage } from '../features/inventory/OutboundPage'
+import { StockPage } from '../features/inventory/StockPage'
+import { TransactionsPage } from '../features/transactions/TransactionsPage'
 
-const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit', '/categories', '/suppliers', '/products', '/warehouses'].includes(item.href)).map((item) => ({
+const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit', '/categories', '/suppliers', '/products', '/warehouses', '/stock', '/inbounds', '/outbounds', '/transactions'].includes(item.href)).map((item) => ({
   path: item.href,
   label: item.label,
   roles: item.roles,
@@ -99,6 +103,10 @@ export function AppRouter() {
           <Route path="/products" element={<RequireRole allow={['admin', 'warehouse', 'client']}><ProductsPage /></RequireRole>} />
           <Route path="/suppliers" element={<RequireRole allow={['admin', 'warehouse']}><SuppliersPage /></RequireRole>} />
           <Route path="/warehouses" element={<RequireRole allow={['admin', 'warehouse', 'client']}><WarehousesPage /></RequireRole>} />
+          <Route path="/stock" element={<RequireRole allow={['admin', 'warehouse', 'client']}><StockPage /></RequireRole>} />
+          <Route path="/inbounds" element={<RequireRole allow={['admin', 'warehouse']}><InboundPage /></RequireRole>} />
+          <Route path="/outbounds" element={<RequireRole allow={['admin', 'warehouse']}><OutboundPage /></RequireRole>} />
+          <Route path="/transactions" element={<RequireRole allow={['admin', 'warehouse']}><TransactionsPage /></RequireRole>} />
           {featureRoutes.map((route) => (
             <Route key={route.path} path={route.path} element={
               <RequireRole allow={route.roles}>

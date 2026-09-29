@@ -159,6 +159,25 @@ td small { margin-top: .25rem; color: var(--quiet-text); }
 .resource-checkbox { display: flex; align-items: center; gap: .6rem; }
 .resource-checkbox input { width: 1.1rem; height: 1.1rem; accent-color: var(--safety-amber); }
 .resource-table td small { max-width: 32rem; overflow-wrap: anywhere; }
+.inventory-workspace { gap: 1.2rem; }
+.inventory-filters { grid-template-columns: repeat(5, minmax(9rem, 1fr)) auto; border-left-width: 3px; }
+.inventory-table { min-width: 42rem; }
+.movement-history, .transaction-ledger { min-width: 68rem; }
+.inventory-identity { display: grid; gap: .18rem; }
+.inventory-identity .scan-code { display: block; }
+.inventory-identity small { margin-top: 0; }
+.inventory-identity .lookup-retry { justify-self: start; min-height: 2rem; padding: .25rem .45rem; font-size: .78rem; }
+.inventory-quantity { color: #f5f8f9; font-family: Bahnschrift, 'Segoe UI', sans-serif; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.movement-manifest { display: grid; gap: 1rem; padding: 1.2rem; border: 1px solid var(--aisle-line); border-left: 3px solid var(--safety-amber); background: var(--bay); }
+.movement-manifest-outbound { border-left-color: var(--alert-coral); }
+.movement-manifest header h3 { margin: 0; font-size: 1.25rem; }
+.movement-manifest header p { margin: .35rem 0 0; color: var(--muted-text); }
+.movement-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 1rem; }
+.movement-fields label:nth-of-type(4), .movement-fields label:nth-of-type(5), .movement-fields .form-error, .movement-fields > button { grid-column: 1 / -1; }
+.movement-fields > button { justify-self: start; }
+.movement-direction { display: inline-block; border: 1px solid var(--aisle-line); padding: .25rem .45rem; font-weight: 650; }
+.movement-direction-inbound { border-color: var(--status-mint); color: var(--status-mint); }
+.movement-direction-outbound { border-color: var(--alert-coral); color: var(--alert-coral); }
 
 @media (max-width: 760px) {
   .application-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); }
@@ -185,6 +204,8 @@ td small { margin-top: .25rem; color: var(--quiet-text); }
   .admin-heading { align-items: start; flex-direction: column; }
   .admin-form-fields, .audit-filters { grid-template-columns: minmax(0, 1fr); }
   .resource-filters, .product-filters { grid-template-columns: minmax(0, 1fr); }
+  .inventory-filters, .movement-fields { grid-template-columns: minmax(0, 1fr); }
+  .movement-fields label:nth-of-type(4), .movement-fields label:nth-of-type(5), .movement-fields .form-error, .movement-fields > button { grid-column: auto; }
   .resource-filters button { justify-self: start; }
   .audit-filters button { justify-self: start; }
   .users-table { min-width: 0; }
