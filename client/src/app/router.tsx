@@ -7,8 +7,11 @@ import { AuthLoading, RequireAuth } from '../features/auth/RequireAuth'
 import { RequireRole } from '../features/auth/RequireRole'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RegisterPage } from '../features/auth/RegisterPage'
+import { DashboardPage } from '../features/dashboard/DashboardPage'
+import { UsersPage } from '../features/users/UsersPage'
+import { AuditPage } from '../features/audit/AuditPage'
 
-const featureRoutes = navigationItems.map((item) => ({
+const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit'].includes(item.href)).map((item) => ({
   path: item.href,
   label: item.label,
   roles: item.roles,
@@ -85,13 +88,16 @@ export function AppRouter() {
         <Route element={<ProtectedShell />}>
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/forbidden" element={<ForbiddenPage />} />
-        {featureRoutes.map((route) => (
+          <Route path="/dashboard" element={<RequireRole allow={['admin']}><DashboardPage /></RequireRole>} />
+          <Route path="/users" element={<RequireRole allow={['admin']}><UsersPage /></RequireRole>} />
+          <Route path="/audit" element={<RequireRole allow={['admin']}><AuditPage /></RequireRole>} />
+          {featureRoutes.map((route) => (
             <Route key={route.path} path={route.path} element={
               <RequireRole allow={route.roles}>
                 <FeaturePlaceholder label={route.label} />
               </RequireRole>
             } />
-        ))}
+          ))}
           <Route path="*" element={<HomeRedirect />} />
         </Route>
       </Route>

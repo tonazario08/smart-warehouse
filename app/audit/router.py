@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.audit.repository import AuditRepository
 from app.audit.schemas import AuditLogPage, AuditLogResponse
@@ -20,11 +20,14 @@ def list_audit_logs(
     params: Annotated[PageParams, Depends()],
     session: Annotated[object, Depends(get_session)],
     _: Annotated[User, Depends(require_permission(Permission.AUDIT_READ))],
+    action: Annotated[str | None, Query(min_length=1, max_length=80)] = None,
+    target_type: Annotated[str | None, Query(min_length=1, max_length=80)] = None,
+    target_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> AuditLogPage:
     repository = AuditRepository(session)
     return AuditLogPage(
-        items=repository.list(params),
-        total=repository.count(),
+        items=repository.list(params, action=action, target_type=target_type, target_id=target_id),
+        total=repository.count(action=action, target_type=target_type, target_id=target_id),
         page=params.page,
         page_size=params.page_size,
     )

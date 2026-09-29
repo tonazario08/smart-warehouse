@@ -16,17 +16,40 @@ class AuditRepository:
     def add(self, audit_log: AuditLog) -> None:
         self.session.add(audit_log)
 
-    def list(self, params: PageParams) -> list[AuditLog]:
+    @staticmethod
+    def _predicates(
+        action: str | None, target_type: str | None, target_id: int | None
+    ) -> list:
+        predicates = []
+        if action is not None:
+            predicates.append(AuditLog.action == action)
+        if target_type is not None:
+            predicates.append(AuditLog.target_type == target_type)
+        if target_id is not None:
+            predicates.append(AuditLog.target_id == target_id)
+        return predicates
+
+    def list(
+        self, params: PageParams, *, action: str | None = None,
+        target_type: str | None = None, target_id: int | None = None,
+    ) -> list[AuditLog]:
         statement = (
             select(AuditLog)
+            .where(*self._predicates(action, target_type, target_id))
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
             .offset(params.offset)
             .limit(params.page_size)
         )
         return list(self.session.scalars(statement).all())
 
-    def count(self) -> int:
-        return self.session.scalar(select(func.count()).select_from(AuditLog)) or 0
+    def count(
+        self, *, action: str | None = None,
+        target_type: str | None = None, target_id: int | None = None,
+    ) -> int:
+        statement = select(func.count()).select_from(AuditLog).where(
+            *self._predicates(action, target_type, target_id)
+        )
+        return self.session.scalar(statement) or 0
 
     def get(self, audit_log_id: int) -> AuditLog | None:
         return self.session.get(AuditLog, audit_log_id)

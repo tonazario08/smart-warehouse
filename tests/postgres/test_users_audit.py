@@ -342,6 +342,64 @@ def test_audit_list_and_detail_are_read_only(
     assert mutation.status_code == 405
 
 
+def test_audit_filters_apply_independently_to_items_and_total(
+    postgres_client, postgres_session, admin, admin_headers, client_headers
+) -> None:
+    """Catches ignored predicates and a count query that reports unfiltered rows."""
+    rows = [
+        ("user.created", "user", 10),
+        ("user.role_changed", "user", 10),
+        ("user.created", "warehouse", 10),
+        ("user.created", "user", 11),
+    ]
+    for action, target_type, target_id in rows:
+        postgres_session.add(AuditLog(
+            actor_user_id=admin.id, action=action, target_type=target_type,
+            target_id=target_id, before_data=None, after_data=None,
+        ))
+    postgres_session.commit()
+
+    cases = [
+        ("action=user.role_changed", ["user.role_changed"], 1),
+        ("target_type=warehouse", ["user.created"], 1),
+        ("target_id=11", ["user.created"], 1),
+        ("action=user.created&target_type=user&target_id=10", ["user.created"], 1),
+        ("action=user.created&target_type=user", ["user.created", "user.created"], 2),
+    ]
+    for query, actions, total in cases:
+        response = postgres_client.get(f"/api/v1/audit-logs?{query}", headers=admin_headers)
+        assert response.status_code == 200
+        assert response.json()["total"] == total
+        assert [item["action"] for item in response.json()["items"]] == actions
+
+    first = postgres_client.get(
+        "/api/v1/audit-logs?action=user.created&target_type=user&page_size=1&page=1",
+        headers=admin_headers,
+    ).json()
+    second = postgres_client.get(
+        "/api/v1/audit-logs?action=user.created&target_type=user&page_size=1&page=2",
+        headers=admin_headers,
+    ).json()
+    assert first["total"] == second["total"] == 2
+    assert [first["items"][0]["target_id"], second["items"][0]["target_id"]] == [11, 10]
+
+    denied = postgres_client.get(
+        "/api/v1/audit-logs?action=user.created&target_id=10", headers=client_headers
+    )
+    assert denied.status_code == 403
+
+
+@pytest.mark.parametrize("target_id", ["abc", "0", "-1", "1.5"])
+def test_audit_target_id_filter_rejects_invalid_values(
+    postgres_client, admin_headers, target_id
+) -> None:
+    """Catches a filter that silently ignores malformed audit target identifiers."""
+    response = postgres_client.get(
+        f"/api/v1/audit-logs?target_id={target_id}", headers=admin_headers
+    )
+    assert response.status_code == 422
+
+
 def test_repositories_do_not_commit(monkeypatch, postgres_session: Session) -> None:
     from app.audit.repository import AuditRepository
     from app.core.pagination import PageParams

@@ -19,7 +19,7 @@ function renderRoute(
   if (role) localStorage.setItem(tokenKey, 'route-token')
   vi.stubGlobal('fetch', fetchMock)
 
-  render(
+  return render(
     <QueryClientProvider client={new QueryClient()}>
       <AuthProvider>
         <MemoryRouter initialEntries={[path]}><AppRouter /></MemoryRouter>
@@ -42,7 +42,6 @@ describe('role-aware application routes', () => {
   })
 
   it.each([
-    ['admin', '/dashboard', 'Overview'],
     ['warehouse', '/inbound', 'Inbound'],
     ['client', '/stock', 'Stock'],
   ] as const)('renders the %s role route at %s inside the accessible shell', async (role, path, navLabel) => {
@@ -62,6 +61,14 @@ describe('role-aware application routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Permission required' })).toBeInTheDocument()
     expect(screen.getByText(/do not have permission/i)).toBeInTheDocument()
+  })
+
+  it.each(['warehouse', 'client'] as const)('denies %s users on every admin page', async (role) => {
+    for (const path of ['/dashboard', '/users', '/audit']) {
+      const view = renderRoute(path, role)
+      expect(await screen.findByRole('heading', { name: 'Permission required' })).toBeInTheDocument()
+      view.unmount()
+    }
   })
 
   it('redirects an authenticated visitor away from public sign-in to an allowed landing route', async () => {
