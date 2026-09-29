@@ -38,6 +38,11 @@ export function StockPage() {
     <header className="admin-heading"><div><h2 id="stock-heading">Stock</h2><p>Current quantity by product and warehouse</p></div></header>
     <InventoryFiltersForm client={client} filters={draft} onChange={(next) => { setDraft(next as InventoryFilters); setRangeError(null) }} onApply={apply} />
     {rangeError && <p className="form-error" role="alert">{rangeError}</p>}
+    {labels.loading && <p className="async-state" role="status">Resolving product and warehouse labels…</p>}
+    {labels.error && <p className="async-state async-state-error" role="alert">
+      {labels.error instanceof Error ? labels.error.message : 'Inventory labels could not be resolved.'}
+      {' '}<button type="button" className="quiet" onClick={() => void labels.retry()}>Retry label lookup</button>
+    </p>}
     <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading stock…" emptyMessage="No stock records match these filters." error={<>{query.error instanceof Error ? query.error.message : 'Stock could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry stock</button></>}>
       <div className="table-wrap">
         <table className="admin-table resource-table inventory-table">

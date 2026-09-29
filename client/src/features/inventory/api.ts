@@ -3,7 +3,7 @@ import type { Product } from '../products/types'
 import { createProductsApi, productKeys } from '../products/api'
 import type { Warehouse } from '../warehouses/types'
 import { createWarehousesApi, warehouseKeys } from '../warehouses/api'
-import type { InventoryFilters, MovementInput, MovementPageData, MovementRow, StockPageData, StockRow } from './types'
+import type { InventoryFilters, MovementCreateResponse, MovementInput, MovementPageData, MovementRow, StockPageData, StockRow } from './types'
 
 export const stockKeys = {
   all: ['stock'] as const,
@@ -41,8 +41,8 @@ export const createInventoryApi = (client: ApiClient) => ({
   listStock: (filters: InventoryFilters) => client.request<StockPageData>(`/stock?${makeParams(filters)}`),
   listInbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/inbounds?${makeParams(filters)}`),
   listOutbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/outbounds?${makeParams(filters)}`),
-  createInbound: (input: MovementInput) => client.request<MovementRow>('/inbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
-  createOutbound: (input: MovementInput) => client.request<MovementRow>('/outbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
+  createInbound: (input: MovementInput) => client.request<MovementCreateResponse>('/inbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
+  createOutbound: (input: MovementInput) => client.request<MovementCreateResponse>('/outbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
   listProducts: () => createProductsApi(client).list({ page: 1, pageSize: 100, search: '', categoryId: '', supplierId: '', isActive: '' }),
   listWarehouses: () => createWarehousesApi(client).list({ page: 1, pageSize: 100, search: '' }),
   getProduct: (id: number) => client.request<Product>(`/products/${id}`),

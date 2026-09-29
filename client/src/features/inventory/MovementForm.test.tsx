@@ -49,7 +49,7 @@ describe('movement schema and manifest', () => {
     await user.type(screen.getByLabelText('Note'), '   ')
     await user.click(screen.getByRole('button', { name: 'Record inbound' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Inbound recorded.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Inbound recorded. Movement #30.')
     const request = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/inbounds') && init?.method === 'POST')?.[1]
     expect(JSON.parse(String(request?.body))).toEqual({ warehouse_id: 7, product_id: 6, quantity: 5, reference: 'ASN 12' })
     await waitFor(() => expect(invalidation).toHaveBeenCalledTimes(4))
@@ -72,7 +72,7 @@ describe('movement schema and manifest', () => {
     await user.type(screen.getByLabelText('Outbound quantity'), '2')
     await user.click(screen.getByRole('button', { name: 'Record outbound' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Outbound recorded.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Outbound recorded. Movement #31.')
     const request = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/outbounds') && init?.method === 'POST')?.[1]
     expect(JSON.parse(String(request?.body))).toEqual({ warehouse_id: 7, product_id: 6, quantity: 2 })
     await waitFor(() => expect(invalidation).toHaveBeenCalledTimes(4))
@@ -152,7 +152,7 @@ describe('movement schema and manifest', () => {
     expect(await screen.findByRole('button', { name: /recording/i })).toBeDisabled()
     expect(posts).toBe(1)
     resolvePost?.(jsonResponse({ id: 30, warehouse_id: 7, product_id: 6, quantity: 5, reference: null, note: null }, 201))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Inbound recorded.'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Inbound recorded. Movement #30.'))
   })
 
   it('requires a successfully loaded, nonempty lookup before movement can be submitted', async () => {

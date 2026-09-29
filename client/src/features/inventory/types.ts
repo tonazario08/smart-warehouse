@@ -19,6 +19,15 @@ export interface MovementRow {
   created_at: string
 }
 
+export interface MovementCreateResponse {
+  id: number
+  warehouse_id: number
+  product_id: number
+  quantity: number
+  reference: string | null
+  note: string | null
+}
+
 export interface MovementInput {
   warehouse_id: number
   product_id: number

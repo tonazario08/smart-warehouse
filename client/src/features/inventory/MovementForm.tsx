@@ -33,7 +33,7 @@ export function MovementForm({ direction }: { direction: MovementDirection }) {
     form.clearErrors()
     try {
       const create = direction === 'inbound' ? api.createInbound : api.createOutbound
-      await create(input)
+      const movement = await create(input)
       const historyKey = direction === 'inbound' ? inboundKeys.all : outboundKeys.all
       await Promise.all([
         cache.invalidateQueries({ queryKey: stockKeys.all }),
@@ -42,7 +42,7 @@ export function MovementForm({ direction }: { direction: MovementDirection }) {
         cache.invalidateQueries({ queryKey: ['dashboard', 'stats'] }),
       ])
       form.reset({ warehouse_id: '', product_id: '', quantity: '', reference: '', note: '' })
-      setSuccess(`${direction === 'inbound' ? 'Inbound' : 'Outbound'} recorded.`)
+      setSuccess(`${direction === 'inbound' ? 'Inbound' : 'Outbound'} recorded. Movement #${movement.id}.`)
     } catch (error) {
       if (error instanceof ApiError) {
         const fieldMap = { warehouse_id: 'warehouse_id', product_id: 'product_id', quantity: 'quantity', reference: 'reference', note: 'note' } as const

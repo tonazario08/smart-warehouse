@@ -45,6 +45,53 @@ describe('stock ledger', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/warehouses/7'))).toBe(true)
   })
 
+  it('resolves many missing labels with at most four detail requests in flight', async () => {
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      ...stock,
+      id: 100 + index,
+      product_id: 1000 + index,
+      warehouse_id: 2000 + index,
+    }))
+    const held: Array<() => void> = []
+    let active = 0
+    let peak = 0
+    const { fetchMock } = renderRoleRoute('/stock', 'client', (url) => {
+      if (url.includes('/stock?')) return jsonResponse(page(rows))
+      if (url.includes('/products?')) return jsonResponse({ items: [], total: 1200, page: 1, page_size: 100 })
+      if (url.includes('/warehouses?')) return jsonResponse({ items: [], total: 2200, page: 1, page_size: 100 })
+      const productMatch = url.match(/\/products\/(\d+)$/)
+      const warehouseMatch = url.match(/\/warehouses\/(\d+)$/)
+      if (productMatch || warehouseMatch) {
+        const id = Number((productMatch ?? warehouseMatch)![1])
+        active += 1
+        peak = Math.max(peak, active)
+        return new Promise<Response>((resolve) => {
+          held.push(() => {
+            resolve(jsonResponse(productMatch
+              ? { ...product, id, sku: `SKU-${id}`, name: `Product ${id}` }
+              : { ...warehouseRow, id, code: `WH-${id}`, name: `Warehouse ${id}` }))
+          })
+        }).finally(() => { active -= 1 })
+      }
+      throw new Error(`Unexpected request ${url}`)
+    })
+
+    await waitFor(() => expect(held).toHaveLength(4))
+    expect(peak).toBe(4)
+    for (let index = 0; index < 40; index += 1) {
+      held[index]()
+      await waitFor(() => expect(held.length).toBe(Math.min(index + 5, 40)))
+      expect(peak).toBeLessThanOrEqual(4)
+    }
+
+    for (const row of rows) {
+      expect(await screen.findByText(`SKU-${row.product_id}`)).toBeInTheDocument()
+      expect(screen.getByText(`WH-${row.warehouse_id}`)).toBeInTheDocument()
+    }
+    expect(fetchMock.mock.calls.filter(([url]) => /\/(products|warehouses)\/\d+$/.test(String(url)))).toHaveLength(40)
+    expect(peak).toBe(4)
+  })
+
   it('filters by warehouse, product, and timezone-aware date range, resetting pagination', async () => {
     let pageCalls = 0
     const { fetchMock } = renderRoleRoute('/stock', 'warehouse', (url) => {
@@ -97,8 +144,9 @@ describe('stock ledger', () => {
       if (url.includes('/warehouses?')) return jsonResponse({ items: [warehouseRow], total: 1, page: 1, page_size: 100 })
       return jsonResponse({})
     })
-    expect(await screen.findByText(/Product lookup unavailable/i)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Retry product lookup' }))
+    const retryLabels = await screen.findByRole('button', { name: 'Retry label lookup' })
+    expect(retryLabels.parentElement).toHaveTextContent('Product lookup unavailable.')
+    await userEvent.click(retryLabels)
     expect(await screen.findByText('SKU-001')).toBeInTheDocument()
     expect(within(screen.getByRole('row', { name: /SKU-001/ })).getByText('WH-01')).toBeInTheDocument()
   })
