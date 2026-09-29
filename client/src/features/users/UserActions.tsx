@@ -22,7 +22,7 @@ export function UserActions({ user, pending, onRoleChange, onStatusChange }: {
       <button type="button" disabled={pending} onClick={() => void onStatusChange().then(() => setConfirm(null)).catch(() => undefined)}>Confirm {user.is_active ? 'deactivation' : 'activation'}</button>
       <button type="button" className="quiet" onClick={() => setConfirm(null)}>Cancel</button>
     </div> : <>
-      <button type="button" className="quiet" disabled={pending} aria-label={`Change role for ${user.email}`} onClick={() => setConfirm('role')}>Change role</button>
+      <button type="button" className="quiet" disabled={pending} aria-label={`Change role for ${user.email}`} onClick={() => { setRole(user.role === 'client' ? 'warehouse' : 'client'); setConfirm('role') }}>Change role</button>
       <button type="button" className="quiet" disabled={pending} aria-label={`${user.is_active ? 'Deactivate' : 'Activate'} ${user.email}`} onClick={() => setConfirm('status')}>{user.is_active ? 'Deactivate' : 'Activate'}</button>
     </>}
   </div>

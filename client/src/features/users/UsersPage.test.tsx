@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -13,7 +13,10 @@ const admin = { id: 1, email: 'admin@example.com', role: 'admin', is_active: tru
 const client = { id: 2, email: 'client@example.com', role: 'client', is_active: true }
 const warehouse = { id: 3, email: 'worker@example.com', role: 'warehouse', is_active: false }
 
-function renderUsers(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+function renderUsers(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   localStorage.setItem('smart-warehouse-token', 'admin-token')
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -21,7 +24,7 @@ function renderUsers(handler: (url: string, init?: RequestInit) => Response | Pr
     return Promise.resolve(handler(url, init))
   })
   vi.stubGlobal('fetch', fetchMock)
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  render(<QueryClientProvider client={queryClient}>
     <AuthProvider><MemoryRouter initialEntries={['/users']}><AppRouter /></MemoryRouter></AuthProvider>
   </QueryClientProvider>)
   return fetchMock
@@ -65,6 +68,30 @@ it('validates a new user, creates a managed account, and refreshes the roster', 
   expect(rosterReads).toBeGreaterThan(1)
 })
 
+it('attaches server field errors to their controls while keeping the domain error visible', async () => {
+  renderUsers((url, init) => {
+    if (url.includes('/users?')) return json({ items: [], total: 0, page: 1, page_size: 20 })
+    if (url.endsWith('/users') && init?.method === 'POST') return json({ detail: {
+      code: 'REQUEST_VALIDATION_ERROR', message: 'Request validation failed.',
+      fields: { email: ['Email is already in use.'], password: ['Password is not accepted.'] },
+    } }, 422)
+    throw new Error(`Unexpected request: ${url}`)
+  })
+  const user = userEvent.setup()
+  await screen.findByText('No users found.')
+  await user.type(screen.getByLabelText('Email'), 'taken@example.com')
+  await user.type(screen.getByLabelText('Password'), 'strong-password-1')
+  await user.click(screen.getByRole('button', { name: 'Create user' }))
+
+  const email = screen.getByLabelText('Email')
+  const password = screen.getByLabelText('Password')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Request validation failed.')
+  expect(email).toHaveAttribute('aria-invalid', 'true')
+  expect(password).toHaveAttribute('aria-invalid', 'true')
+  expect(email).toHaveAccessibleDescription('Email is already in use.')
+  expect(password).toHaveAccessibleDescription('Password is not accepted.')
+})
+
 it('requires a visible confirmation for role changes and surfaces domain failures', async () => {
   const fetchMock = renderUsers((url, init) => {
     if (url.includes('/users?')) return json({ items: [client], total: 1, page: 1, page_size: 20 })
@@ -79,6 +106,52 @@ it('requires a visible confirmation for role changes and surfaces domain failure
   await user.click(screen.getByRole('button', { name: 'Confirm role change' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('User already has that role.')
   expect(screen.getByText('admin@example.com')).toBeInTheDocument()
+})
+
+it('defaults each new role confirmation from the current role after a successful refetch', async () => {
+  let currentRole: 'client' | 'warehouse' = 'client'
+  let rosterReads = 0
+  const submittedRoles: string[] = []
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const auditFetch = vi.fn().mockResolvedValue({ items: [] })
+  const auditObserver = new QueryObserver(queryClient, { queryKey: ['audit', { page: 1 }], queryFn: auditFetch })
+  const stopAuditObserver = auditObserver.subscribe(() => undefined)
+  await waitFor(() => expect(auditFetch).toHaveBeenCalledTimes(1))
+  renderUsers((url, init) => {
+    if (url.includes('/users?')) { rosterReads += 1; return json({ items: [{ ...client, role: currentRole }], total: 1, page: 1, page_size: 20 }) }
+    if (url.endsWith('/users/2/role') && init?.method === 'PATCH') {
+      const requested = (JSON.parse(String(init.body)) as { role: 'client' | 'warehouse' }).role
+      submittedRoles.push(requested)
+      if (requested === currentRole) return json({ detail: { code: 'USER_ROLE_UNCHANGED', message: 'User already has that role.', fields: null } }, 409)
+      currentRole = requested
+      return json({ ...client, role: currentRole })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }, queryClient)
+  const user = userEvent.setup()
+  const account = await screen.findByText('client@example.com')
+  const row = account.closest('tr') as HTMLTableRowElement
+
+  await user.click(within(row).getByRole('button', { name: 'Change role for client@example.com' }))
+  expect(within(row).getByLabelText(/confirm role change for client@example.com/i)).toHaveValue('warehouse')
+  await user.click(within(row).getByRole('button', { name: 'Confirm role change' }))
+  await waitFor(() => expect(within(row).getByText('warehouse')).toBeInTheDocument())
+  expect(rosterReads).toBeGreaterThan(1)
+
+  await user.click(within(row).getByRole('button', { name: 'Change role for client@example.com' }))
+  const roleSelect = within(row).getByLabelText(/confirm role change for client@example.com/i)
+  expect(roleSelect).toHaveValue('client')
+  await user.selectOptions(roleSelect, 'warehouse')
+  const readsBeforeRefresh = rosterReads
+  await user.click(screen.getByRole('button', { name: 'Refresh roster' }))
+  await waitFor(() => expect(rosterReads).toBeGreaterThan(readsBeforeRefresh))
+  expect(roleSelect).toHaveValue('warehouse')
+  await user.selectOptions(roleSelect, 'client')
+  await user.click(within(row).getByRole('button', { name: 'Confirm role change' }))
+  await waitFor(() => expect(within(row).getByText('client')).toBeInTheDocument())
+  expect(submittedRoles).toEqual(['warehouse', 'client'])
+  await waitFor(() => expect(auditFetch).toHaveBeenCalledTimes(3))
+  stopAuditObserver()
 })
 
 it('confirms status changes and refreshes the roster and audit cache', async () => {
