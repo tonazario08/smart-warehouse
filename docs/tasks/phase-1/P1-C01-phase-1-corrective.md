@@ -546,3 +546,18 @@ npm.cmd run e2e
 
 - Independent final re-review approved both spec compliance and task quality with no remaining Critical, Important, or Minor finding for cumulative diff `2a5107d..5fbcc90`.
 - The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-16-review-report.md`. Internal Task 16 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 17.
+
+## Internal Task 17 Evidence (append-only)
+
+### 2026-09-29 — Internal Task 17 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 16 is accepted at `d55c9b0`, and the approved plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-17-brief.md` authorize this scope.
+- Added plural, role-aware stock, inbound, outbound, and transaction routes; scan-first paginated/filterable ledgers; validated movement manifests; product/warehouse label resolution; explicit async/retry states; exact query invalidations; and preserved domain/field errors including insufficient stock.
+- Review corrections bound out-of-page detail lookup concurrency to four across product and warehouse identities, deduplicate/cache successes, use an exact create-response type distinct from history rows, and expose shared partial-success/retry recovery on stock, movement history, and transaction history.
+- Fresh final frontend verification: 19 files and 115 tests passed; typecheck passed; production build passed with 215 modules; cumulative diff check passed. Vitest printed only its informational jsdom startup-time note.
+- Implementation checkpoints are `31b943b` (`feat(web): add inventory movement and history workflows`), `c28b1ad` (`fix: bound inventory label lookups and type movement responses`), and `230cb53` (`fix: expose label recovery on history pages`). Detailed evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-17-report.md`.
+
+### 2026-09-29 — Internal Task 17 accepted
+
+- Independent final re-review approved spec compliance and task quality with no remaining P2 or P3 finding for cumulative diff `d55c9b0..230cb53`.
+- The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-17-review-report.md`. Internal Task 17 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 18.
