@@ -1,3 +1,6 @@
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -13,6 +16,52 @@ from app.seed import (
     load_seed_settings,
     seed_database,
 )
+
+SEED_ENVIRONMENT_NAMES = (
+    "SEED_ADMIN_EMAIL",
+    "SEED_ADMIN_PASSWORD",
+    "SEED_WAREHOUSE_EMAIL",
+    "SEED_WAREHOUSE_PASSWORD",
+    "SEED_CLIENT_EMAIL",
+    "SEED_CLIENT_PASSWORD",
+)
+
+
+def compose_config_command(directory: Path) -> tuple[list[str], dict[str, str]]:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker CLI unavailable; Compose config validation skipped.")
+    available = subprocess.run(
+        [docker, "compose", "version"], capture_output=True, text=True, timeout=15
+    )
+    if available.returncode != 0:
+        pytest.skip("Docker Compose CLI plugin unavailable; config validation skipped.")
+
+    project_file = directory / "docker-compose.yml"
+    source_file = Path(__file__).resolve().parents[1] / "docker-compose.yml"
+    project_file.write_bytes(source_file.read_bytes())
+    (directory / ".env").write_text("", encoding="utf-8")
+    environment = os.environ.copy()
+    for name in SEED_ENVIRONMENT_NAMES:
+        environment.pop(name, None)
+    environment.update(
+        {
+            "POSTGRES_PASSWORD": "compose-test-password",
+            "DATABASE_URL": "postgresql+psycopg://smart_warehouse:test@db/smart_warehouse",
+            "JWT_SECRET_KEY": "compose-test-jwt-secret-with-at-least-32-characters",
+        }
+    )
+    command = [
+        docker,
+        "compose",
+        "--project-directory",
+        str(directory),
+        "--file",
+        str(project_file),
+        "config",
+        "--quiet",
+    ]
+    return command, environment
 
 
 def seed_environment(**overrides: str) -> dict[str, str]:
@@ -66,6 +115,32 @@ def test_seed_engine_rejects_missing_or_blank_database_url(value: str | None) ->
 
     with pytest.raises(ValueError, match="DATABASE_URL"):
         create_engine_from_environment(environment)
+
+
+@pytest.mark.parametrize("name", SEED_ENVIRONMENT_NAMES)
+@pytest.mark.parametrize("value", [None, ""])
+def test_compose_config_fails_closed_for_missing_or_blank_bootstrap_credentials(
+    tmp_path: Path, name: str, value: str | None
+) -> None:
+    command, environment = compose_config_command(tmp_path)
+    if value is None:
+        environment.pop(name, None)
+    else:
+        environment[name] = value
+
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
+
+    assert result.returncode != 0
+    assert name in result.stderr + result.stdout
+
+
+def test_compose_config_accepts_complete_bootstrap_credentials(tmp_path: Path) -> None:
+    command, environment = compose_config_command(tmp_path)
+    environment.update({name: f"compose-test-{name.lower()}" for name in SEED_ENVIRONMENT_NAMES})
+
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_seed_settings_normalize_emails_like_auth_requests() -> None:
