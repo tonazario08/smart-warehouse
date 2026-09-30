@@ -561,3 +561,20 @@ npm.cmd run e2e
 
 - Independent final re-review approved spec compliance and task quality with no remaining P2 or P3 finding for cumulative diff `d55c9b0..230cb53`.
 - The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-17-review-report.md`. Internal Task 17 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 18.
+
+## Internal Task 18 Evidence (append-only)
+
+### 2026-09-30 — Internal Task 18 implementation and verification
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 17 is accepted at `af2a956`, and the approved plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-18-brief.md` authorize this scope.
+- Added production-oriented backend and frontend container builds, Nginx runtime configuration, PostgreSQL health and migration ordering, API readiness, non-root runtime users, explicit environment examples, and an idempotent privileged-account seed path that validates all credentials before opening a database connection.
+- Initial isolated runtime verification used the disposable Compose project `smart-warehouse-phase1-task18`: PostgreSQL 16 became healthy, migrations completed, API and web health probes returned HTTP 200, API and web processes ran as non-root users, and two seed runs preserved stable row counts and credential hashes. The exact disposable project, network, containers, and volume were then removed without touching default Docker data.
+- Independent review found that the bootstrap service validated six seed credentials only inside the application after its dependencies started. A test-first correction added required Compose interpolation for every privileged seed email and password so missing or blank values fail during `docker compose config`.
+- Final correction verification passed: Compose positive/negative config cases — 13 passed; focused seed/readiness/PostgreSQL suite — 46 passed; full backend suite — 442 passed; Ruff — passed; frontend production build — passed; `git diff --check` — passed. The isolated PostgreSQL 18.3 UTC test server was stopped afterward. Docker daemon runtime gates were not rerun after the config-only correction because the daemon was unavailable; the earlier runtime evidence remains applicable to the otherwise unchanged stack.
+- Implementation checkpoints are `10069d2` (`build: harden migration and runtime containers`) and `06ba899` (`fix: require bootstrap seed credentials in Compose`). Detailed evidence is in `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-18-report.md`.
+
+### 2026-09-30 — Internal Task 18 accepted
+
+- Independent final re-review of cumulative diff `af2a956..06ba899` confirmed the prior Compose fail-closed finding is resolved and found no remaining Critical, Important, or Minor finding. Spec compliance and task quality both passed.
+- Reviewer verification passed all 13 Compose config cases without starting containers and confirmed `.env.example` fails closed. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-18-review-report.md`.
+- Internal Task 18 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 19.
