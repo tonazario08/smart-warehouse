@@ -40,10 +40,10 @@ test('seeded admin manages warehouse data and sees password-safe user audit evid
   await page.getByRole('link', { name: 'Audit' }).click()
   await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
   const audit = page.getByRole('table', { name: 'Administrative audit ledger' })
-  await expect(audit).toContainText('user.created')
-  await expect(audit).toContainText('user.role_changed')
-  await expect(audit).toContainText('user.status_changed')
-  await expect(audit).toContainText(operator.email)
+  for (const action of ['user.created', 'user.role_changed', 'user.status_changed']) {
+    const matchingRow = audit.getByRole('row').filter({ hasText: action }).filter({ hasText: operator.email })
+    await expect(matchingRow).toHaveCount(1)
+  }
   await expect(audit).not.toContainText(operator.password)
   await expect(page.getByText(/password/i)).toHaveCount(0)
 })

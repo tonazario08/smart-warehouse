@@ -35,12 +35,9 @@ export function uniqueRunId() {
 }
 
 export async function selectOptionByText(select: Locator, text: string) {
-  const value = await select.evaluate((element, optionText) => {
-    const options = Array.from((element as HTMLSelectElement).options)
-    return options.find((option) => option.text === optionText)?.value ?? null
-  }, text)
-  if (value === null) throw new Error(`Option "${text}" does not have a value.`)
-  await select.selectOption(value)
+  await expect(select.getByRole('option', { name: text, exact: true })).toHaveCount(1)
+  await select.selectOption({ label: text })
+  await expect(select.locator('option:checked')).toHaveText(text)
 }
 
 export async function signIn(page: Page, credentials: Credentials) {

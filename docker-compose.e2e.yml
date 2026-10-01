@@ -1,3 +1,5 @@
+name: smart-warehouse-phase1-task19-e2e
+
 services:
   db:
     environment:

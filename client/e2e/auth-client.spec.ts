@@ -16,6 +16,12 @@ test('anonymous registers as client and receives read-only catalogue access', as
   await signIn(page, credentials)
   await expect(page).toHaveURL(/\/products$/)
   await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible()
+  const productsResponsePromise = page.waitForResponse((response) => response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/v1/products')
+  await page.reload()
+  const productsResponse = await productsResponsePromise
+  expect(productsResponse.status()).toBe(200)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('table', { name: 'Product ledger' }).or(page.getByText('No products match these filters.'))).toBeVisible()
   await expect(page.getByRole('link', { name: 'Stock' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Warehouses' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Inbound' })).toHaveCount(0)
@@ -23,6 +29,11 @@ test('anonymous registers as client and receives read-only catalogue access', as
   await expect(page.getByRole('link', { name: 'Transactions' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Create product' })).toHaveCount(0)
 
+  const stockResponsePromise = page.waitForResponse((response) => response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/v1/stock')
   await page.getByRole('link', { name: 'Stock' }).click()
+  const stockResponse = await stockResponsePromise
+  expect(stockResponse.status()).toBe(200)
   await expect(page.getByRole('heading', { name: 'Stock' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('table', { name: 'Stock quantity ledger' }).or(page.getByText('No stock records match these filters.'))).toBeVisible()
 })

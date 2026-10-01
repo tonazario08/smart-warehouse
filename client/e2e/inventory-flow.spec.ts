@@ -89,8 +89,17 @@ test('warehouse movement flow updates stock, history, dashboard, and client perm
 
   await signOut(page)
   await signIn(page, e2eCredentials.seededClient)
+  await page.goto('/products')
+  await expect(page.getByRole('heading', { name: 'Products' })).toBeVisible()
+  const clientProductRow = page.getByRole('table', { name: 'Product ledger' }).getByRole('row').filter({ hasText: names.sku })
+  await expect(clientProductRow).toHaveCount(1)
+  await expect(clientProductRow).toContainText(names.product)
   await page.getByRole('link', { name: 'Stock' }).click()
   await expect(page.getByRole('heading', { name: 'Stock' })).toBeVisible()
+  await filterInventory(page, productOption, warehouseOption)
+  const clientStockRow = page.getByRole('table', { name: 'Stock quantity ledger' }).getByRole('row').filter({ hasText: names.product })
+  await expect(clientStockRow).toHaveCount(1)
+  await expect(clientStockRow.getByText('13', { exact: true })).toBeVisible()
   for (const deniedPath of ['/inbounds', '/outbounds', '/transactions']) {
     await page.goto(deniedPath)
     await expect(page).toHaveURL(/\/forbidden$/)
