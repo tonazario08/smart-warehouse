@@ -603,3 +603,9 @@ npm.cmd run e2e
 - A meaningful corrected-path RED showed the seeded client returning to the previous `/transactions` route and being correctly denied. Root-cause evidence confirmed the router preserves pre-login location; the test now navigates explicitly to `/products` before verifying permitted catalogue data. The focused inventory path then passed.
 - Final correction verification passed on two new empty-volume Docker cycles using the no-`-p` plan commands: all three Chromium paths passed in 13.1 seconds and 14.2 seconds. The exact disposable project and volume were removed between and after the runs. Frontend Vitest passed 19 files and 115 tests; typecheck, production build with 215 modules, Compose project-name validation, and `git diff --check` passed. Backend code was unchanged, so the recorded Ruff and 442-test backend evidence remains applicable.
 - Task 19 remains in progress pending independent re-review of the corrected cumulative diff.
+
+### 2026-10-01 — Internal Task 19 accepted
+
+- Independent re-review of cumulative diff `001776f..ca0fea2` confirmed all three Important findings and the Minor finding are resolved and found no remaining Critical, Important, or Minor issue. Compose fail-closed project isolation, CI override safety, asynchronous option selection, genuine client catalogue/stock reads, scoped audit evidence, generated-artifact hygiene, and brief/spec compliance passed.
+- Reviewer verification passed frontend Vitest — 19 files and 115 tests; typecheck; YAML lint; `git diff --check`; and confirmed no generated Playwright or coverage artifact is tracked. The implementation checkpoints are `949c2fc` (`test: add phase 1 critical path quality gates`) and `ca0fea2` (`fix: harden phase 1 e2e quality gates`).
+- Internal Task 19 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 20.
