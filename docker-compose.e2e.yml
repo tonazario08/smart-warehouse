@@ -1,0 +1,45 @@
+services:
+  db:
+    environment:
+      POSTGRES_DB: smart_warehouse_e2e
+      POSTGRES_USER: smart_warehouse_e2e
+      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD:-e2e-postgres-password-2026}
+    ports: !reset []
+    volumes: !override
+      - e2e_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smart_warehouse_e2e -d smart_warehouse_e2e"]
+
+  migrate:
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql+psycopg://smart_warehouse_e2e:${E2E_POSTGRES_PASSWORD:-e2e-postgres-password-2026}@db:5432/smart_warehouse_e2e
+
+  bootstrap:
+    profiles: !reset []
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql+psycopg://smart_warehouse_e2e:${E2E_POSTGRES_PASSWORD:-e2e-postgres-password-2026}@db:5432/smart_warehouse_e2e
+      SEED_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL:-e2e-admin@example.com}
+      SEED_ADMIN_PASSWORD: ${E2E_ADMIN_PASSWORD:-e2e-admin-password-2026}
+      SEED_WAREHOUSE_EMAIL: ${E2E_WAREHOUSE_EMAIL:-e2e-warehouse@example.com}
+      SEED_WAREHOUSE_PASSWORD: ${E2E_WAREHOUSE_PASSWORD:-e2e-warehouse-password-2026}
+      SEED_CLIENT_EMAIL: ${E2E_CLIENT_EMAIL:-e2e-client@example.com}
+      SEED_CLIENT_PASSWORD: ${E2E_CLIENT_PASSWORD:-e2e-client-password-2026}
+
+  api:
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql+psycopg://smart_warehouse_e2e:${E2E_POSTGRES_PASSWORD:-e2e-postgres-password-2026}@db:5432/smart_warehouse_e2e
+      JWT_SECRET_KEY: ${E2E_JWT_SECRET_KEY:-e2e-only-jwt-secret-key-with-at-least-32-characters}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    ports: !reset []
+
+  web:
+    ports: !override
+      - "${E2E_WEB_PORT:-58080}:8080"
+
+volumes:
+  e2e_postgres_data:

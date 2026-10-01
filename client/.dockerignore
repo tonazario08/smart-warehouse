@@ -13,6 +13,9 @@ playwright-report
 playwright-report/**
 test-results
 test-results/**
+*.trace.zip
+*.webm
+*-screenshot.png
 src/**/*.test.*
 src/**/*.spec.*
 **/__tests__
