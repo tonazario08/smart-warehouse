@@ -578,3 +578,14 @@ npm.cmd run e2e
 - Independent final re-review of cumulative diff `af2a956..06ba899` confirmed the prior Compose fail-closed finding is resolved and found no remaining Critical, Important, or Minor finding. Spec compliance and task quality both passed.
 - Reviewer verification passed all 13 Compose config cases without starting containers and confirmed `.env.example` fails closed. The detailed review record is `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-18-review-report.md`.
 - Internal Task 18 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 19.
+
+## Internal Task 19 Evidence (append-only)
+
+### 2026-10-01 — Internal Task 19 implementation in progress
+
+- Confirmed P1-C01 remains `IN_PROGRESS`, Task 18 is accepted at `001776f`, and the approved plan/specification plus `.superpowers/sdd/2026-09-04-phase-1-production-ready/task-19-brief.md` authorize this scope.
+- Added Playwright Chromium configuration and three real critical paths for anonymous client access, admin management/audit, and warehouse movement/dashboard/RBAC behavior. Added an isolated E2E Compose overlay and a non-deploying GitHub Actions quality workflow for backend, frontend, migration, and E2E gates.
+- Test-first corrections isolated Vitest from Playwright discovery, replaced email values rejected by the application contract, made wrapped-label combobox interaction deterministic through accessible roles, and navigated explicitly to the dashboard after the router correctly restored a pre-login transaction route.
+- Daemon-independent verification passed: Compose configuration rendered project `smart-warehouse-phase1-task19-e2e`, disposable volume `e2e_postgres_data`, web port `58080`, bootstrap-before-API ordering, and no host database port. Full backend pytest passed — 442 tests; Ruff passed. Frontend Vitest passed — 19 files and 115 tests; typecheck and production build with 215 modules passed.
+- Real Chromium verification against an isolated native PostgreSQL 18.3 UTC database, local API, and Vite passed all three critical paths. This is diagnostic evidence only and does not replace the required Docker verification.
+- Docker Desktop remains unavailable because its Windows backend cannot rename AF_UNIX runtime sockets even after the exact runtime directories were preserved and recreated without deleting Docker data. No factory reset was performed. The two mandatory fresh Docker-stack E2E cycles are `NOT VERIFIED`; therefore Task 19 is not accepted and P1-C01 remains `IN_PROGRESS`.
