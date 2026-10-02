@@ -2313,7 +2313,7 @@ Update `PROGRESS.md` with the migration head, backend test count/result, fronten
 production build result, E2E spec result, Docker smoke result, known non-blocking limitations, and
 the exact date. Remove obsolete current/next tasks and architectural claims.
 
-- [ ] **Step 8: Commit the final documentation and completion record**
+- [x] **Step 8: Commit the final documentation and completion record**
 
 Before the commit, inspect status, staged/unstaged diffs, staged file list, and all Step 6 output.
 
