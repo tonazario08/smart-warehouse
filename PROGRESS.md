@@ -1,56 +1,41 @@
-# Phase 1 Progress
+# Phase 1 Completion Record
 
-Current Task:
-- Task 10 - Dashboard integration and final verification.
+Status: Phase 1 implementation and verification complete on 2026-10-02.
 
-Completed:
-- 1.1 - Environment setup: Python virtual environment, backend dependency metadata, lint/test tooling, environment template, Docker/Compose configuration, Git ignore rules, and baseline documentation.
-- 1.2 - Project initialization: FastAPI application factory with a versioned health endpoint, health test, React + TypeScript/Vite client foundation, client Docker configuration, and API/web Compose services.
-- 1.3 - Domain model foundation: SQLAlchemy declarative base and Phase 1 entities with role, hierarchy, uniqueness, and quantity constraints, verified by persistence tests.
-- 1.4 - Alembic configuration and initial schema migration: all Phase 1 tables, foreign keys, indexes, unique/check constraints, and timestamp defaults are defined in revision `20260829_0001`.
-- 1.7-1.8 - Authentication and RBAC: registration, Argon2 password hashing, JWT login/validation, current-user loading, and centralized permission mapping are implemented and tested.
-- 1.9-1.12 - Master-data APIs: paginated category/product/supplier reads, admin writes, validation, conflict handling, and RBAC tests are implemented.
-- 1.13 - Warehouse CRUD: role-protected list/detail/create/update endpoints with uniqueness validation are implemented.
-- 1.15-1.18 (foundation) - Role-protected inbound/outbound creation updates stock atomically and appends immutable transaction records; insufficient stock returns `409`.
-- 1.19 (foundation) - Admin-only dashboard stats reports product count, total stock, and low-stock count.
-- Docker runtime - Docker Desktop 4.89.0 / Docker Engine 29.7.2 with WSL 2 backend is installed and running.
-- Docker migration/seed - PostgreSQL 16 initialized; Alembic revision `20260829_0001` applied and seed data created.
-- Docker runtime smoke - `api`, `web`, and `db` rebuilt and started successfully; web returned `200` and admin API login returned `200` with an access token.
-- 1.20-1.21 - Frontend sign-in form calls `POST /api/v1/auth/login`, stores the access token, reports errors, and displays the signed-in user.
-- 1.23-1.24 - Frontend product register and client portal are implemented with real product, warehouse, and stock APIs. Admins can create, update, and delete products; client views expose no inventory mutation controls.
-- Stock read API - `GET /api/v1/stock` supports optional warehouse/product filters and is available to inventory-read roles.
-- API/frontend integration - CORS allows the local frontend origin `http://localhost:5173`.
+## Delivered scope
 
-In Progress:
-- None.
+The delivered application is a PostgreSQL-backed modular monolith with a FastAPI API and React/Vite web client. It includes strict runtime configuration, stable error envelopes, pagination and filtering, liveness/readiness probes, Argon2 authentication, current-database-role authorization, admin user management and audit, master data, warehouses, atomic inbound/outbound movement, stock, immutable transaction history, role-aware frontend workflows, an admin dashboard, production-oriented non-root images, ordered migration/bootstrap, Playwright critical paths, and non-deploying CI quality gates.
 
-Blocked:
-- None.
-- Geocoding provider verification: no configured external provider credentials are available; warehouse coordinates remain explicitly supplied fields.
+Anonymous business access is limited to registration and login. Public registration always creates a client. Phase 1 authenticated roles are admin, warehouse, and client.
 
-Failed Tests:
-- None. `.venv\Scripts\python.exe -m pytest -q` passed (27 tests) and `npm.cmd run build` passed on 2026-09-03.
+## Final evidence
 
-Known Issues:
-- The repository has no initial Git commit, so an isolated linked worktree cannot be created.
-- In-app browser smoke verification remains unavailable because no browser session is connected; HTTP-level web/API smoke verification passed.
+| Gate | Verified result |
+|---|---|
+| Alembic | Empty PostgreSQL reached head `20260904_0002` |
+| Ruff | `python -m ruff check app tests alembic` passed |
+| Backend | `442 passed`, no skipped critical PostgreSQL test; two dependency deprecation warnings |
+| Frontend | Vitest `19` files and `115` tests passed |
+| TypeScript | Typecheck passed |
+| Production build | Vite transformed `215` modules and completed successfully |
+| E2E | Three Playwright Chromium critical paths passed against the final fresh Docker stack |
+| Docker smoke | PostgreSQL/API healthy; migration and bootstrap exited `0`; web, live, and ready returned HTTP `200` |
+| Seed | Second invocation preserved users, reference row counts, and credential-hash fingerprint |
+| Runtime user | API ran as `10001:10001`; Nginx web ran as non-root user `101` |
+| Disposable isolation | E2E project resolved to `smart-warehouse-phase1-task19-e2e`; database/API ports remained internal |
 
-Technical Decisions:
-- Backend dependencies are managed by `pyproject.toml`; `.[dev]` installs pytest, httpx, coverage, and Ruff.
-- PostgreSQL 16 is the Docker Compose database target.
-- API and frontend implementation follow `docs/architecture/phase-1-design.md`.
-- Docker Desktop uses the WSL 2 backend and per-user installation.
+The final Docker verification used a new volume and `docker compose -f docker-compose.yml -f docker-compose.e2e.yml build --no-cache`. Migration, bootstrap, health, seed idempotency, and all Playwright paths were verified before cleanup.
 
-API Contract Changes:
-- Frontend now consumes the existing `POST /api/v1/auth/login` contract; no backend auth contract changes were required.
-- CORS was added for the local frontend origin.
-- `GET /api/v1/stock` returns stock balances and accepts optional `warehouse_id` and `product_id` filters for admin, warehouse, and client roles.
+## Database and runtime contract
 
-Database Migration Status:
-- Initial Alembic revision `20260829_0001` was applied successfully to the Docker PostgreSQL 16 database on 2026-09-03. Development seed data was created successfully.
+PostgreSQL 16 is the supported Compose database. Migration is an explicit one-shot release step; API processes do not run schema changes. Seed requires explicit credentials for all three roles, validates them before database access, is idempotent, and does not replace existing hashes or business data.
 
-Next Task:
-- Implement the admin dashboard page against `GET /api/v1/dashboard/stats`, then run final Phase 1 verification.
+Operational setup, rollback, backup, restore, and diagnostics are documented in `docs/operations/phase-1-runbook.md`. The complete endpoint and RBAC contract is in `docs/api/phase-1-contract.md`.
 
-Last Updated:
-- 2026-09-03
+## Known non-blocking limitations
+
+The backend suite reports two dependency deprecation warnings: Starlette's current `TestClient` compatibility path and pytest-asyncio's use of an asyncio policy API scheduled for future Python removal. They do not fail or skip tests but should be handled during dependency maintenance.
+
+Warehouse row-level assignment is not part of Phase 1; a warehouse-role user can operate across the Phase 1 warehouse set. Regions, purchase requests, and route logs exist only as foundation tables and have no Phase 1 API/UI workflow.
+
+Geocoding, transfers, stocktake, barcode/QR, alerts, reports, advanced dashboard behavior, notifications, enhanced security, password reset, refresh tokens, MFA, and cloud deployment remain outside Phase 1. No image was published, no remote branch was pushed, and no pull request or deployment was created.

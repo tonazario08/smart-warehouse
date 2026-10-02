@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Status: IN_PROGRESS
+- Status: REVIEWING
 - Phase: Phase 1
 - Plan: docs/superpowers/plans/2026-09-04-phase-1-production-ready.md
 - Specification: docs/superpowers/specs/2026-09-04-phase-1-production-ready-design.md
@@ -37,15 +37,15 @@ Phase 1 has partial uncommitted implementation but no authoritative completion e
 
 ## Acceptance Criteria
 
-- [ ] AC-1 — Core configuration, stable error contracts, pagination, health probes, and PostgreSQL test foundations satisfy the approved Phase 1 contracts.
-- [ ] AC-2 — Database migrations, integrity constraints, administrative audit, authentication, authorization, and transaction ownership satisfy the approved design.
-- [ ] AC-3 — Backend user, master-data, warehouse, stock, inbound, outbound, transaction-history, and dashboard workflows are complete and covered by focused and PostgreSQL-backed tests.
-- [ ] AC-4 — The React client provides the approved authentication, role-aware navigation, dashboard, administration, master-data, warehouse, inventory, movement, and history workflows.
-- [ ] AC-5 — Seed, migration, Docker runtime, liveness/readiness, non-root images, and Compose ordering satisfy the production-readiness contract.
-- [ ] AC-6 — Ruff, backend tests, frontend tests, type checking, production build, PostgreSQL integration, and Playwright critical paths pass with reproducible evidence.
-- [ ] AC-7 — CI quality gates and generated-artifact exclusions cover backend, frontend, migration, and E2E verification without publishing or deployment side effects.
-- [ ] AC-8 — README, architecture, API contract, operations runbook, and Phase 1 completion record match the delivered implementation.
-- [ ] AC-9 — All twenty plan workstreams are reconciled against the repository and checked complete only where the recorded evidence proves completion.
+- [x] AC-1 — Core configuration, stable error contracts, pagination, health probes, and PostgreSQL test foundations satisfy the approved Phase 1 contracts.
+- [x] AC-2 — Database migrations, integrity constraints, administrative audit, authentication, authorization, and transaction ownership satisfy the approved design.
+- [x] AC-3 — Backend user, master-data, warehouse, stock, inbound, outbound, transaction-history, and dashboard workflows are complete and covered by focused and PostgreSQL-backed tests.
+- [x] AC-4 — The React client provides the approved authentication, role-aware navigation, dashboard, administration, master-data, warehouse, inventory, movement, and history workflows.
+- [x] AC-5 — Seed, migration, Docker runtime, liveness/readiness, non-root images, and Compose ordering satisfy the production-readiness contract.
+- [x] AC-6 — Ruff, backend tests, frontend tests, type checking, production build, PostgreSQL integration, and Playwright critical paths pass with reproducible evidence.
+- [x] AC-7 — CI quality gates and generated-artifact exclusions cover backend, frontend, migration, and E2E verification without publishing or deployment side effects.
+- [x] AC-8 — README, architecture, API contract, operations runbook, and Phase 1 completion record match the delivered implementation.
+- [x] AC-9 — All twenty plan workstreams are reconciled against the repository and checked complete only where the recorded evidence proves completion.
 - [ ] AC-10 — Independent review approves the complete Phase 1 diff with no unresolved Critical or Important finding.
 
 ## Verification Commands
@@ -609,3 +609,17 @@ npm.cmd run e2e
 - Independent re-review of cumulative diff `001776f..ca0fea2` confirmed all three Important findings and the Minor finding are resolved and found no remaining Critical, Important, or Minor issue. Compose fail-closed project isolation, CI override safety, asynchronous option selection, genuine client catalogue/stock reads, scoped audit evidence, generated-artifact hygiene, and brief/spec compliance passed.
 - Reviewer verification passed frontend Vitest — 19 files and 115 tests; typecheck; YAML lint; `git diff --check`; and confirmed no generated Playwright or coverage artifact is tracked. The implementation checkpoints are `949c2fc` (`test: add phase 1 critical path quality gates`) and `ca0fea2` (`fix: harden phase 1 e2e quality gates`).
 - Internal Task 19 is complete; P1-C01 remains `IN_PROGRESS` and advances to internal Task 20.
+
+## Internal Task 20 Evidence (append-only)
+
+### 2026-10-02 — Final documentation and fresh-environment verification
+
+- Task 20 executed directly from the approved plan and stable specification because no separate `task-20-brief.md` exists. Replaced the stale README and architecture document, added the complete Phase 1 API contract and operations runbook, replaced the obsolete progress tracker with an evidence-based completion record, and checked Task 20 plan steps only after their evidence passed.
+- Documentation audit compared all routers with generated OpenAPI, the centralized permission map and RBAC tests, strict schemas and filters, Compose service names, migration head, seed behavior, health probes, and delivered frontend routes. Automated comparison found all 44 generated method/path pairs documented with no missing or extra endpoint; README links and `git diff --check` passed.
+- Fresh disposable verification used fail-closed project `smart-warehouse-phase1-task19-e2e`, a new volume, and `build --no-cache`. PostgreSQL and API became healthy; migration and bootstrap exited `0`; database head was `20260904_0002`; a second bootstrap preserved user/reference counts and the credential-hash fingerprint; web, liveness, and readiness returned HTTP `200`; API ran as `10001:10001` and web as non-root user `101`; Playwright passed all three Chromium paths in 9.2 seconds.
+- Final quality gate passed: Ruff — all checks passed; backend pytest — 442 passed with two non-blocking dependency deprecation warnings and no skipped critical PostgreSQL test; frontend Vitest — 19 files and 115 tests passed; typecheck passed; production build passed with 215 modules; Playwright — three paths passed. The exact E2E and PostgreSQL test containers, networks, and disposable volume were removed afterward.
+
+### 2026-10-02 — IN_PROGRESS -> VERIFYING -> REVIEWING
+
+- Internal Tasks 1 through 20 are implemented and their focused evidence is recorded. P1-C01 moved from `IN_PROGRESS` to `VERIFYING` without changing its frozen baseline.
+- Every frozen verification class and AC-1 through AC-9 passed. P1-C01 then moved from `VERIFYING` to `REVIEWING`; implementation is frozen pending independent review of the complete Phase 1 diff. AC-10 and `DONE` remain pending review approval.

@@ -1,116 +1,101 @@
-# Phase 1 Architecture Design
+# Phase 1 Implemented Architecture
 
-## Purpose and boundaries
+## System boundary
 
-Phase 1 delivers a FastAPI REST backend, PostgreSQL persistence, and a React + TypeScript frontend foundation for warehouse management. It deliberately excludes AI/ML, GIS route optimization, RAG, and chatbot features. Public APIs are versioned under `/api/v1`.
+Phase 1 is a basic warehouse-management modular monolith. A React 19/Vite client calls a versioned FastAPI API, and SQLAlchemy persists state in PostgreSQL 16. Docker Compose is the supported local integration topology. Public business access is limited to registration and login; authenticated roles are `admin`, `warehouse`, and `client`.
 
-## Architecture overview
+The phase deliberately excludes geocoding, route optimization, transfer, stocktake, barcode/QR, alerting, notifications, advanced reports/dashboard behavior, password reset, refresh tokens, MFA, distributed rate limiting, event buses, CQRS, Kubernetes, and cloud-specific deployment. Coordinates are entered directly and must be supplied as a valid latitude/longitude pair.
 
-The backend is organized as `api routers -> services -> repositories -> SQLAlchemy models -> PostgreSQL`. Routers own HTTP concerns and declare authorization dependencies; services own validation and transaction boundaries; repositories encapsulate queries and persistence. Pydantic schemas form the public request/response contract. Alembic owns schema changes.
+## Backend dependency flow
 
-The frontend is organized as `pages`, reusable `components`, `services/api`, `auth`, and `types`. A single environment-configured API client sends access tokens and centralizes error handling. It never acts as the authorization boundary.
+The implemented dependency direction is:
 
 ```text
-React/Vite -> /api/v1 -> FastAPI router -> permission dependency
-                                  -> service -> repository -> PostgreSQL
+HTTP request
+  -> FastAPI router and permission dependency
+  -> domain service
+  -> repository
+  -> SQLAlchemy model/session
+  -> PostgreSQL
 ```
+
+Routers own HTTP parsing, response models, and authorization declarations. They do not import SQLAlchemy or execute queries. Services own business validation, transaction commit/rollback, and applicable audit writes. Repositories query, add, delete, flush, refresh, and expose the session required by the owning service; repositories do not commit. Pydantic schemas define strict external input and output. Alembic is the sole schema migration mechanism.
+
+Feature packages under `app/` separate auth, master data, warehouses, inventory, dashboard, users, and administrative audit. Cross-feature dependencies stay explicit rather than using a generic repository or dependency-injection framework.
 
 ## Authentication and authorization
 
-Persisted authenticated roles are `admin`, `warehouse`, and `client`. `guest` is anonymous/public access only and is never persisted as a user role.
+Passwords use Argon2 hashes. The JWT contains only `sub`, `iat`, and `exp`; it does not carry authoritative role or active-state claims. Every protected request validates the token, loads the current user from PostgreSQL, rejects missing or inactive users, and evaluates the current database role through the centralized `PERMISSION_ROLES` map.
 
-Login issues a signed JWT containing `sub` (user ID), `role` (issuance snapshot), and `exp`. A protected request validates signature and expiration, then loads the user identified by `sub` from the database. Authorization always evaluates the current database role, never the JWT `role` claim. Disabled or missing users are rejected as unauthenticated.
+Frontend route guards and role-sensitive controls improve navigation and user experience, but the backend permission dependency remains the security boundary. Public registration always creates an active `client`; the request schema rejects a role field. Admin user creation and role changes accept only `client` or `warehouse`, so an API caller cannot mint another admin through Phase 1 management endpoints.
 
-Routers use centralized reusable dependencies such as `require_permission(Permission.PRODUCT_WRITE)`. The dependency checks a single permission-to-allowed-roles map; routers do not contain ad hoc role checks.
+## Role capabilities
 
-## RBAC contract
+| Capability | admin | warehouse | client |
+|---|---:|---:|---:|
+| Read categories and products | Yes | Yes | Yes |
+| Modify categories and products | Yes | No | No |
+| Read suppliers | Yes | Yes | No |
+| Modify suppliers | Yes | No | No |
+| Read warehouses and stock | Yes | Yes | Yes |
+| Modify warehouses | Yes | No | No |
+| Create/read inbound and outbound movements | Yes | Yes | No |
+| Read immutable stock transactions | Yes | Yes | No |
+| Read dashboard totals | Yes | No | No |
+| Manage client/warehouse users | Yes | No | No |
+| Read administrative user audit | Yes | No | No |
 
-| Capability | Anonymous guest | admin | warehouse | client |
-|---|---:|---:|---:|---:|
-| Register / login | No / No | Yes | Yes | Yes |
-| Read products, categories | Yes | Yes | Yes | Yes |
-| Create, update, delete products/categories | No | Yes | No | No |
-| Read suppliers | No | Yes | Yes | No |
-| Modify suppliers | No | Yes | No | No |
-| Read warehouses and stock | No | Yes | Yes | Yes |
-| Modify warehouses | No | Yes | No | No |
-| Create/read inbound and outbound | No | Yes | Yes | No |
-| Read transactions (append-only) | No | Yes | Yes | No |
-| Admin dashboard | No | Yes | No | No |
-| Client portal API subset | No | Yes | No | Yes |
-| Manage users/roles | No | admin only (no Phase 1 API) | No | No |
+Warehouse row-level tenancy is not implemented. The `warehouse` role can operate across the Phase 1 warehouse set. Warehouse IDs remain explicit throughout the model so finer assignment can be added later.
 
-All transaction-log mutation routes are absent. Warehouse-specific row-level authorization is out of scope, but every warehouse-scoped data model retains `warehouse_id` so it can be added later without a route-contract break.
-
-## ERD and database schema
+## Data model and integrity
 
 ```text
-users (id, email UQ, password_hash, role, is_active, created_at, updated_at)
-categories (id, name UQ, parent_id -> categories.id nullable, timestamps)
-suppliers (id, name UQ, email UQ nullable, phone nullable, address nullable, timestamps)
-products (id, sku UQ, name, description nullable, category_id -> categories, supplier_id -> suppliers nullable,
-          unit, reorder_level >= 0, is_active, timestamps)
-warehouses (id, code UQ, name UQ, address, latitude nullable, longitude nullable, timestamps)
-stocks (id, warehouse_id -> warehouses, product_id -> products, quantity >= 0, timestamps,
-        UQ(warehouse_id, product_id))
-inbounds (id, warehouse_id -> warehouses, product_id -> products, quantity > 0, reference nullable,
-          note nullable, created_by -> users, created_at)
-outbounds (id, warehouse_id -> warehouses, product_id -> products, quantity > 0, reference nullable,
-           note nullable, created_by -> users, created_at)
-transactions (id, transaction_type {INBOUND, OUTBOUND}, warehouse_id -> warehouses,
-              product_id -> products, quantity > 0, inbound_id -> inbounds nullable,
-              outbound_id -> outbounds nullable, created_by -> users, created_at)
-regions (id, code UQ, name UQ, timestamps)
-purchase_requests (id, request_number UQ, warehouse_id -> warehouses, product_id -> products,
-                   quantity > 0, status, requested_by -> users, timestamps)
-route_logs (id, warehouse_id -> warehouses, region_id -> regions nullable, route_payload JSON nullable,
-            created_by -> users nullable, created_at)
+users
+  ├─< inbounds.created_by_id
+  ├─< outbounds.created_by_id
+  ├─< transactions.created_by_id
+  └─< audit_logs.actor_user_id
+
+categories ──< categories (parent) ──< products >── suppliers
+                                        │
+warehouses ──< stocks >─────────────────┘
+     │          UQ(warehouse_id, product_id), quantity >= 0
+     ├─< inbounds  ──1 transactions(type=inbound)
+     └─< outbounds ──1 transactions(type=outbound)
 ```
 
-Foreign keys use restrictive deletion for audited or referenced business data. Category deletion is rejected when children or products reference it. Product, warehouse, and user deletion are not exposed where historic records would be invalidated. Indexes cover foreign keys and commonly filtered fields: `products.category_id`, `products.supplier_id`, stock compound unique key, inbound/outbound warehouse/product/created_at, and transaction warehouse/product/type/created_at.
+Users have case-insensitive unique email addresses and roles `admin`, `warehouse`, or `client`. Products have case-insensitive unique normalized SKUs, nonnegative reorder levels, a required category, and an optional supplier. Warehouses have case-insensitive unique uppercase codes; coordinates are either both absent or both present and within valid ranges.
 
-## API contract
+Inbound, outbound, and transaction quantities are positive. A stock row is unique per warehouse/product and cannot be negative. A transaction must reference exactly one matching inbound or outbound movement. Foreign keys use restrictive deletion where history would otherwise be invalidated. All persisted timestamps are timezone-aware UTC; the browser formats them in the user's locale.
 
-All errors use `{ "detail": { "code": "...", "message": "..." } }`. Validation errors retain FastAPI's documented 422 shape. Lists use `{ "items": [], "total": 0, "page": 1, "page_size": 20 }` and accept `page` and `page_size`; stock additionally accepts `warehouse_id` and `product_id`.
+The schema also contains `regions`, `purchase_requests`, and `route_logs` as reserved Phase 1 foundation tables. They have no Phase 1 HTTP or UI workflow and must not be presented as completed product capability.
 
-| Group | Endpoints | Access |
-|---|---|---|
-| Auth | `POST /auth/register`, `POST /auth/login` | register is public; login authenticates persisted roles |
-| Product | `GET /products`, `GET /products/{id}`, `POST`, `PUT`, `DELETE /products/{id}` | reads public; mutations admin |
-| Category | corresponding CRUD routes | reads public; mutations admin |
-| Supplier | corresponding CRUD routes | reads admin/warehouse; mutations admin |
-| Warehouse | corresponding CRUD routes | reads admin/warehouse/client; mutations admin |
-| Stock | `GET /stock`, `GET /stock/{id}` | admin/warehouse/client |
-| Inbound | `POST /inbounds`, `GET /inbounds`, `GET /inbounds/{id}` | admin/warehouse |
-| Outbound | `POST /outbounds`, `GET /outbounds`, `GET /outbounds/{id}` | admin/warehouse |
-| Transaction | `GET /transactions`, `GET /transactions/{id}` | admin/warehouse, read-only |
-| Dashboard | `GET /dashboard/stats` | admin |
-| Client portal | documented read-only product/warehouse/stock views | client/admin |
+Alembic head is `20260904_0002`. It adds administrative audit persistence, case-insensitive identity indexes, normalized warehouse constraints, coordinate constraints, and the exact-one-movement transaction constraint on top of the initial schema.
 
-Successful creates return `201`, reads/updates return `200`, deletes return `204`, missing resources return `404`, duplicate/conflict and insufficient stock return `409`, invalid input returns `422`, missing/invalid authentication returns `401`, and authenticated disallowed roles return `403`.
+## Inventory transaction boundary
 
-## Inventory transaction design
+Inbound and outbound use database transactions owned by `InventoryService`. Inbound validates warehouse/product references, locks or safely creates the stock row, increments quantity, writes the inbound movement and its immutable stock transaction, then commits. Outbound locks the stock row, rejects absent or insufficient stock with `409`, decrements quantity, writes the outbound movement and its immutable transaction, then commits. Any exception rolls back the complete unit.
 
-Inbound and outbound services each execute in one database transaction. Inbound creates its record, locks or creates the corresponding `(warehouse_id, product_id)` stock row, increments it, writes a transaction record, and commits. Outbound locks the stock row, rejects if absent or quantity is insufficient, then creates outbound, decrements stock, writes transaction, and commits. Any failure rolls back all writes. A check constraint also prohibits negative stored stock.
+Stock transactions are the sole Phase 1 business audit for inventory movement. There is no API to mutate or delete them. `audit_logs` is a separate admin-only trail for `user.created`, `user.role_changed`, and `user.status_changed`; it exposes only allowlisted `email`, `role`, and `is_active` snapshots and never passwords or password hashes.
 
-## Migration and seed plan
+## Frontend architecture
 
-1. Create Alembic configuration and an initial migration containing roles, domain tables, constraints, indexes, and timestamp defaults.
-2. Verify `alembic upgrade head` against an empty PostgreSQL database.
-3. Add an idempotent seed command creating one admin, warehouse operator, client, master categories/suppliers/products, warehouses, and stock. Credentials come from environment variables or are printed only for local development, never committed.
-4. Verify an upgrade, seed, application startup, and downgrade/upgrade cycle in a disposable test database.
+The client is feature-oriented under `client/src/features`, with application providers, routes, navigation, and the shell under `client/src/app`, and shared API/error/UI utilities under `client/src/shared`. React Router enforces authenticated/role-aware navigation. TanStack Query owns server state, React Hook Form and Zod own form validation, and one API client adds the bearer token and normalizes the stable backend error envelope.
 
-## Implementation order
+A genuine `401` clears the local session and returns to login. A `403` preserves the valid session and displays the forbidden route. Role-aware UI never substitutes for backend authorization.
 
-1. Environment, project scaffolding, quality tooling, Docker, and progress tracking (1.1–1.2).
-2. Domain schema and migration/seed (1.3–1.6).
-3. Authentication and centralized RBAC (1.7–1.8).
-4. Master-data CRUD and tests (1.9–1.12).
-5. Warehouse, verified geocoding, stock, inventory workflow, audit log, dashboard (1.13–1.19).
-6. Frontend foundation, authentication, product management, client portal, then dashboard integration after backend dashboard is ready (1.20–1.24).
+## Runtime topology
 
-## Testing strategy
+The production-oriented Compose stack contains PostgreSQL `db`, one-shot `migrate`, FastAPI `api`, Nginx-served `web`, and opt-in one-shot `bootstrap`. API startup depends on a healthy database and successful migration. Web startup depends on a healthy API. API and web runtime images are multi-stage builds and run as non-root users. Source tests, `.env`, credentials, caches, local virtual environments, `node_modules`, and Playwright output are excluded from runtime images.
 
-Backend tests use pytest, httpx, a disposable PostgreSQL test database, and transaction-isolated fixtures. Tests first cover authentication and every permission boundary, then each CRUD response/validation/conflict case, then inventory atomicity and low-stock dashboard aggregation. Auth plus CRUD coverage must exceed 70%.
+`GET /api/v1/health/live` is process liveness. `GET /api/v1/health/ready` executes `SELECT 1` and reports database availability. Migration is a single release step; API replicas never migrate on startup. Seed requires all three role credentials, validates them before opening the database, is idempotent, and preserves existing hashes and business data.
 
-Frontend verification includes typecheck/build, routing, token lifecycle, protected-route behavior, loading/error states, and real API integration. No mock data is accepted for critical integrated flows. End-to-end verification follows login -> protected API -> product -> warehouse -> inbound -> stock increase -> outbound -> stock decrease -> transaction -> dashboard.
+The E2E overlay locks itself to `smart-warehouse-phase1-task19-e2e`, uses a disposable volume, publishes only web port `58080`, runs migration then bootstrap before API, and leaves database/API ports internal.
+
+## Verification and extension points
+
+Backend verification combines Ruff, unit tests, PostgreSQL migration/integration/constraint/concurrency tests, and transaction-ownership guards. Frontend verification combines Vitest/React Testing Library, TypeScript, production build, and three Playwright critical paths against the Dockerized stack. CI performs those gates without publishing images or deploying.
+
+Phase 2 should extend existing service/repository boundaries and create new Alembic revisions. Transfer and stocktake should reuse inventory locking and immutable transaction patterns. Alerts, reports, dashboards, notifications, and security enhancements should consume explicit application contracts rather than query across repository boundaries.
+
+The exact HTTP contract is in `docs/api/phase-1-contract.md`; operational commands are in `docs/operations/phase-1-runbook.md`.
