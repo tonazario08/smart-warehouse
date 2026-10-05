@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Status: REVIEWING
+- Status: IN_PROGRESS
 - Phase: Phase 1
 - Plan: docs/superpowers/plans/2026-09-04-phase-1-production-ready.md
 - Specification: docs/superpowers/specs/2026-09-04-phase-1-production-ready-design.md
@@ -627,3 +627,9 @@ npm.cmd run e2e
 ### 2026-10-02 — Final documentation checkpoint
 
 - Final documentation and completion evidence were committed at `5506f4c` (`docs: complete Phase 1 operations and verification guide`). Task 20 Step 8 is complete; Step 9 and P1-C01 completion remain pending the independent review and final handoff.
+
+### 2026-10-05 — REVIEWING -> IN_PROGRESS after final independent review
+
+- Independent review of cumulative diff `5337e86..bc0d23c` found no Critical issue, three Important issues, and one Minor issue. AC-10 is not satisfied, so P1-C01 returned from `REVIEWING` to `IN_PROGRESS` before any correction.
+- The required corrections are: fail closed when seed-role emails collide or an existing account has the wrong role; make frontend relationship and inventory selectors support records beyond the first 100; preflight normalization collisions before migration `20260904_0002` mutates legacy data; and make the runbook's complete quality-gate E2E prerequisite executable as written.
+- Corrections will preserve the frozen baseline and receive focused regression tests, relevant full-gate verification, and independent re-review before another transition to `VERIFYING` or `REVIEWING`.
