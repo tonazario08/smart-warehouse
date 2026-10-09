@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
 import app.models  # noqa: F401
 from alembic import context
+from app.core.config import get_settings
 from app.db.base import Base
 
 config = context.config
@@ -14,11 +14,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-if database_url := os.getenv("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", database_url)
+if not config.get_main_option("sqlalchemy.url"):
+    database_url = str(get_settings().database_url)
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
-
 
 def run_migrations_offline() -> None:
     context.configure(
