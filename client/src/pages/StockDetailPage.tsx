@@ -27,8 +27,8 @@ export function StockDetailPage() {
   useEffect(() => {
     if (!token) return
     let active = true
-    void Promise.all([api.stock(token), api.products(), api.warehouses(token)])
-      .then(([stocks, productPage, warehouses]) => { if (active) setRows(buildInventoryRows({ stocks, products: productPage.items, warehouses })) })
+    void Promise.all([api.stock(token), api.productsAll(), api.warehouses(token)])
+      .then(([stocks, products, warehouses]) => { if (active) setRows(buildInventoryRows({ stocks, products, warehouses })) })
       .catch((cause: unknown) => {
         if (!active) return
         if (cause instanceof ApiError && cause.status === 401) logout()

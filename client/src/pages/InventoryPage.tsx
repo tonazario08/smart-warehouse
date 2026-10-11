@@ -30,10 +30,10 @@ export function InventoryPage() {
   useEffect(() => {
     if (!token) return
     let active = true
-    void Promise.all([api.stock(token), api.products(), api.warehouses(token)])
-      .then(([stocks, productPage, warehouseList]) => {
+    void Promise.all([api.stock(token), api.productsAll(), api.warehouses(token)])
+      .then(([stocks, products, warehouseList]) => {
         if (!active) return
-        setRows(buildInventoryRows({ stocks, products: productPage.items, warehouses: warehouseList }))
+        setRows(buildInventoryRows({ stocks, products, warehouses: warehouseList }))
         setWarehouses(warehouseList)
       })
       .catch((cause: unknown) => {

@@ -30,11 +30,11 @@ export function WarehouseDetailPage() {
     if (!token) return
     if (!Number.isInteger(warehouseId)) { setLoading(false); return }
     let active = true
-    void Promise.all([api.warehouse(token, warehouseId), api.stock(token), api.products()])
-      .then(([nextWarehouse, stocks, productPage]) => {
+    void Promise.all([api.warehouse(token, warehouseId), api.stock(token), api.productsAll()])
+      .then(([nextWarehouse, stocks, products]) => {
         if (!active) return
         setWarehouse(nextWarehouse)
-        setRows(buildInventoryRows({ warehouses: [nextWarehouse], stocks, products: productPage.items }).filter((row) => row.warehouseId === warehouseId))
+        setRows(buildInventoryRows({ warehouses: [nextWarehouse], stocks, products }).filter((row) => row.warehouseId === warehouseId))
       })
       .catch((cause: unknown) => {
         if (!active) return

@@ -31,9 +31,9 @@ export function DashboardPage() {
   useEffect(() => {
     if (!token) return
     let active = true
-    void Promise.all([api.dashboardStats(token), api.products(), api.warehouses(token), api.stock(token), api.transactions(token)])
+    void Promise.all([api.dashboardStats(token), api.productsAll(), api.warehouses(token), api.stock(token), api.transactions(token)])
       .then(([stats, products, warehouses, stock, transactions]) => {
-        if (active) setOverview(buildDashboardOverview({ stats, products: products.items, warehouses, stock, transactions }))
+        if (active) setOverview(buildDashboardOverview({ stats, products, warehouses, stock, transactions }))
       })
       .catch((cause: unknown) => {
         if (!active) return

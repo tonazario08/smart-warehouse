@@ -28,10 +28,10 @@ export function WarehousesPage() {
   useEffect(() => {
     if (!token) return
     let active = true
-    void Promise.all([api.warehouses(token), api.stock(token), api.products()])
-      .then(([warehouseList, stocks, productPage]) => {
+    void Promise.all([api.warehouses(token), api.stock(token), api.productsAll()])
+      .then(([warehouseList, stocks, products]) => {
         if (!active) return
-        const rows: InventoryRow[] = buildInventoryRows({ warehouses: warehouseList, stocks, products: productPage.items })
+        const rows: InventoryRow[] = buildInventoryRows({ warehouses: warehouseList, stocks, products })
         setWarehouses(buildWarehouseSummaries({ warehouses: warehouseList, rows }))
       })
       .catch((cause: unknown) => {
