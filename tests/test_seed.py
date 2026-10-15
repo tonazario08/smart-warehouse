@@ -151,6 +151,15 @@ def test_seed_settings_normalize_emails_like_auth_requests() -> None:
     assert settings.client_email == "client@example.com"
 
 
+def test_seed_settings_reject_duplicate_normalized_role_emails() -> None:
+    environment = seed_environment(
+        SEED_WAREHOUSE_EMAIL=" ADMIN@example.com ",
+    )
+
+    with pytest.raises(ValueError, match="distinct"):
+        load_seed_settings(environment)
+
+
 @pytest.mark.parametrize(
     ("password", "valid"),
     [("a" * 11, False), ("a" * 12, True), ("a" * 128, True), ("a" * 129, False)],
@@ -218,3 +227,36 @@ def test_seed_is_idempotent_and_preserves_existing_user_credentials(tmp_path: Pa
         seeded_roles = set(session.scalars(select(User.role)))
         assert seeded_roles == {UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.CLIENT}
         assert session.get(User, admin.id).password_hash == original_password_hash
+
+
+def test_seed_rejects_existing_user_with_wrong_privileged_role(tmp_path: Path) -> None:
+    database_path = tmp_path / "seed-role-conflict.db"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path}")
+    command.upgrade(config, "head")
+    engine = create_engine(f"sqlite:///{database_path}")
+    settings = SeedSettings(
+        admin_email="admin@example.com",
+        admin_password="admin-password",
+        warehouse_email="warehouse@example.com",
+        warehouse_password="warehouse-password",
+        client_email="client@example.com",
+        client_password="client-password",
+    )
+
+    with Session(engine) as session:
+        session.add(
+            User(
+                email=settings.admin_email,
+                password_hash="existing-hash",
+                role=UserRole.CLIENT,
+            )
+        )
+        session.commit()
+
+        with pytest.raises(ValueError, match="expected role admin"):
+            seed_database(session, settings)
+
+        assert session.scalar(select(func.count()).select_from(User)) == 1
+
+    engine.dispose()

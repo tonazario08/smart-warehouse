@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
@@ -32,7 +33,6 @@ def test_seed_is_idempotent_and_preserves_users_and_relationships(
     assert first_counts == (3, 1, 1, 1, 1, 1)
     admin = postgres_session.scalar(select(User).where(User.email == settings.admin_email))
     assert admin is not None
-    admin.role = UserRole.CLIENT
     admin.is_active = False
     postgres_session.flush()
     preserved_admin_hash = admin.password_hash
@@ -65,7 +65,7 @@ def test_seed_is_idempotent_and_preserves_users_and_relationships(
     assert second_counts == first_counts
     assert second_hashes == first_hashes | {settings.admin_email: preserved_admin_hash}
     assert preserved_admin is not None
-    assert preserved_admin.role is UserRole.CLIENT
+    assert preserved_admin.role is UserRole.ADMIN
     assert preserved_admin.is_active is False
     assert product is not None
     assert product.category_id is not None
@@ -91,3 +91,22 @@ def test_seed_failure_rolls_back_all_inserted_rows(postgres_session: Session) ->
 
     for model in (User, Category, Supplier, Warehouse, Product, Stock):
         assert postgres_session.scalar(select(func.count()).select_from(model)) == 0
+
+
+def test_seed_rejects_existing_user_with_wrong_privileged_role(
+    postgres_session: Session,
+) -> None:
+    settings = seed_settings()
+    postgres_session.add(
+        User(
+            email=settings.admin_email,
+            password_hash="existing-hash",
+            role=UserRole.CLIENT,
+        )
+    )
+    postgres_session.flush()
+
+    with pytest.raises(ValueError, match="expected role admin"):
+        seed_database(postgres_session, settings)
+
+    assert postgres_session.scalar(select(func.count()).select_from(User)) == 1

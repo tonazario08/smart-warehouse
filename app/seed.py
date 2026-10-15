@@ -79,6 +79,8 @@ def _validated_credentials(values: dict[str, str]) -> dict[str, str]:
                 raise ValueError(f"{email_name} must be a valid email address") from None
             raise ValueError(f"{password_name} must contain 12 to 128 characters") from None
         normalized[email_name] = request.email
+    if len(set(normalized.values())) != len(normalized):
+        raise ValueError("Seed role email addresses must be distinct")
     return normalized
 
 
@@ -87,6 +89,10 @@ def _get_or_create_user(
 ) -> User:
     user = session.scalar(select(User).where(User.email == email))
     if user is not None:
+        if user.role is not role:
+            raise ValueError(
+                f"Existing seed user has role {user.role.value}; expected role {role.value}"
+            )
         return user
 
     user = User(email=email, password_hash=password_hasher.hash(password), role=role)
