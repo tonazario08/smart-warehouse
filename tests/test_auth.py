@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.auth.security import create_access_token
+from app.auth.security import create_access_token, decode_access_token
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -30,6 +30,24 @@ def make_client(unit_settings) -> tuple[TestClient, Session, object]:
 def test_access_token_helper_requires_explicit_settings() -> None:
     with pytest.raises(TypeError, match="settings must be a Settings instance"):
         create_access_token(23, UserRole.ADMIN)
+
+
+@pytest.mark.parametrize("missing_claim", ["sub", "iat", "exp"])
+def test_access_token_rejects_missing_identity_or_lifecycle_claims(
+    unit_settings, missing_claim: str
+) -> None:
+    claims = {
+        "sub": "23",
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=5),
+    }
+    del claims[missing_claim]
+    token = jwt.encode(
+        claims, unit_settings.jwt_secret_key.get_secret_value(), algorithm="HS256"
+    )
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        decode_access_token(token, unit_settings)
 
 
 def test_registration_always_creates_a_client_and_hashes_password(unit_settings) -> None:
