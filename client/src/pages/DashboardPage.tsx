@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import { useAuth } from '../app/AuthProvider'
 import './dashboard.css'
-import { buildDashboardOverview, type DashboardStockRow } from '../shared/lib/dashboard'
+import kpiBlue from '../shared/assets/figma/kpi-blue.svg'
+import kpiGreen from '../shared/assets/figma/kpi-green.svg'
+import kpiWarning from '../shared/assets/figma/kpi-warning.svg'
+import { buildDashboardOverview, type DashboardStockRow, type DashboardTransactionRow } from '../shared/lib/dashboard'
+import { inventoryStatusLabels, inventoryStatusVariants } from '../shared/lib/inventory'
 import { formatNumber, formatQuantity } from '../shared/lib/formatters'
+import { can } from '../shared/lib/permissions'
 import { Badge } from '../shared/ui/Badge'
 import { Button } from '../shared/ui/Button'
 import { DataTable, type DataTableColumn } from '../shared/ui/DataTable'
@@ -15,22 +20,35 @@ import { PageHeader } from '../shared/ui/PageHeader'
 type DashboardOverview = ReturnType<typeof buildDashboardOverview>
 
 const stockColumns: DataTableColumn<DashboardStockRow>[] = [
-  { id: 'product', header: 'Sản phẩm', render: (row) => <div className="dashboard-product-cell"><strong>{row.productName}</strong><span>{row.sku}</span></div> },
-  { id: 'warehouse', header: 'Kho hàng', render: (row) => row.warehouseName },
-  { id: 'quantity', header: 'Tồn kho', render: (row) => <strong>{formatQuantity(row.quantity, row.unit)}</strong> },
-  { id: 'reorder', header: 'Mức đặt lại', render: (row) => formatQuantity(row.reorderLevel, row.unit) },
-  { id: 'status', header: 'Trạng thái', render: (row) => <Badge variant={row.status === 'low' ? 'warning' : 'success'}>{row.status === 'low' ? 'Sắp hết hàng' : 'Ổn định'}</Badge> },
+  { id: 'product', header: 'Sản phẩm', render: row => <strong>{row.productName}</strong> },
+  { id: 'sku', header: 'SKU', render: row => row.sku },
+  { id: 'warehouse', header: 'Kho', render: row => row.warehouseName },
+  { id: 'quantity', header: 'Tồn kho', render: row => <strong>{formatQuantity(row.quantity, row.unit)}</strong> },
+  { id: 'reorder', header: 'Mức tối thiểu', render: row => formatQuantity(row.reorderLevel, row.unit) },
+  { id: 'status', header: 'Trạng thái', render: row => <Badge variant={inventoryStatusVariants[row.status]}>{inventoryStatusLabels[row.status]}</Badge> },
+]
+
+const transactionColumns: DataTableColumn<DashboardTransactionRow>[] = [
+  { id: 'kind', header: 'Loại giao dịch', render: row => <strong>{row.kind === 'inbound' ? 'Nhập kho' : 'Xuất kho'}</strong> },
+  { id: 'product', header: 'Sản phẩm', render: row => row.productName },
+  { id: 'warehouse', header: 'Kho', render: row => row.warehouseName },
+  { id: 'quantity', header: 'Thay đổi', render: row => <strong className={`dashboard-transaction-change dashboard-transaction-change--${row.kind}`}>{row.kind === 'inbound' ? '+' : '−'}{formatQuantity(row.quantity, row.unit)}</strong> },
+  { id: 'time', header: 'Thời gian', render: () => <span title="Chưa có dữ liệu thời gian">—</span> },
+  { id: 'actor', header: 'Người thực hiện', render: () => <span title="Chưa có dữ liệu người thực hiện">—</span> },
 ]
 
 export function DashboardPage() {
-  const { logout, token } = useAuth()
+  const { logout, token, user } = useAuth()
   const navigate = useNavigate()
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [error, setError] = useState('')
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     if (!token) return
     let active = true
+    setOverview(null)
+    setError('')
     void Promise.all([api.dashboardStats(token), api.productsAll(), api.warehouses(token), api.stock(token), api.transactions(token)])
       .then(([stats, products, warehouses, stock, transactions]) => {
         if (active) setOverview(buildDashboardOverview({ stats, products, warehouses, stock, transactions }))
@@ -38,50 +56,49 @@ export function DashboardPage() {
       .catch((cause: unknown) => {
         if (!active) return
         if (cause instanceof ApiError && cause.status === 401) logout()
-        else setError('Không thể tải dữ liệu bảng điều khiển. Vui lòng thử lại sau.')
+        else setError('Không thể tải dữ liệu bảng điều khiển. Vui lòng thử lại.')
       })
     return () => { active = false }
-  }, [logout, token])
+  }, [logout, reload, token])
 
-  if (error) return <FeedbackMessage variant="error">{error}</FeedbackMessage>
+  if (error) return <FeedbackMessage variant="error">{error} <Button onClick={() => setReload(value => value + 1)} size="small" variant="secondary">Thử lại</Button></FeedbackMessage>
   if (!overview) return <FeedbackMessage>Đang tải dữ liệu bảng điều khiển...</FeedbackMessage>
 
-  const { lowStockRows, recentTransactions, stats, stockRows, warehouseRows } = overview
+  const { lowStockRows, recentTransactions, recentInbound, recentOutbound, stats, stockRows, warehouseRows } = overview
   return <section className="dashboard-page">
-    <PageHeader actions={<Button onClick={() => navigate('/products/new')}><span aria-hidden="true">+</span> Tạo sản phẩm</Button>} description="Theo dõi nhanh hoạt động và tình trạng tồn kho của bạn." title="Bảng điều khiển" />
-
+    <PageHeader actions={can(user?.role, 'product:write') ? <Button onClick={() => navigate('/products/new')}><span aria-hidden="true">+</span> Tạo sản phẩm</Button> : undefined} description="Theo dõi tình trạng tồn kho và hoạt động kho hàng." title="Bảng điều khiển" />
     <section aria-label="Chỉ số tổng quan" className="dashboard-kpis">
-      <article className="dashboard-kpi"><span className="dashboard-kpi__label">Tổng sản phẩm</span><strong>{formatNumber(stats.productCount)}</strong><small>Dữ liệu sản phẩm hiện có</small></article>
-      <article className="dashboard-kpi"><span className="dashboard-kpi__label">Số lượng tồn</span><strong>{formatNumber(stats.totalStock)}</strong><small>Tổng đơn vị đang lưu kho</small></article>
-      <article className="dashboard-kpi"><span className="dashboard-kpi__label">Số kho hàng</span><strong>{formatNumber(stats.warehouseCount)}</strong><small>Kho đang được quản lý</small></article>
-      <article className="dashboard-kpi dashboard-kpi--warning"><span className="dashboard-kpi__label">Sắp hết hàng</span><strong>{formatNumber(stats.lowStockCount)}</strong><small>Cần theo dõi và bổ sung</small></article>
+      <article className="dashboard-kpi"><span className="dashboard-kpi__label">Tổng sản phẩm<img alt="" src={kpiBlue} /></span><strong>{formatNumber(stats.productCount)}</strong><small>Dữ liệu sản phẩm hiện có</small></article>
+      <article className="dashboard-kpi dashboard-kpi--success"><span className="dashboard-kpi__label">Số lượng tồn kho<img alt="" src={kpiGreen} /></span><strong>{formatNumber(stats.totalStock)}</strong><small>Tổng đơn vị đang lưu kho</small></article>
+      <article className="dashboard-kpi dashboard-kpi--success"><span className="dashboard-kpi__label">Số kho hàng<img alt="" src={kpiGreen} /></span><strong>{formatNumber(stats.warehouseCount)}</strong><small>Kho hiện có trong hệ thống</small></article>
+      <article className="dashboard-kpi dashboard-kpi--warning"><span className="dashboard-kpi__label">Sản phẩm cần bổ sung<img alt="" src={kpiWarning} /></span><strong>{formatNumber(stats.lowStockCount)}</strong><small>Chạm ngưỡng hoặc hết hàng</small></article>
     </section>
-
     <section className="dashboard-grid dashboard-grid--primary">
-      <article className="dashboard-panel dashboard-panel--table">
-        <div className="dashboard-panel__header"><div><h2>Tổng quan tồn kho</h2><p>Các mặt hàng cần theo dõi trước được hiển thị đầu tiên.</p></div><Button onClick={() => navigate('/inventory')} size="small" variant="ghost">Xem tồn kho</Button></div>
-        <DataTable caption="Tồn kho theo sản phẩm và kho hàng" columns={stockColumns} emptyMessage="Chưa có dữ liệu tồn kho." getRowKey={(row) => row.id} rows={stockRows.slice(0, 6)} />
+      <article className="dashboard-panel dashboard-panel--stock">
+        <div className="dashboard-panel__header"><h2>Tổng quan tồn kho</h2><Button onClick={() => navigate('/inventory')} size="small" variant="ghost">Xem tất cả</Button></div>
+        <DataTable caption="Tồn kho theo sản phẩm và kho hàng" columns={stockColumns} emptyMessage="Chưa có dữ liệu tồn kho." getRowKey={row => row.id} rows={stockRows.slice(0, 6)} />
       </article>
       <article className="dashboard-panel dashboard-panel--alerts">
-        <div className="dashboard-panel__header"><div><h2>Cần xử lý</h2><p>Các mặt hàng đạt hoặc thấp hơn mức đặt lại.</p></div></div>
+        <div className="dashboard-panel__header"><div><h2>Cảnh báo tồn kho</h2><p>Các sản phẩm cần được xử lý ngay.</p></div></div>
         {lowStockRows.length === 0
-          ? <EmptyState description="Chưa có mặt hàng nào cần bổ sung theo mức đặt lại." title="Tồn kho đang ổn định" />
-          : <ul className="dashboard-alert-list">{lowStockRows.slice(0, 4).map((item) => <li key={item.id}><div><strong>{item.productName}</strong><span>{item.warehouseName}</span></div><Badge variant="warning">Còn {formatQuantity(item.quantity, item.unit)}</Badge></li>)}</ul>}
+          ? <EmptyState description="Chưa có mặt hàng nào cần bổ sung theo mức tồn tối thiểu." title="Tồn kho đang ổn định" />
+          : <ul className="dashboard-alert-list">{lowStockRows.slice(0, 4).map(item => <li key={item.id}><div><strong>{item.productName}</strong><span>{item.warehouseName} · Còn {formatQuantity(item.quantity, item.unit)}</span></div><Badge variant={inventoryStatusVariants[item.status]}>{inventoryStatusLabels[item.status]}</Badge></li>)}</ul>}
+        <Button onClick={() => navigate('/inventory')} size="small">Xem tồn kho</Button>
       </article>
     </section>
-
     <section className="dashboard-grid dashboard-grid--secondary">
       <article className="dashboard-panel">
-        <div className="dashboard-panel__header"><div><h2>Kho hàng</h2><p>Tổng tồn và số mặt hàng theo từng kho.</p></div><Button onClick={() => navigate('/warehouses')} size="small" variant="ghost">Xem kho hàng</Button></div>
-        {warehouseRows.length === 0 ? <EmptyState title="Chưa có kho hàng" /> : <ul className="dashboard-warehouse-list">{warehouseRows.map((warehouse) => <li key={warehouse.id}><div><strong>{warehouse.name}</strong><span>{warehouse.code} · {formatNumber(warehouse.productCount)} sản phẩm</span></div><div><strong>{formatNumber(warehouse.totalStock)}</strong><span>{warehouse.lowStockCount > 0 ? `${formatNumber(warehouse.lowStockCount)} cần theo dõi` : 'Tồn kho ổn định'}</span></div></li>)}</ul>}
-        <p className="dashboard-unavailable">Sức chứa kho chưa khả dụng vì API hiện chưa cung cấp dữ liệu công suất.</p>
+        <div className="dashboard-panel__header"><h2>Tình trạng kho hàng</h2><Button onClick={() => navigate('/warehouses')} size="small" variant="ghost">Xem tất cả</Button></div>
+        {warehouseRows.length === 0 ? <EmptyState title="Chưa có kho hàng" /> : <ul className="dashboard-warehouse-list">{warehouseRows.slice(0, 4).map(warehouse => <li key={warehouse.id}><div><strong>{warehouse.name}</strong><span>{warehouse.address ?? warehouse.code}</span></div><strong>{formatNumber(warehouse.totalStock)}</strong><div><span>{formatNumber(warehouse.productCount)} sản phẩm</span><span>{warehouse.lowStockCount > 0 ? `${formatNumber(warehouse.lowStockCount)} cần bổ sung` : 'Tồn kho ổn định'}</span></div></li>)}</ul>}
+        <p className="dashboard-unavailable">Chưa có thông tin sức chứa và trạng thái vận hành kho.</p>
       </article>
       <article className="dashboard-panel">
-        <div className="dashboard-panel__header"><div><h2>Giao dịch gần đây</h2><p>Dữ liệu nhập và xuất kho mới nhất.</p></div></div>
-        {recentTransactions.length === 0
-          ? <EmptyState description="Giao dịch sẽ xuất hiện tại đây khi phát sinh." title="Chưa có giao dịch" />
-          : <ul className="dashboard-transaction-list">{recentTransactions.map((transaction) => <li key={transaction.id}><Badge variant={transaction.kind === 'inbound' ? 'success' : 'primary'}>{transaction.kind === 'inbound' ? 'Nhập kho' : 'Xuất kho'}</Badge><div><strong>{transaction.productName}</strong><span>{transaction.warehouseName}</span></div><strong>{formatQuantity(transaction.quantity, transaction.unit)}</strong></li>)}</ul>}
+        <div className="dashboard-transaction-list">{(['inbound', 'outbound'] as const).map(kind => {
+          const operations = kind === 'inbound' ? recentInbound : recentOutbound
+          return <section className="dashboard-operations" key={kind}><div className="dashboard-panel__header"><h2>{kind === 'inbound' ? 'Nhập kho gần đây' : 'Xuất kho gần đây'}</h2><Button onClick={() => navigate(kind === 'inbound' ? '/inbound' : '/outbound')} size="small" variant="ghost">Xem tất cả</Button></div>{operations.length === 0 ? <p className="dashboard-operations__empty">Chưa có giao dịch {kind === 'inbound' ? 'nhập' : 'xuất'} kho.</p> : <ul className="dashboard-operation-list">{operations.map(row => <li key={row.id}><div><strong>{row.productName}</strong><span>{row.warehouseName}</span></div><strong className={`dashboard-transaction-change dashboard-transaction-change--${kind}`}>{kind === 'inbound' ? '+' : '−'}{formatQuantity(row.quantity, row.unit)}</strong></li>)}</ul>}</section>
+        })}</div>
       </article>
     </section>
+    <article className="dashboard-panel dashboard-panel--transactions"><div className="dashboard-panel__header"><h2>Giao dịch kho gần đây</h2></div><DataTable caption="Giao dịch nhập và xuất kho theo mã giao dịch mới nhất" columns={transactionColumns} emptyMessage="Chưa có giao dịch kho." getRowKey={row => row.id} rows={recentTransactions} /><p className="dashboard-unavailable">Thời gian và người thực hiện chưa khả dụng. Các giao dịch được sắp theo mã mới nhất.</p></article>
   </section>
 }

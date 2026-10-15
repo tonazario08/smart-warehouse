@@ -17,7 +17,7 @@ type DataTableProps<Row> = {
 export function DataTable<Row>({ columns, rows, getRowKey, caption, emptyMessage = 'Không có dữ liệu để hiển thị.' }: DataTableProps<Row>) {
   return <div className="ui-data-table-wrapper">
     <table className="ui-data-table">
-      {caption && <caption>{caption}</caption>}
+      {caption && <caption className="visually-hidden">{caption}</caption>}
       <thead><tr>{columns.map((column) => <th key={column.id} scope="col">{column.header}</th>)}</tr></thead>
       <tbody>
         {rows.length > 0

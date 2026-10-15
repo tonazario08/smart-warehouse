@@ -18,12 +18,12 @@ type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> & {
 export function Select({ className = '', error, hint, id, label, options, placeholder = 'Chọn một mục', ...props }: SelectProps) {
   const generatedId = useId()
   const selectId = id ?? generatedId
-  const describedBy = error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined
+  const describedBy = [props['aria-describedby'], error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined].filter(Boolean).join(' ') || undefined
   const classes = ['ui-select', error ? 'ui-select--error' : '', className].filter(Boolean).join(' ')
 
   return <div className="ui-field">
     {label && <label className="ui-field__label" htmlFor={selectId}>{label}</label>}
-    <select {...props} aria-describedby={describedBy} aria-invalid={Boolean(error)} className={classes} id={selectId}>
+    <select {...props} aria-describedby={describedBy} aria-invalid={error ? true : props['aria-invalid']} className={classes} id={selectId}>
       <option value="">{placeholder}</option>
       {options.map((option) => <option disabled={option.disabled} key={option.value} value={option.value}>{option.label}</option>)}
     </select>

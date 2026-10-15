@@ -1,1 +1,43 @@
-.movements-page,.movement-form-page{display:grid;gap:24px}.movement-card{border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;background:var(--color-surface);box-shadow:var(--shadow-sm)}.movement-card__head{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.movement-card h2{margin:0;font-size:16px}.movement-card p,.movement-product span{margin:4px 0 0;color:var(--color-text-muted);font-size:12px}.movement-card__head .ui-field{width:260px}.movement-product{display:grid;gap:2px}.movement-form{display:grid;gap:16px;max-width:720px}.movement-actions{display:flex;gap:12px;padding-top:4px}@media(max-width:640px){.movement-card{padding:16px}.movement-card__head{display:grid}.movement-card__head .ui-field{width:auto}}
+.movements-page,
+.movement-form-page { display: grid; gap: 24px; min-width: 0; }
+.movement-card {
+  display: grid; gap: 16px; min-width: 0; padding: 18px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.movement-toolbar,
+.movement-toolbar__filters,
+.movement-pagination,
+.movement-pagination > div { display: flex; align-items: center; gap: 12px; }
+.movement-toolbar,
+.movement-pagination { justify-content: space-between; }
+.movement-toolbar__filters { flex-wrap: wrap; min-width: 0; }
+.movement-toolbar__filters .ui-field { width: 160px; }
+.movement-toolbar__filters .ui-field:first-child { width: 260px; }
+.movement-toolbar > .ui-button { flex-shrink: 0; }
+.movement-product { display: grid; gap: 2px; }
+.movement-product span { color: var(--color-text-muted); font-size: 11px; }
+.movement-pagination { min-height: 40px; color: var(--color-text-muted); font-size: 11px; }
+.movement-stock-impact {
+  display: grid; gap: 12px; padding: 14px 16px;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-app-background);
+}
+.movement-stock-impact h2 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
+.movement-stock-impact p { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 18px; }
+.movement-stock-impact dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.movement-stock-impact dt { color: var(--color-text-muted); font-size: 13px; line-height: 18px; }
+.movement-stock-impact dd { margin: 4px 0 0; font-size: 18px; font-weight: 600; line-height: 24px; }
+.movement-value--inbound { color: var(--color-success); }
+.movement-value--outbound { color: var(--color-danger); }
+@media (max-width: 960px) {
+  .movement-toolbar { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 640px) {
+  .movement-card { padding: 16px; }
+  .movement-toolbar__filters { width: 100%; }
+  .movement-toolbar__filters .ui-field,
+  .movement-toolbar__filters .ui-field:first-child { width: 100%; }
+  .movement-pagination { flex-wrap: wrap; }
+  .movement-stock-impact dl { grid-template-columns: 1fr; }
+}

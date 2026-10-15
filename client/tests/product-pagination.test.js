@@ -38,6 +38,7 @@ function pageHost(pageName, productId, token = 'test-token') {
       if (specifier === 'react-router-dom') return { useNavigate: () => () => {}, useParams: () => ({ id: '1', warehouseId: '1', productId: String(productId) }) }
       if (specifier.endsWith('/app/AuthProvider')) return { useAuth: () => ({ token, user: { id: 1, email: 'test@example.com', role: 'client', is_active: true }, logout: () => { logoutCount++ } }) }
       if (specifier.endsWith('.css')) return {}
+      if (specifier.endsWith('.svg')) return { default: specifier }
       if (!specifier.startsWith('.')) return require(specifier)
       const base = resolve(dirname(filename), specifier)
       const dependency = [base, `${base}.js`].find((candidate) => existsSync(candidate))

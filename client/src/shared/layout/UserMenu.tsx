@@ -5,9 +5,10 @@ const roleLabel: Record<User['role'], string> = { admin: 'Quản trị viên', w
 
 export function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
   const initials = user.email.slice(0, 2).toUpperCase()
+  const accountLabel = `Tài khoản ${roleLabel[user.role]}, ${user.email}`
 
   return <details className="user-menu">
-    <summary className="user-menu__trigger">
+    <summary aria-label={accountLabel} className="user-menu__trigger" title={accountLabel}>
       <span className="user-menu__avatar">{initials}</span>
       <span><strong>{roleLabel[user.role]}</strong><small>{user.email}</small></span>
     </summary>
