@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../shared/api/ApiError'
+import { collectAllPages } from '../../shared/api/collectAllPages'
 import { AsyncState } from '../../shared/ui/AsyncState'
 import { FormFieldError } from '../../shared/ui/FormFieldError'
 import { Pagination } from '../../shared/ui/Pagination'
@@ -114,9 +115,10 @@ export function ProductsPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const query = useQuery({ queryKey: productKeys.list(filters), queryFn: () => api.list(filters) })
-  const lookupPage = { page: 1, pageSize: 100 }
-  const categories = useQuery({ queryKey: categoryKeys.list(lookupPage), queryFn: () => createCategoriesApi(client).list(lookupPage) })
-  const suppliers = useQuery({ queryKey: supplierKeys.list({ ...lookupPage, search: '' }), queryFn: () => createSuppliersApi(client).list({ ...lookupPage, search: '' }), enabled: canReadSuppliers })
+  const categoriesApi = createCategoriesApi(client)
+  const suppliersApi = createSuppliersApi(client)
+  const categories = useQuery({ queryKey: [...categoryKeys.all, 'lookup', 'all'], queryFn: () => collectAllPages((page) => categoriesApi.list({ page, pageSize: 100 })) })
+  const suppliers = useQuery({ queryKey: [...supplierKeys.all, 'lookup', 'all'], queryFn: () => collectAllPages((page) => suppliersApi.list({ page, pageSize: 100, search: '' })), enabled: canReadSuppliers })
   const invalidate = async () => cache.invalidateQueries({ queryKey: productKeys.all })
   const save = useMutation({ mutationFn: ({ id, input }: { id: number | null; input: ProductInput }) => id ? api.update(id, input) : api.create(input), onSuccess: async (_, variables) => { await invalidate(); setSelection(null); setFailure(null); setMessage(variables.id ? 'Product updated.' : 'Product created.') } })
   const remove = useMutation({ mutationFn: api.delete, onSuccess: async () => { await invalidate(); setDeleting(null); setFailure(null); setMessage('Product deleted.') }, onError: (error) => setFailure(error instanceof Error ? error.message : 'Product could not be deleted.') })

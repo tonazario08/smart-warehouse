@@ -1,4 +1,5 @@
 import type { ApiClient } from '../../shared/api/ApiClient'
+import { collectAllPages } from '../../shared/api/collectAllPages'
 import type { Product } from '../products/types'
 import { createProductsApi, productKeys } from '../products/api'
 import type { Warehouse } from '../warehouses/types'
@@ -21,8 +22,8 @@ export const outboundKeys = {
 }
 
 export const inventoryLookup = {
-  products: productKeys.list({ page: 1, pageSize: 100, search: '', categoryId: '', supplierId: '', isActive: '' }),
-  warehouses: warehouseKeys.list({ page: 1, pageSize: 100, search: '' }),
+  products: [...productKeys.all, 'lookup', 'all'] as const,
+  warehouses: [...warehouseKeys.all, 'lookup', 'all'] as const,
   product: (id: number) => ['products', 'detail', id] as const,
   warehouse: (id: number) => ['warehouses', 'detail', id] as const,
 }
@@ -37,17 +38,21 @@ function makeParams(filters: InventoryFilters, transactionType?: string) {
   return params
 }
 
-export const createInventoryApi = (client: ApiClient) => ({
+export const createInventoryApi = (client: ApiClient) => {
+  const productsApi = createProductsApi(client)
+  const warehousesApi = createWarehousesApi(client)
+  return {
   listStock: (filters: InventoryFilters) => client.request<StockPageData>(`/stock?${makeParams(filters)}`),
   listInbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/inbounds?${makeParams(filters)}`),
   listOutbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/outbounds?${makeParams(filters)}`),
   createInbound: (input: MovementInput) => client.request<MovementCreateResponse>('/inbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
   createOutbound: (input: MovementInput) => client.request<MovementCreateResponse>('/outbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
-  listProducts: () => createProductsApi(client).list({ page: 1, pageSize: 100, search: '', categoryId: '', supplierId: '', isActive: '' }),
-  listWarehouses: () => createWarehousesApi(client).list({ page: 1, pageSize: 100, search: '' }),
+  listProducts: () => collectAllPages((page) => productsApi.list({ page, pageSize: 100, search: '', categoryId: '', supplierId: '', isActive: '' })),
+  listWarehouses: () => collectAllPages((page) => warehousesApi.list({ page, pageSize: 100, search: '' })),
   getProduct: (id: number) => client.request<Product>(`/products/${id}`),
   getWarehouse: (id: number) => client.request<Warehouse>(`/warehouses/${id}`),
-})
+  }
+}
 
 function normalizeMovement(input: MovementInput): MovementInput {
   const reference = input.reference?.trim()

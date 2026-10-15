@@ -29,6 +29,32 @@ it('does not request supplier lookups for clients', async () => {
   expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/suppliers?'))).toBe(false)
 })
 
+it('loads category and supplier options beyond the first lookup page', async () => {
+  const lateCategory = { ...categoryRow, id: 104, name: 'Late category' }
+  const lateSupplier = { ...supplierRow, id: 105, name: 'Late supplier' }
+  const { fetchMock } = renderRoleRoute('/products', 'admin', (url) => {
+    const parsed = new URL(url, 'http://localhost')
+    if (parsed.pathname.endsWith('/products')) return jsonResponse(page())
+    if (parsed.pathname.endsWith('/categories')) {
+      return parsed.searchParams.get('page') === '2'
+        ? jsonResponse({ items: [lateCategory], total: 101, page: 2, page_size: 100 })
+        : jsonResponse({ items: [categoryRow], total: 101, page: 1, page_size: 100 })
+    }
+    if (parsed.pathname.endsWith('/suppliers')) {
+      return parsed.searchParams.get('page') === '2'
+        ? jsonResponse({ items: [lateSupplier], total: 101, page: 2, page_size: 100 })
+        : jsonResponse({ items: [supplierRow], total: 101, page: 1, page_size: 100 })
+    }
+    return jsonResponse({})
+  })
+
+  expect(await screen.findByRole('option', { name: 'Late category' })).toBeInTheDocument()
+  expect(await screen.findByRole('option', { name: 'Late supplier' })).toBeInTheDocument()
+  const lookupUrls = fetchMock.mock.calls.map(([url]) => String(url))
+  expect(lookupUrls.some((url) => url.includes('/categories?') && url.includes('page=2'))).toBe(true)
+  expect(lookupUrls.some((url) => url.includes('/suppliers?') && url.includes('page=2'))).toBe(true)
+})
+
 it('filters by supported fields and resets to the first page', async () => {
   const { fetchMock } = renderRoleRoute('/products', 'warehouse', (url) => {
     if (url.includes('/products?')) return jsonResponse(page([productRow], 25, url.includes('page=2') ? 2 : 1))

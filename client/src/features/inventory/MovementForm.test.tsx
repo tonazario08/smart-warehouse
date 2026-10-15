@@ -18,6 +18,32 @@ function lookup(url: string) {
 }
 
 describe('movement schema and manifest', () => {
+  it('loads movement and filter options beyond the first lookup page', async () => {
+    const lateProduct = { ...product, id: 106, sku: 'SKU-101', name: 'Late product' }
+    const lateWarehouse = { ...warehouseRow, id: 107, code: 'WH-101', name: 'Late warehouse' }
+    const { fetchMock } = renderRoleRoute('/inbounds', 'warehouse', (url) => {
+      const parsed = new URL(url, 'http://localhost')
+      if (parsed.pathname.endsWith('/products')) {
+        return parsed.searchParams.get('page') === '2'
+          ? jsonResponse({ items: [lateProduct], total: 101, page: 2, page_size: 100 })
+          : jsonResponse({ items: [product], total: 101, page: 1, page_size: 100 })
+      }
+      if (parsed.pathname.endsWith('/warehouses')) {
+        return parsed.searchParams.get('page') === '2'
+          ? jsonResponse({ items: [lateWarehouse], total: 101, page: 2, page_size: 100 })
+          : jsonResponse({ items: [warehouseRow], total: 101, page: 1, page_size: 100 })
+      }
+      if (url.includes('/inbounds?')) return jsonResponse(page)
+      return jsonResponse({})
+    })
+
+    expect(await screen.findAllByRole('option', { name: 'SKU-101 · Late product' })).toHaveLength(2)
+    expect(await screen.findAllByRole('option', { name: 'WH-101 · Late warehouse' })).toHaveLength(2)
+    const lookupUrls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(lookupUrls.some((url) => url.includes('/products?') && url.includes('page=2'))).toBe(true)
+    expect(lookupUrls.some((url) => url.includes('/warehouses?') && url.includes('page=2'))).toBe(true)
+  })
+
   it('accepts positive integer quantities and rejects zero, negative, fractional, and extra values', () => {
     const valid = { warehouse_id: '7', product_id: '6', quantity: '5' }
     expect(movementSchema.safeParse(valid).success).toBe(true)
