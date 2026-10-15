@@ -16,8 +16,8 @@ const errorMessage = (cause: unknown) => {
   if (cause instanceof ApiError) {
     if (cause.status === 403) return 'Bạn không có quyền quản lý kho hàng.'
     if (cause.status === 404) return 'Không tìm thấy kho hàng.'
-    if (cause.status === 409) return 'Mã kho đã tồn tại. Vui lòng chọn mã khác.'
-    if (cause.status === 422) return 'Thông tin kho hàng chưa hợp lệ. Vui lòng kiểm tra lại.'
+    if (cause.status === 409) return cause.message
+    if (cause.status === 422) return cause.message
   }
   return 'Không thể tải hoặc lưu kho hàng. Vui lòng thử lại.'
 }
@@ -60,7 +60,7 @@ export function WarehouseFormPage({ mode }: WarehouseFormPageProps) {
     let active = true
     void api.warehouse(token, warehouseId)
       .then((warehouse) => { if (active) { setLoaded(true); setValues({ code: warehouse.code, name: warehouse.name, address: warehouse.address, latitude: warehouse.latitude?.toString() ?? '', longitude: warehouse.longitude?.toString() ?? '' }) } })
-      .catch((cause: unknown) => { if (active) { if (cause instanceof ApiError && cause.status === 401) logout(); else setError(errorMessage(cause)) } })
+      .catch((cause: unknown) => { if (active) { if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() } else setError(errorMessage(cause)) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [logout, mode, retry, token, warehouseId])
@@ -75,7 +75,7 @@ export function WarehouseFormPage({ mode }: WarehouseFormPageProps) {
     try {
       const warehouse = mode === 'create' ? await api.createWarehouse(token, input) : await api.updateWarehouse(token, warehouseId, input)
       navigate(`/warehouses/${warehouse.id}`)
-    } catch (cause) { if (cause instanceof ApiError && cause.status === 401) logout(); else setError(errorMessage(cause)) } finally { setSaving(false) }
+    } catch (cause) { if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() } else setError(errorMessage(cause)) } finally { setSaving(false) }
   }
 
   const title = mode === 'create' ? 'Thêm kho hàng' : 'Chỉnh sửa kho hàng'

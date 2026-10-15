@@ -1,12 +1,191 @@
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
 from alembic import command
 from app.models import Category, Product, Stock, Supplier, User, UserRole, Warehouse
-from app.seed import SeedSettings, seed_database
+from app.seed import (
+    SeedSettings,
+    create_engine_from_environment,
+    load_seed_settings,
+    seed_database,
+)
+
+SEED_ENVIRONMENT_NAMES = (
+    "SEED_ADMIN_EMAIL",
+    "SEED_ADMIN_PASSWORD",
+    "SEED_WAREHOUSE_EMAIL",
+    "SEED_WAREHOUSE_PASSWORD",
+    "SEED_CLIENT_EMAIL",
+    "SEED_CLIENT_PASSWORD",
+)
+
+
+def compose_config_command(directory: Path) -> tuple[list[str], dict[str, str]]:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("Docker CLI unavailable; Compose config validation skipped.")
+    available = subprocess.run(
+        [docker, "compose", "version"], capture_output=True, text=True, timeout=15
+    )
+    if available.returncode != 0:
+        pytest.skip("Docker Compose CLI plugin unavailable; config validation skipped.")
+
+    project_file = directory / "docker-compose.yml"
+    source_file = Path(__file__).resolve().parents[1] / "docker-compose.yml"
+    project_file.write_bytes(source_file.read_bytes())
+    (directory / ".env").write_text("", encoding="utf-8")
+    environment = os.environ.copy()
+    for name in SEED_ENVIRONMENT_NAMES:
+        environment.pop(name, None)
+    environment.update(
+        {
+            "POSTGRES_PASSWORD": "compose-test-password",
+            "DATABASE_URL": "postgresql+psycopg://smart_warehouse:test@db/smart_warehouse",
+            "JWT_SECRET_KEY": "compose-test-jwt-secret-with-at-least-32-characters",
+        }
+    )
+    command = [
+        docker,
+        "compose",
+        "--project-directory",
+        str(directory),
+        "--file",
+        str(project_file),
+        "config",
+        "--quiet",
+    ]
+    return command, environment
+
+
+def seed_environment(**overrides: str) -> dict[str, str]:
+    values = {
+        "DATABASE_URL": "postgresql+psycopg://seed:secret@localhost/warehouse_test",
+        "SEED_ADMIN_EMAIL": " Admin@Example.com ",
+        "SEED_ADMIN_PASSWORD": "admin-password-long",
+        "SEED_WAREHOUSE_EMAIL": " Warehouse@Example.com ",
+        "SEED_WAREHOUSE_PASSWORD": "warehouse-password-long",
+        "SEED_CLIENT_EMAIL": " Client@Example.com ",
+        "SEED_CLIENT_PASSWORD": "client-password-long",
+    }
+    return values | overrides
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "SEED_ADMIN_EMAIL",
+        "SEED_ADMIN_PASSWORD",
+        "SEED_WAREHOUSE_EMAIL",
+        "SEED_WAREHOUSE_PASSWORD",
+        "SEED_CLIENT_EMAIL",
+        "SEED_CLIENT_PASSWORD",
+    ],
+)
+@pytest.mark.parametrize("value", [None, "", " \t "])
+def test_seed_settings_reject_missing_or_blank_privileged_credentials(
+    name: str, value: str | None
+) -> None:
+    environment = seed_environment()
+    if value is None:
+        environment.pop(name)
+    else:
+        environment[name] = value
+
+    with pytest.raises(ValueError, match=name):
+        load_seed_settings(environment)
+
+
+def test_seed_settings_require_database_url() -> None:
+    environment = seed_environment(DATABASE_URL="  ")
+
+    with pytest.raises(ValueError, match="DATABASE_URL"):
+        load_seed_settings(environment)
+
+
+@pytest.mark.parametrize("value", [None, "", " \t "])
+def test_seed_engine_rejects_missing_or_blank_database_url(value: str | None) -> None:
+    environment = {} if value is None else {"DATABASE_URL": value}
+
+    with pytest.raises(ValueError, match="DATABASE_URL"):
+        create_engine_from_environment(environment)
+
+
+@pytest.mark.parametrize("name", SEED_ENVIRONMENT_NAMES)
+@pytest.mark.parametrize("value", [None, ""])
+def test_compose_config_fails_closed_for_missing_or_blank_bootstrap_credentials(
+    tmp_path: Path, name: str, value: str | None
+) -> None:
+    command, environment = compose_config_command(tmp_path)
+    if value is None:
+        environment.pop(name, None)
+    else:
+        environment[name] = value
+
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
+
+    assert result.returncode != 0
+    assert name in result.stderr + result.stdout
+
+
+def test_compose_config_accepts_complete_bootstrap_credentials(tmp_path: Path) -> None:
+    command, environment = compose_config_command(tmp_path)
+    environment.update({name: f"compose-test-{name.lower()}" for name in SEED_ENVIRONMENT_NAMES})
+
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_seed_settings_normalize_emails_like_auth_requests() -> None:
+    settings = load_seed_settings(seed_environment())
+
+    assert settings.admin_email == "admin@example.com"
+    assert settings.warehouse_email == "warehouse@example.com"
+    assert settings.client_email == "client@example.com"
+
+
+def test_seed_settings_reject_duplicate_normalized_role_emails() -> None:
+    environment = seed_environment(
+        SEED_WAREHOUSE_EMAIL=" ADMIN@example.com ",
+    )
+
+    with pytest.raises(ValueError, match="distinct"):
+        load_seed_settings(environment)
+
+
+@pytest.mark.parametrize(
+    ("password", "valid"),
+    [("a" * 11, False), ("a" * 12, True), ("a" * 128, True), ("a" * 129, False)],
+)
+def test_seed_settings_enforce_auth_password_boundaries(password: str, valid: bool) -> None:
+    environment = seed_environment(SEED_ADMIN_PASSWORD=password)
+
+    if valid:
+        assert load_seed_settings(environment).admin_password == password
+    else:
+        with pytest.raises(ValueError, match="SEED_ADMIN_PASSWORD"):
+            load_seed_settings(environment)
+
+
+def test_seed_failure_output_never_echoes_invalid_credentials(monkeypatch, capsys) -> None:
+    from app import seed
+
+    sentinel = "x-secret"
+    for name, value in seed_environment(SEED_ADMIN_PASSWORD=sentinel).items():
+        monkeypatch.setenv(name, value)
+
+    assert seed.main() == 1
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert sentinel not in output
+    assert "DATABASE_URL" not in output
 
 
 def test_seed_is_idempotent_and_preserves_existing_user_credentials(tmp_path: Path) -> None:
@@ -48,3 +227,36 @@ def test_seed_is_idempotent_and_preserves_existing_user_credentials(tmp_path: Pa
         seeded_roles = set(session.scalars(select(User.role)))
         assert seeded_roles == {UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.CLIENT}
         assert session.get(User, admin.id).password_hash == original_password_hash
+
+
+def test_seed_rejects_existing_user_with_wrong_privileged_role(tmp_path: Path) -> None:
+    database_path = tmp_path / "seed-role-conflict.db"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path}")
+    command.upgrade(config, "head")
+    engine = create_engine(f"sqlite:///{database_path}")
+    settings = SeedSettings(
+        admin_email="admin@example.com",
+        admin_password="admin-password",
+        warehouse_email="warehouse@example.com",
+        warehouse_password="warehouse-password",
+        client_email="client@example.com",
+        client_password="client-password",
+    )
+
+    with Session(engine) as session:
+        session.add(
+            User(
+                email=settings.admin_email,
+                password_hash="existing-hash",
+                role=UserRole.CLIENT,
+            )
+        )
+        session.commit()
+
+        with pytest.raises(ValueError, match="expected role admin"):
+            seed_database(session, settings)
+
+        assert session.scalar(select(func.count()).select_from(User)) == 1
+
+    engine.dispose()

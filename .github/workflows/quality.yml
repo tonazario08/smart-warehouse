@@ -1,0 +1,131 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smart_warehouse_test
+          POSTGRES_USER: smart_warehouse_test
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smart_warehouse_test -d smart_warehouse_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://smart_warehouse_test:test-only@127.0.0.1:5432/smart_warehouse_test
+      DATABASE_URL: postgresql+psycopg://smart_warehouse_test:test-only@127.0.0.1:5432/smart_warehouse_test
+      JWT_SECRET_KEY: ci-only-jwt-secret-key-with-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Ruff
+        run: python -m ruff check app tests alembic
+      - name: Apply migrations to PostgreSQL 16
+        run: python -m alembic upgrade head
+      - name: Backend tests
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run test:all
+      - run: npm run typecheck
+      - run: npm run build
+
+  e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: smart-warehouse-phase1-task19-e2e-ci
+      POSTGRES_PASSWORD: e2e-postgres-password-2026
+      DATABASE_URL: postgresql+psycopg://smart_warehouse_e2e:e2e-postgres-password-2026@db:5432/smart_warehouse_e2e
+      JWT_SECRET_KEY: e2e-only-jwt-secret-key-with-at-least-32-characters
+      SEED_ADMIN_EMAIL: e2e-admin@example.com
+      SEED_ADMIN_PASSWORD: e2e-admin-password-2026
+      SEED_WAREHOUSE_EMAIL: e2e-warehouse@example.com
+      SEED_WAREHOUSE_PASSWORD: e2e-warehouse-password-2026
+      SEED_CLIENT_EMAIL: e2e-client@example.com
+      SEED_CLIENT_PASSWORD: e2e-client-password-2026
+      E2E_ADMIN_EMAIL: e2e-admin@example.com
+      E2E_ADMIN_PASSWORD: e2e-admin-password-2026
+      E2E_WAREHOUSE_EMAIL: e2e-warehouse@example.com
+      E2E_WAREHOUSE_PASSWORD: e2e-warehouse-password-2026
+      E2E_CLIENT_EMAIL: e2e-client@example.com
+      E2E_CLIENT_PASSWORD: e2e-client-password-2026
+      E2E_BASE_URL: http://127.0.0.1:58080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install frontend and Chromium
+        working-directory: client
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Validate disposable Compose target
+        run: |
+          test "$COMPOSE_PROJECT_NAME" = "smart-warehouse-phase1-task19-e2e-ci"
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f docker-compose.e2e.yml config --quiet
+      - name: Start disposable E2E stack
+        run: |
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:58080/api/v1/health/ready >/dev/null \
+              && curl --fail --silent http://127.0.0.1:58080/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f docker-compose.e2e.yml ps
+          exit 1
+      - name: Playwright critical paths
+        working-directory: client
+        run: npm run e2e
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            client/playwright-report/
+            client/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove disposable E2E stack
+        if: always()
+        run: |
+          test "$COMPOSE_PROJECT_NAME" = "smart-warehouse-phase1-task19-e2e-ci"
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans

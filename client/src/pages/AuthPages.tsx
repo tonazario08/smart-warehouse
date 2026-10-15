@@ -29,13 +29,17 @@ export function LoginPage() {
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+  const destination = from?.pathname?.startsWith('/') && !from.pathname.startsWith('//')
+    ? from.pathname + (from.search ?? '') + (from.hash ?? '')
+    : '/dashboard'
 
-  if (user) return <Navigate replace to="/dashboard" />
+  if (user) return <Navigate replace to={destination} />
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (await login(email, password)) {
-      navigate((location.state as { from?: Location } | null)?.from?.pathname ?? '/dashboard', { replace: true })
+      navigate(destination, { replace: true })
     }
   }
 

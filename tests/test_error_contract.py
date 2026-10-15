@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, field_validator
 from sqlalchemy.exc import IntegrityError
 
 from app.main import create_app
@@ -107,3 +108,29 @@ def test_unhandled_error_hides_internal_exception_details(unit_settings) -> None
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "INTERNAL_SERVER_ERROR"
     assert "secret internal detail" not in response.text
+
+
+def test_validation_error_does_not_reflect_validator_exception_text(unit_settings) -> None:
+    """A validator's exception may contain secrets and must stay out of responses."""
+
+    class SensitiveRequest(BaseModel):
+        value: str
+
+        @field_validator("value")
+        @classmethod
+        def reject_value(cls, value: str) -> str:
+            raise ValueError("SQL password=do-not-disclose")
+
+    application = create_app(unit_settings)
+
+    @application.post("/test/sensitive-validation")
+    def sensitive_validation(_: SensitiveRequest) -> None:
+        pass
+
+    response = TestClient(application).post("/test/sensitive-validation", json={"value": "bad"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "REQUEST_VALIDATION_ERROR"
+    assert "value" in response.json()["detail"]["fields"]
+    assert "do-not-disclose" not in response.text
+    assert "password=" not in response.text

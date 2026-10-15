@@ -10,4 +10,10 @@ htmlcov/
 node_modules/
 dist/
 build/
+coverage/
+playwright-report/
+test-results/
+*.trace.zip
+*.webm
+*-screenshot.png
 .worktrees/

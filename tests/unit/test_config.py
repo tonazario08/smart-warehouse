@@ -16,11 +16,59 @@ def test_production_rejects_unsafe_jwt_secret() -> None:
         )
 
 
+def test_production_rejects_whitespace_jwt_secret() -> None:
+    """Whitespace cannot satisfy the minimum production signing-key length."""
+    with pytest.raises(ValidationError):
+        Settings(
+            app_env="production",
+            database_url="postgresql+psycopg://u:p@db/app",
+            jwt_secret_key=" " * 32,
+            cors_origins=["https://warehouse.example.com"],
+            _env_file=None,
+        )
+
+
+def test_missing_database_url_fails_configuration_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Application startup cannot silently select a local SQLite database."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("minutes", [4, 1441])
+def test_jwt_expiry_outside_supported_range_is_rejected(minutes: int) -> None:
+    """Invalid token lifetimes fail before the app starts."""
+    with pytest.raises(ValidationError):
+        Settings(
+            app_env="test",
+            database_url="sqlite+pysqlite:///:memory:",
+            jwt_secret_key="test-only-secret",
+            jwt_expire_minutes=minutes,
+            _env_file=None,
+        )
+
+
+def test_cors_origins_load_from_json_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The env example's JSON origin list is parsed as a list of origins."""
+    monkeypatch.setenv("CORS_ORIGINS", '["https://warehouse.example.com"]')
+
+    settings = Settings(
+        app_env="test",
+        database_url="sqlite+pysqlite:///:memory:",
+        jwt_secret_key="test-only-secret",
+        _env_file=None,
+    )
+
+    assert settings.cors_origins == ["https://warehouse.example.com"]
+
+
 @pytest.mark.parametrize(
     "secret",
     [
         "replace-with-a-long-random-secret",
         "local-development-secret-change-me",
+        " replace-with-a-long-random-secret ",
     ],
 )
 def test_production_rejects_known_jwt_placeholders(secret: str) -> None:

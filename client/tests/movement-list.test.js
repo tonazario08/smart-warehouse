@@ -17,7 +17,8 @@ test('filterMovementRows filters by movement type and Vietnamese search text', (
 test('productsAll retrieves every product page for movement list and form selections', async () => {
   const originalFetch = globalThis.fetch
   const requestedUrls = []
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer test-token')
     requestedUrls.push(String(input))
     const page = requestedUrls.length
     return {
@@ -28,7 +29,7 @@ test('productsAll retrieves every product page for movement list and form select
   }
 
   try {
-    assert.deepEqual((await api.productsAll()).map((product) => product.id), [1, 2])
+    assert.deepEqual((await api.productsAll('test-token')).map((product) => product.id), [1, 2])
     assert.deepEqual(requestedUrls, [
       'http://localhost:8000/api/v1/products?page=1&page_size=100',
       'http://localhost:8000/api/v1/products?page=2&page_size=100',

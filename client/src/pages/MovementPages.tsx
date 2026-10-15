@@ -19,6 +19,7 @@ const title = (type: MovementType) => type === 'inbound' ? 'Nhập kho' : 'Xuấ
 const direction = (type: MovementType) => type === 'inbound' ? 'nhập' : 'xuất'
 const errorMessage = (cause: unknown) => {
   if (!(cause instanceof ApiError)) return 'Không thể tải dữ liệu. Vui lòng thử lại sau.'
+  if (cause.code !== 'UNEXPECTED_RESPONSE') return cause.message
   if (cause.status === 403) return 'Bạn không có quyền thực hiện thao tác này.'
   if (cause.status === 404) return 'Không tìm thấy dữ liệu cần thiết.'
   if (cause.status === 400 || cause.status === 409) return 'Không thể hoàn tất giao dịch. Vui lòng kiểm tra kho, sản phẩm và số lượng tồn.'
@@ -46,7 +47,7 @@ export function MovementListPage({ type }: { type: MovementType }) {
     let active = true
     setLoading(true)
     setMessage('')
-    void Promise.all([api.transactions(token), api.productsAll(), api.warehouses(token)])
+    void Promise.all([api.transactions(token), api.productsAll(token), api.warehouses(token)])
       .then(([transactions, productList, warehouseList]) => {
         if (!active) return
         setProducts(productList)
@@ -55,7 +56,7 @@ export function MovementListPage({ type }: { type: MovementType }) {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setMessage(errorMessage(cause))
       })
       .finally(() => { if (active) setLoading(false) })
@@ -128,7 +129,7 @@ export function MovementFormPage({ type }: { type: MovementType }) {
     setLoading(true)
     setLoaded(false)
     setMessage('')
-    void Promise.all([api.productsAll(), api.warehouses(token)])
+    void Promise.all([api.productsAll(token), api.warehouses(token)])
       .then(([productList, warehouseList]) => {
         if (!active) return
         setProducts(productList)
@@ -137,7 +138,7 @@ export function MovementFormPage({ type }: { type: MovementType }) {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setMessage(errorMessage(cause))
       })
       .finally(() => { if (active) setLoading(false) })
@@ -158,7 +159,7 @@ export function MovementFormPage({ type }: { type: MovementType }) {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setStockError('Không thể kiểm tra tồn kho. Vui lòng thử lại.')
       })
       .finally(() => { if (active) setStockLoading(false) })
@@ -167,13 +168,14 @@ export function MovementFormPage({ type }: { type: MovementType }) {
 
   const currentStock = stock?.warehouseId === warehouseId && stock?.productId === productId ? stock.quantity : null
   const amount = Number(quantity)
-  const validAmount = quantity.trim() !== '' && Number.isSafeInteger(amount) && amount > 0
+  const validAmount = quantity.trim() !== '' && Number.isSafeInteger(amount) && amount > 0 && amount <= 2_147_483_647
   const afterStock = currentStock !== null && validAmount ? currentStock + (type === 'inbound' ? amount : -amount) : null
   const selectedProduct = products.find(product => product.id === Number(productId))
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token || saving || !loaded) return
     if (!warehouseId || !productId || !validAmount) { setMessage('Vui lòng chọn kho, sản phẩm và nhập số lượng nguyên dương hợp lệ.'); return }
+    if (reference.trim().length > 120) { setMessage('Mã phiếu không được vượt quá 120 ký tự.'); return }
     setSaving(true)
     setMessage('')
     try {
@@ -182,7 +184,7 @@ export function MovementFormPage({ type }: { type: MovementType }) {
       else await api.createOutbound(token, input)
       navigate('/' + type)
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 401) logout()
+      if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
       else setMessage(errorMessage(cause))
       setStockRetry(value => value + 1)
     } finally { setSaving(false) }
@@ -196,12 +198,12 @@ export function MovementFormPage({ type }: { type: MovementType }) {
         <fieldset className="ui-form-fields ui-form-section" disabled={saving}>
           <h2>Thông tin phiếu {direction(type)}</h2>
           <div className="ui-form-grid">
-            <Input label="Mã phiếu" value={reference} onChange={event => setReference(event.target.value)} placeholder="Nhập mã tham chiếu (không bắt buộc)" />
+            <Input label="Mã phiếu" maxLength={120} value={reference} onChange={event => setReference(event.target.value)} placeholder="Nhập mã tham chiếu (không bắt buộc)" />
             <Select label="Kho hàng" placeholder="Chọn kho" required value={warehouseId} onChange={event => setWarehouseId(event.target.value)} options={warehouses.map(item => ({ value: item.id, label: item.name }))} />
           </div>
           <Select label="Sản phẩm" placeholder="Chọn sản phẩm" required value={productId} onChange={event => setProductId(event.target.value)} options={products.map(item => ({ value: item.id, label: item.sku + ' · ' + item.name }))} />
           <div className="ui-form-grid">
-            <Input label="Số lượng" min="1" step="1" required type="number" value={quantity} onChange={event => setQuantity(event.target.value)} placeholder="Nhập số lượng" />
+            <Input label="Số lượng" min="1" max={2_147_483_647} step="1" required type="number" value={quantity} onChange={event => setQuantity(event.target.value)} placeholder="Nhập số lượng" />
             <Input label="Tài khoản thực hiện" readOnly value={user?.email ?? ''} />
           </div>
           <Input label="Ghi chú" value={note} onChange={event => setNote(event.target.value)} placeholder="Nhập ghi chú (không bắt buộc)" />

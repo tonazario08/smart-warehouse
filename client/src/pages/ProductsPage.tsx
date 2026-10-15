@@ -58,13 +58,14 @@ export function ProductsPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    if (!token) return
     let active = true
     setLookupError('')
-    void api.categories().then((result) => { if (active) setCategories(result.items) }).catch((cause) => { if (active) setLookupError(message(cause)) })
+    void api.categories(token).then((result) => { if (active) setCategories(result.items) }).catch((cause) => { if (active) setLookupError(message(cause)) })
     if (token && (user?.role === 'admin' || user?.role === 'warehouse')) {
       void api.suppliers(token).then((result) => { if (active) setSuppliers(result.items) }).catch((cause) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setLookupError('Không thể tải tên nhà cung cấp. Bạn vẫn có thể đọc và lọc sản phẩm theo mã nhà cung cấp.')
       })
     } else setSuppliers([])
@@ -72,12 +73,13 @@ export function ProductsPage() {
   }, [logout, lookupRetry, token, user?.role])
 
   useEffect(() => {
+    if (!token) return
     let active = true
     setFilterOptionsLoading(true)
     setFilterOptionsError('')
     // Lookup choices must not shrink with the current page or filtered rows.
-    // Public product references also work for roles without supplier-directory access.
-    void api.productsAll().then((allProducts) => {
+    // Catalogue references work for roles without supplier-directory access.
+    void api.productsAll(token).then((allProducts) => {
       if (!active) return
       setProductSupplierIds([...new Set(allProducts.flatMap((product) => product.supplier_id === null ? [] : [product.supplier_id]))])
       setProductCategoryIds([...new Set(allProducts.map((product) => product.category_id))])
@@ -85,20 +87,21 @@ export function ProductsPage() {
       if (active) setFilterOptionsError('Không thể tải đầy đủ bộ lọc danh mục và nhà cung cấp. Vui lòng thử lại.')
     }).finally(() => { if (active) setFilterOptionsLoading(false) })
     return () => { active = false }
-  }, [refresh])
+  }, [refresh, token])
 
   useEffect(() => {
+    if (!token) return
     let active = true
     setLoading(true); setError('')
     const filtered = search.trim() !== '' || categoryId !== null || supplierId !== null || status !== ''
-    // The API has pagination only. Filters must evaluate every page, not just the first 100 records.
-    const request = filtered ? api.productsAll().then((allProducts) => {
+    // Local combined filters evaluate every page, not just the first 100 records.
+    const request = filtered ? api.productsAll(token).then((allProducts) => {
       const matching = filterProducts(allProducts, { categoryId, search }).filter((product) =>
         (supplierId === null || product.supplier_id === supplierId) &&
         (status === '' || product.is_active === (status === 'active')),
       )
       return { items: matching.slice((page - 1) * 100, page * 100), total: matching.length, page, page_size: 100 }
-    }) : api.products(page)
+    }) : api.products(token, page)
     void request.then((result) => {
       if (!active) return
       const lastPage = Math.max(1, Math.ceil(result.total / result.page_size))
@@ -106,9 +109,9 @@ export function ProductsPage() {
       setProducts(result.items); setTotal(result.total); setPageSize(result.page_size)
     }).catch((cause) => { if (active) setError(message(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [categoryId, page, refresh, search, status, supplierId])
+  }, [categoryId, page, refresh, search, status, supplierId, token])
 
-  const remove = async () => { if (!token || !removing || busy) return; setBusy(true); setRemoveError(''); try { await api.deleteProduct(token, removing.id); setRemoving(null); setRefresh((value) => value + 1) } catch (cause) { if (cause instanceof ApiError && cause.status === 401) logout(); else setRemoveError(deleteMessage(cause)) } finally { setBusy(false) } }
+  const remove = async () => { if (!token || !removing || busy) return; setBusy(true); setRemoveError(''); try { await api.deleteProduct(token, removing.id); setRemoving(null); setRefresh((value) => value + 1) } catch (cause) { if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() } else setRemoveError(deleteMessage(cause)) } finally { setBusy(false) } }
   const canWrite = user?.role === 'admin'
   const categoryName = (id: number) => categories.find((category) => category.id === id)?.name ?? `Danh mục #${id}`
   const supplierName = (id: number | null) => id === null ? 'Chưa có nhà cung cấp' : suppliers.find((supplier) => supplier.id === id)?.name ?? `Nhà cung cấp #${id}`

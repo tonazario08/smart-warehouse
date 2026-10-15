@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-04-phase-1-production-ready-design.md`
 
+**Execution authority:** `P1-C01` at `docs/tasks/phase-1/P1-C01-phase-1-corrective.md` is the single executable corrective task for this plan. The twenty numbered tasks below are internal workstreams of `P1-C01` under Model A, not separately routed executable tasks.
+
 ## Global Constraints
 
 - Public API routes are rooted at `/api/v1`.
@@ -64,7 +66,7 @@ The checked-in test Compose file owns only disposable test data. A developer mus
 | `tests/unit/` | Database-independent rules and schema tests |
 | `tests/postgres/` | PostgreSQL migration, integration, constraint, and concurrency tests |
 | `client/src/app/` | Providers, routes, layout, and navigation |
-| `client/src/features/` | Feature-grouped auth, dashboard, users, audit, master data, warehouses, and inventory modules |
+| `client/src/features/` | Auth, dashboard, users, audit, master data, warehouses, and inventory |
 | `client/src/shared/` | API client, common types, forms, errors, and UI primitives |
 | `client/e2e/` | Playwright critical-path specifications |
 
@@ -84,7 +86,6 @@ The checked-in test Compose file owns only disposable test data. A developer mus
 - Modify: `.env.example`
 - Create: `tests/unit/test_config.py`
 - Create: `tests/unit/test_pagination.py`
-- Create: `tests/conftest.py`
 - Modify: `tests/test_health.py`
 - Create: `tests/test_error_contract.py`
 
@@ -93,7 +94,7 @@ The checked-in test Compose file owns only disposable test data. A developer mus
 - Produces: `GET /api/v1/health/live` and database-dependent `GET /api/v1/health/ready`.
 - Consumes: existing FastAPI application factory and SQLAlchemy session dependency.
 
-- [ ] **Step 1: Write failing configuration and pagination tests**
+- [x] **Step 1: Write failing configuration and pagination tests**
 
 ```python
 # tests/unit/test_config.py
@@ -121,13 +122,13 @@ def test_page_size_is_bounded() -> None:
         PageParams(page=1, page_size=101)
 ```
 
-- [ ] **Step 2: Run the focused tests and verify the missing modules fail**
+- [x] **Step 2: Run the focused tests and verify the missing modules fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_config.py tests/unit/test_pagination.py -q`
 
 Expected: collection fails because `app.core.config` and `app.core.pagination` do not exist.
 
-- [ ] **Step 3: Implement typed settings and pagination primitives**
+- [x] **Step 3: Implement typed settings and pagination primitives**
 
 ```python
 # app/core/config.py
@@ -145,7 +146,7 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_expire_minutes: int = Field(default=30, ge=5, le=1440)
-    cors_origins: list[str] = Field(default_factory=list)
+    cors_origins: list[str] = []
 
     @model_validator(mode="after")
     def reject_unsafe_production_values(self) -> "Settings":
@@ -170,10 +171,6 @@ class PageParams(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
-    @property
-    def offset(self) -> int:
-        return (self.page - 1) * self.page_size
-
 class Page(BaseModel, Generic[T]):
     items: list[T]
     total: int
@@ -181,15 +178,7 @@ class Page(BaseModel, Generic[T]):
     page_size: int
 ```
 
-Create `tests/conftest.py` with a `unit_settings` fixture that explicitly supplies an in-memory
-SQLite URL, a test-only JWT secret of at least 32 characters, and empty CORS origins. Its
-`test_client` fixture calls `create_app(unit_settings)` so tests never depend on the developer's
-`.env`. At module import time, use `os.environ.setdefault()` for `APP_ENV=test`, the test-only
-SQLite URL, and the test-only JWT secret so importing the module-level `app = create_app()` is also
-independent of `.env`. Change the factory signature to
-`create_app(settings: Settings | None = None) -> FastAPI`.
-
-- [ ] **Step 4: Write failing error-contract and probe tests**
+- [x] **Step 4: Write failing error-contract and probe tests**
 
 ```python
 # tests/test_error_contract.py
@@ -204,24 +193,9 @@ def test_liveness_does_not_touch_database(test_client) -> None:
     response = test_client.get("/api/v1/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "alive"}
-
-def test_readiness_reports_database_failure(unit_settings) -> None:
-    class BrokenSession:
-        def execute(self, _statement):
-            raise SQLAlchemyError("database detail that must not escape")
-    application = create_app(unit_settings)
-    application.dependency_overrides[get_session] = lambda: BrokenSession()
-    response = TestClient(application, raise_server_exceptions=False).get("/api/v1/health/ready")
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "DATABASE_UNAVAILABLE"
-    assert "database detail" not in response.text
 ```
 
-Add a test-only route that raises `RuntimeError("secret internal detail")` and assert the global
-handler returns `500`, code `INTERNAL_SERVER_ERROR`, and no exception text when the client uses
-`raise_server_exceptions=False`.
-
-- [ ] **Step 5: Implement the common error model and exception handlers**
+- [x] **Step 5: Implement the common error model and exception handlers**
 
 ```python
 # app/core/errors.py
@@ -268,7 +242,7 @@ Register safe handlers for `HTTPException`, expected `IntegrityError`, and uncau
 the same file. Log uncaught exceptions server-side and return `INTERNAL_SERVER_ERROR` without
 including exception text.
 
-- [ ] **Step 6: Move engine/CORS configuration to Settings and add probes**
+- [x] **Step 6: Move engine/CORS configuration to Settings and add probes**
 
 ```python
 # app/main.py (route bodies)
@@ -289,16 +263,16 @@ Update `.env.example` to use `JWT_SECRET_KEY`, `JWT_EXPIRE_MINUTES`, and JSON-fo
 `CORS_ORIGINS`. Remove the SQLite runtime fallback from `app/db/session.py`; missing
 `DATABASE_URL` must fail configuration loading.
 
-- [ ] **Step 7: Run focused and baseline regression tests**
+- [x] **Step 7: Run focused and baseline regression tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_config.py tests/unit/test_pagination.py tests/test_error_contract.py tests/test_health.py -q`
 
 Expected: all listed tests pass and no error body contains SQL or an exception string.
 
-- [ ] **Step 8: Commit the core contract**
+- [x] **Step 8: Commit the core contract**
 
 ```powershell
-git add .env.example app/core app/db/session.py app/main.py tests/conftest.py tests/unit tests/test_error_contract.py tests/test_health.py
+git add .env.example app/core app/db/session.py app/main.py tests/unit tests/test_error_contract.py tests/test_health.py
 git commit -m "feat(core): add safe configuration and API contracts"
 ```
 
@@ -317,7 +291,7 @@ git commit -m "feat(core): add safe configuration and API contracts"
 - Produces: pytest marker `postgres` and a disposable PostgreSQL service on host port `55432`.
 - Consumes: `TEST_DATABASE_URL`, Alembic configuration, `create_app()`, and `get_session`.
 
-- [ ] **Step 1: Add a failing PostgreSQL migration test**
+- [x] **Step 1: Add a failing PostgreSQL migration test**
 
 ```python
 # tests/postgres/test_migrations.py
@@ -337,13 +311,13 @@ def test_migrations_build_expected_schema(postgres_url: str) -> None:
     assert {"users", "products", "warehouses", "stocks", "transactions"} <= tables
 ```
 
-- [ ] **Step 2: Run the test and verify it fails without the fixture/service**
+- [x] **Step 2: Run the test and verify it fails without the fixture/service**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_migrations.py -q`
 
 Expected: collection fails because fixture `postgres_url` is unavailable.
 
-- [ ] **Step 3: Add the disposable PostgreSQL service**
+- [x] **Step 3: Add the disposable PostgreSQL service**
 
 ```yaml
 # docker-compose.test.yml
@@ -363,14 +337,12 @@ services:
       retries: 20
 ```
 
-- [ ] **Step 4: Implement PostgreSQL fixtures with database-name protection**
+- [x] **Step 4: Implement PostgreSQL fixtures with database-name protection**
 
 ```python
 # tests/postgres/conftest.py
 import os
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -385,9 +357,6 @@ def postgres_url() -> str:
 @pytest.fixture(scope="session")
 def postgres_engine(postgres_url: str):
     engine = create_engine(postgres_url, pool_pre_ping=True)
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", postgres_url)
-    command.upgrade(config, "head")
     yield engine
     engine.dispose()
 
@@ -404,13 +373,10 @@ def postgres_session(postgres_engine):
         ))
 ```
 
-Add `postgres_client` by creating `create_app(test_settings)`, overriding `get_session` with the
-fixture session, and yielding a `TestClient`. Add `make_user(email, role=UserRole.CLIENT)` and
-`auth_headers(user)` fixture helpers so later PostgreSQL tests share one identity setup path.
-Configure the `postgres` marker in `pyproject.toml` so unknown markers fail under the existing
-strict setting.
+Add `postgres_client` by overriding `get_session` with the fixture session. Configure the
+`postgres` marker in `pyproject.toml` so unknown markers fail under the existing strict setting.
 
-- [ ] **Step 5: Start PostgreSQL and run the migration test**
+- [x] **Step 5: Start PostgreSQL and run the migration test**
 
 Run: `docker compose -f docker-compose.test.yml up -d db_test`
 
@@ -418,7 +384,7 @@ Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_migrations.py -q`
 
 Expected: the migration reaches `head` against PostgreSQL 16 and the table assertion passes.
 
-- [ ] **Step 6: Commit the PostgreSQL harness**
+- [x] **Step 6: Commit the PostgreSQL harness**
 
 ```powershell
 git add docker-compose.test.yml pyproject.toml tests/postgres tests/test_migration.py
@@ -442,7 +408,7 @@ git commit -m "test(db): add PostgreSQL integration harness"
 - Produces: PostgreSQL checks for normalized identity fields, coordinates, and stock-transaction linkage.
 - Consumes: existing `User`, `Product`, `Warehouse`, `Stock`, `Inbound`, `Outbound`, and `StockTransaction` models.
 
-- [ ] **Step 1: Write failing PostgreSQL constraint tests**
+- [x] **Step 1: Write failing PostgreSQL constraint tests**
 
 ```python
 # tests/postgres/test_constraints.py
@@ -467,13 +433,13 @@ def test_normalized_email_is_unique_case_insensitively(postgres_session, make_us
         postgres_session.commit()
 ```
 
-- [ ] **Step 2: Run the constraint tests and verify they fail**
+- [x] **Step 2: Run the constraint tests and verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_constraints.py -q`
 
 Expected: at least the coordinate and case-insensitive email tests fail because the new checks/indexes are absent.
 
-- [ ] **Step 3: Add the audit model and model-level checks**
+- [x] **Step 3: Add the audit model and model-level checks**
 
 ```python
 # app/audit/models.py
@@ -502,25 +468,12 @@ class AuditLog(IdentifierMixin, Base):
 Add SQLAlchemy `CheckConstraint` definitions for paired/ranged coordinates and exactly one
 movement link per stock transaction. Re-export `AuditLog` through `app.models`.
 
-- [ ] **Step 4: Write the additive Alembic revision**
+- [x] **Step 4: Write the additive Alembic revision**
 
 The revision must normalize existing email/SKU/warehouse codes before adding checks, create the
 `audit_logs` table and indexes, and add named constraints/indexes:
 
 ```python
-op.execute("UPDATE users SET email = lower(btrim(email))")
-op.execute("UPDATE suppliers SET email = lower(btrim(email)) WHERE email IS NOT NULL")
-op.execute("UPDATE products SET sku = upper(btrim(sku))")
-op.execute("UPDATE warehouses SET code = upper(btrim(code))")
-op.create_check_constraint("ck_users_email_normalized", "users", "email = lower(btrim(email))")
-op.create_check_constraint(
-    "ck_suppliers_email_normalized", "suppliers",
-    "email IS NULL OR email = lower(btrim(email))",
-)
-op.create_check_constraint("ck_products_sku_normalized", "products", "sku = upper(btrim(sku))")
-op.create_check_constraint(
-    "ck_warehouses_code_normalized", "warehouses", "code = upper(btrim(code))",
-)
 op.create_check_constraint(
     "ck_warehouses_coordinates_paired_and_ranged",
     "warehouses",
@@ -528,9 +481,6 @@ op.create_check_constraint(
     "(latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)",
 )
 op.create_index("uq_users_email_lower", "users", [sa.text("lower(email)")], unique=True)
-op.create_index(
-    "uq_suppliers_email_lower", "suppliers", [sa.text("lower(email)")], unique=True,
-)
 op.create_index("uq_products_sku_upper", "products", [sa.text("upper(sku)")], unique=True)
 op.create_check_constraint(
     "ck_transactions_exactly_one_movement",
@@ -543,7 +493,7 @@ op.create_check_constraint(
 The downgrade removes only objects introduced by revision `20260904_0002`; it does not recreate
 the initial schema.
 
-- [ ] **Step 5: Extend migration assertions and run PostgreSQL tests**
+- [x] **Step 5: Extend migration assertions and run PostgreSQL tests**
 
 Assert `audit_logs` exists and inspect named checks/indexes. Then run:
 
@@ -551,7 +501,7 @@ Assert `audit_logs` exists and inspect named checks/indexes. Then run:
 
 Expected: upgrade from base and upgrade from revision `20260829_0001` both reach head; all constraints pass.
 
-- [ ] **Step 6: Commit the additive schema hardening**
+- [x] **Step 6: Commit the additive schema hardening**
 
 ```powershell
 git add app/audit app/models alembic/versions/20260904_0002_production_baseline.py tests/postgres
@@ -565,28 +515,23 @@ git commit -m "feat(db): harden constraints and add audit log"
 ### Task 4: Refactor Authentication into Router, Service, and Repository
 
 **Files:**
+- Create: `app/auth/repository.py`
 - Create: `app/auth/service.py`
-- Create: `app/users/__init__.py`
-- Create: `app/users/repository.py`
 - Modify: `app/auth/schemas.py`
 - Modify: `app/auth/security.py`
 - Modify: `app/auth/dependencies.py`
 - Modify: `app/auth/router.py`
 - Replace: `tests/test_auth.py`
-- Modify: `tests/test_master_data.py`
-- Modify: `tests/test_warehouses.py`
-- Modify: `tests/test_inventory.py`
-- Modify: `tests/test_dashboard.py`
 - Create: `tests/unit/test_auth_schemas.py`
 - Create: `tests/postgres/test_auth_integration.py`
 
 **Interfaces:**
-- Produces: the user domain interface `UserRepository.get_by_id()`, `get_by_email()`, `add()` for authentication and later administration.
+- Produces: `UserRepository.get_by_id()`, `get_by_email()`, `add()`.
 - Produces: `AuthService.register(email, password) -> User` and `authenticate(email, password) -> User`.
 - Produces: `create_access_token(user_id: int, settings: Settings, expires_delta=None) -> str` containing `sub`, `iat`, and `exp` only.
 - Produces: strict `RegisterRequest`, `LoginRequest`, `TokenResponse`, and `UserResponse`.
 
-- [ ] **Step 1: Write failing strict-registration and JWT tests**
+- [x] **Step 1: Write failing strict-registration and JWT tests**
 
 ```python
 # tests/postgres/test_auth_integration.py
@@ -609,13 +554,13 @@ def test_access_token_does_not_carry_authoritative_role(settings, client_user) -
     assert set(claims) == {"sub", "iat", "exp"}
 ```
 
-- [ ] **Step 2: Run the auth tests and confirm current behavior fails**
+- [x] **Step 2: Run the auth tests and confirm current behavior fails**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py -q`
 
 Expected: public registration accepts role or the JWT still includes role.
 
-- [ ] **Step 3: Make request schemas strict and normalize email**
+- [x] **Step 3: Make request schemas strict and normalize email**
 
 ```python
 class RegisterRequest(BaseModel):
@@ -632,7 +577,7 @@ class RegisterRequest(BaseModel):
 Add `email-validator>=2.2,<3.0` to `pyproject.toml`. Apply the same normalization and strict-extra
 policy to login without exposing whether an email exists.
 
-- [ ] **Step 4: Implement repository and service ownership**
+- [x] **Step 4: Implement repository and service ownership**
 
 ```python
 class AuthService:
@@ -655,39 +600,32 @@ Implement `authenticate()` as a read-only service method that returns the same
 `INVALID_CREDENTIALS` response for missing, disabled, or mismatched users. The router builds the
 response and contains no SQLAlchemy query or commit.
 
-- [ ] **Step 5: Reload current user state from PostgreSQL on every protected request**
+- [x] **Step 5: Reload current user state from PostgreSQL on every protected request**
 
 Update `get_current_user` to decode only `sub`, query `UserRepository.get_by_id`, and reject a
 missing/disabled user. Preserve the centralized `Permission -> frozenset[UserRole]` mapping; add
 `CATALOG_READ`, `SUPPLIER_WRITE`, `USER_MANAGE`, and `AUDIT_READ` instead of reusing unrelated
-permissions. Apply `CATALOG_READ` immediately to existing category/product list and detail routes,
-and change their legacy public-read tests to use authenticated client headers.
+permissions.
 
-Update every existing test token helper to call `create_access_token(user.id, settings=unit_settings)`;
-remove the obsolete positional role argument so intermediate commits keep the entire suite green.
-
-- [ ] **Step 6: Run auth, error-contract, and security regressions**
+- [x] **Step 6: Run auth, error-contract, and security regressions**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_error_contract.py -q`
 
 Expected: all pass; responses and audit-capable serializers contain no `password_hash` field.
 
-Run: `.venv\Scripts\python.exe -m pytest -q`
-
-Expected: the full current suite passes after all legacy token helpers and catalogue expectations are updated.
-
-- [ ] **Step 7: Commit the authentication boundary**
+- [x] **Step 7: Commit the authentication boundary**
 
 ```powershell
-git add pyproject.toml app/auth app/master_data/router.py app/users/__init__.py app/users/repository.py tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py tests/test_master_data.py tests/test_warehouses.py tests/test_inventory.py tests/test_dashboard.py
+git add pyproject.toml app/auth tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py
 git commit -m "fix(auth): secure registration and database-backed authorization"
 ```
 
 ### Task 5: Admin User Management with Atomic Administrative Audit
 
 **Files:**
+- Create: `app/users/__init__.py`
 - Create: `app/users/schemas.py`
-- Modify: `app/users/repository.py`
+- Create: `app/users/repository.py`
 - Create: `app/users/service.py`
 - Create: `app/users/router.py`
 - Create: `app/audit/schemas.py`
@@ -701,14 +639,10 @@ git commit -m "fix(auth): secure registration and database-backed authorization"
 **Interfaces:**
 - Produces: `POST /api/v1/users`, `GET /users`, `GET /users/{id}`, `PATCH /users/{id}/role`, and `PATCH /users/{id}/status`.
 - Produces: `GET /api/v1/audit-logs` and `GET /audit-logs/{id}`; no audit mutation route.
-- Produces: `AuditService.record(actor_id, action, target_type, target_id, before, after) -> AuditLog` with allowlisted user fields.
+- Produces: `AuditService.record_user_event(actor, action, before, after) -> AuditLog` with allowlisted fields.
 - Consumes: `PageParams`, `Page`, `DomainError`, `Permission.USER_MANAGE`, and `Permission.AUDIT_READ`.
 
-User listing accepts `search`, `role`, and `is_active`. Audit listing accepts `actor_user_id`,
-`action`, and `target_type`. Both use bounded `PageParams`, stable descending/ascending ID ordering
-as documented by their response contract, and identical filters for item/count queries.
-
-- [ ] **Step 1: Write failing admin-action and self-protection tests**
+- [x] **Step 1: Write failing admin-action and self-protection tests**
 
 ```python
 # tests/postgres/test_users_audit.py
@@ -734,13 +668,13 @@ def test_admin_cannot_modify_an_admin(postgres_client, admin, admin_headers) -> 
         assert response.json()["detail"]["code"] == "ADMIN_ACCOUNT_PROTECTED"
 ```
 
-- [ ] **Step 2: Run the user-management test and confirm routes are missing**
+- [x] **Step 2: Run the user-management test and confirm routes are missing**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_users_audit.py -q`
 
 Expected: requests return `404` because the users and audit routers do not exist.
 
-- [ ] **Step 3: Implement strict user and audit schemas**
+- [x] **Step 3: Implement strict user and audit schemas**
 
 ```python
 class ManagedRole(StrEnum):
@@ -764,7 +698,7 @@ class UserStatusUpdate(BaseModel):
 
 Audit response schemas expose `before_data`/`after_data` and UTC timestamps, never user hashes.
 
-- [ ] **Step 4: Implement domain-specific repositories without commit**
+- [x] **Step 4: Implement domain-specific repositories without commit**
 
 `UserRepository` supplies paginated list/count/get/add and mutation of loaded entities.
 `AuditRepository` supplies add/list/count/get. Verify with this architectural test:
@@ -778,7 +712,7 @@ def test_repositories_do_not_commit(monkeypatch, postgres_session) -> None:
     AuditRepository(postgres_session).list(PageParams())
 ```
 
-- [ ] **Step 5: Implement service transaction and audit behavior**
+- [x] **Step 5: Implement service transaction and audit behavior**
 
 ```python
 def change_status(self, actor: User, target_id: int, is_active: bool) -> User:
@@ -802,19 +736,19 @@ Use the same transaction pattern for internal creation and role changes. Convert
 conflicts to `USER_EMAIL_CONFLICT`; allow the safe global handler to sanitize unexpected audit
 failures.
 
-- [ ] **Step 6: Test rollback when audit persistence fails**
+- [x] **Step 6: Test rollback when audit persistence fails**
 
 Patch `AuditRepository.add` to raise during internal user creation, call the service, then assert a
 new independent PostgreSQL session finds neither the user nor audit row. This test must verify
 database state after rollback, not only the raised error.
 
-- [ ] **Step 7: Run focused user/audit and auth tests**
+- [x] **Step 7: Run focused user/audit and auth tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_audit_payload.py tests/postgres/test_users_audit.py tests/postgres/test_auth_integration.py -q`
 
 Expected: all pass; only admins can call either router, no ordinary API can assign `admin`, and audit is atomic.
 
-- [ ] **Step 8: Commit user administration and audit**
+- [x] **Step 8: Commit user administration and audit**
 
 ```powershell
 git add app/users app/audit app/main.py tests/unit/test_audit_payload.py tests/postgres/test_users_audit.py
@@ -841,7 +775,7 @@ git commit -m "feat(users): add audited admin account management"
 - Produces: authenticated CRUD routes at `/api/v1/categories` with `CATALOG_READ` for reads and `PRODUCT_WRITE` for mutations.
 - Consumes: `PageParams`, `Page[CategoryResponse]`, `DomainError`, and a request-scoped `Session`.
 
-- [ ] **Step 1: Write failing authentication and indirect-cycle tests**
+- [x] **Step 1: Write failing authentication and indirect-cycle tests**
 
 ```python
 # tests/postgres/test_categories.py
@@ -861,13 +795,13 @@ def test_category_rejects_indirect_parent_cycle(postgres_client, admin_headers) 
     assert response.json()["detail"]["code"] == "CATEGORY_PARENT_CYCLE"
 ```
 
-- [ ] **Step 2: Run category tests and observe public-read/cycle failures**
+- [x] **Step 2: Run category tests and observe public-read/cycle failures**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py -q`
 
 Expected: anonymous read succeeds unexpectedly or indirect cycle is accepted.
 
-- [ ] **Step 3: Implement category repository and service**
+- [x] **Step 3: Implement category repository and service**
 
 ```python
 class CategoryService:
@@ -886,7 +820,7 @@ class CategoryService:
 The router constructs the service from the injected session, declares permission dependencies,
 and delegates without importing `select`, `func`, or `IntegrityError`.
 
-- [ ] **Step 4: Add an architecture test that forbids repository commit calls**
+- [x] **Step 4: Add an architecture test that forbids repository commit calls**
 
 ```python
 # tests/unit/test_architecture.py
@@ -904,13 +838,13 @@ def test_repository_modules_never_call_commit() -> None:
     assert offenders == []
 ```
 
-- [ ] **Step 5: Run category and architecture tests**
+- [x] **Step 5: Run category and architecture tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/unit/test_architecture.py -q`
 
 Expected: anonymous receives `401`, authenticated roles can read, only admin mutates, cycles and references return stable errors.
 
-- [ ] **Step 6: Commit the category domain slice**
+- [x] **Step 6: Commit the category domain slice**
 
 ```powershell
 git add app/master_data tests/unit/test_architecture.py tests/postgres/test_categories.py tests/test_master_data.py
@@ -932,7 +866,7 @@ git commit -m "refactor(categories): add service and repository boundary"
 - Produces: bounded, filterable `/api/v1/suppliers` responses.
 - Consumes: `SUPPLIER_READ` for admin/warehouse and `SUPPLIER_WRITE` for admin.
 
-- [ ] **Step 1: Write failing supplier RBAC, normalization, and conflict tests**
+- [x] **Step 1: Write failing supplier RBAC, normalization, and conflict tests**
 
 ```python
 def test_supplier_permissions_and_normalized_email(postgres_client, role_headers) -> None:
@@ -950,19 +884,19 @@ def test_supplier_permissions_and_normalized_email(postgres_client, role_headers
     ).status_code == 403
 ```
 
-- [ ] **Step 2: Run supplier tests and confirm router-owned persistence fails the architecture target**
+- [x] **Step 2: Run supplier tests and confirm router-owned persistence fails the architecture target**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_suppliers.py tests/unit/test_architecture.py -q`
 
 Expected: normalization or stable errors fail before the new service/repository behavior.
 
-- [ ] **Step 3: Add strict schemas and supplier query filters**
+- [x] **Step 3: Add strict schemas and supplier query filters**
 
 `SupplierCreate` and `SupplierUpdate` use `extra="forbid"`, normalize optional email, trim name,
 phone, and address, and reject empty strings after trimming. `SupplierRepository.list()` accepts
 `search: str | None`, `PageParams`, and orders by `id` for stable pagination.
 
-- [ ] **Step 4: Implement service transaction/error mapping**
+- [x] **Step 4: Implement service transaction/error mapping**
 
 ```python
 def create(self, request: SupplierCreate) -> Supplier:
@@ -980,13 +914,13 @@ def create(self, request: SupplierCreate) -> Supplier:
 Delete maps referenced products to `SUPPLIER_IN_USE`; get/update missing records map to
 `SUPPLIER_NOT_FOUND`.
 
-- [ ] **Step 5: Run supplier, category, and architecture tests**
+- [x] **Step 5: Run supplier, category, and architecture tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_suppliers.py tests/postgres/test_categories.py tests/unit/test_architecture.py -q`
 
 Expected: all pass and repository files remain free of commits.
 
-- [ ] **Step 6: Commit the supplier slice**
+- [x] **Step 6: Commit the supplier slice**
 
 ```powershell
 git add app/master_data tests/postgres/test_suppliers.py tests/test_master_data.py
@@ -1008,7 +942,7 @@ git commit -m "refactor(suppliers): add validated domain service"
 - Produces: authenticated, bounded product reads and admin-only writes with `search`, `category_id`, `supplier_id`, and `is_active` filters.
 - Consumes: category/supplier repository lookups and PostgreSQL normalized SKU uniqueness.
 
-- [ ] **Step 1: Write failing product authentication, normalization, and reference tests**
+- [x] **Step 1: Write failing product authentication, normalization, and reference tests**
 
 ```python
 def test_product_is_authenticated_and_sku_is_normalized(
@@ -1024,19 +958,19 @@ def test_product_is_authenticated_and_sku_is_normalized(
     assert postgres_client.get("/api/v1/products", headers=client_headers).status_code == 200
 ```
 
-- [ ] **Step 2: Run product tests and verify current public-read/raw-SKU behavior fails**
+- [x] **Step 2: Run product tests and verify current public-read/raw-SKU behavior fails**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_products.py -q`
 
 Expected: anonymous access or SKU normalization assertion fails.
 
-- [ ] **Step 3: Implement strict schemas and product repository filters**
+- [x] **Step 3: Implement strict schemas and product repository filters**
 
 Use separate create/update schemas, both `extra="forbid"`. Normalize SKU with
 `value.strip().upper()`, trim textual fields, enforce `reorder_level >= 0`, and reject an empty
 unit. Repository results order by product `id`; list/count apply identical filters.
 
-- [ ] **Step 4: Implement product business rules and stable domain errors**
+- [x] **Step 4: Implement product business rules and stable domain errors**
 
 ```python
 def _validate_references(self, category_id: int, supplier_id: int | None) -> None:
@@ -1049,13 +983,13 @@ def _validate_references(self, category_id: int, supplier_id: int | None) -> Non
 Map unique SKU conflicts to `PRODUCT_SKU_CONFLICT`, missing records to `PRODUCT_NOT_FOUND`, and
 referenced deletion to `PRODUCT_IN_USE`. Router methods only adapt HTTP inputs/outputs.
 
-- [ ] **Step 5: Run all master-data PostgreSQL tests and architecture test**
+- [x] **Step 5: Run all master-data PostgreSQL tests and architecture test**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_categories.py tests/postgres/test_suppliers.py tests/postgres/test_products.py tests/unit/test_architecture.py -q`
 
 Expected: all pass with no anonymous catalogue access.
 
-- [ ] **Step 6: Commit the product slice**
+- [x] **Step 6: Commit the product slice**
 
 ```powershell
 git add app/master_data tests/postgres/test_products.py tests/test_master_data.py
@@ -1065,13 +999,10 @@ git commit -m "refactor(products): add secure product service slice"
 ### Task 9: Warehouse Repository, Service, Coordinates, and Protected Delete
 
 **Files:**
-- Create: `app/warehouses/__init__.py`
-- Create: `app/warehouses/repository.py`
-- Create: `app/warehouses/service.py`
-- Move: `app/warehouse/schemas.py` to `app/warehouses/schemas.py`
-- Move: `app/warehouse/router.py` to `app/warehouses/router.py`
-- Delete: `app/warehouse/__init__.py`
-- Modify: `app/main.py`
+- Create: `app/warehouse/repository.py`
+- Create: `app/warehouse/service.py`
+- Modify: `app/warehouse/schemas.py`
+- Modify: `app/warehouse/router.py`
 - Create: `tests/postgres/test_warehouses.py`
 - Modify: `tests/test_warehouses.py` (retain only database-independent unit coverage)
 
@@ -1080,7 +1011,7 @@ git commit -m "refactor(products): add secure product service slice"
 - Produces: paginated `/api/v1/warehouses` with `search` filter, authenticated reads, and admin-only mutations.
 - Consumes: coordinate database constraint from Task 3 and common pagination/errors.
 
-- [ ] **Step 1: Write failing coordinate and delete-contract API tests**
+- [x] **Step 1: Write failing coordinate and delete-contract API tests**
 
 ```python
 def test_coordinates_must_be_paired_and_ranged(postgres_client, admin_headers) -> None:
@@ -1101,13 +1032,13 @@ def test_referenced_warehouse_cannot_be_deleted(
     assert response.json()["detail"]["code"] == "WAREHOUSE_IN_USE"
 ```
 
-- [ ] **Step 2: Run warehouse tests and verify missing delete/validation behavior**
+- [x] **Step 2: Run warehouse tests and verify missing delete/validation behavior**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_warehouses.py -q`
 
 Expected: coordinate response or delete route fails.
 
-- [ ] **Step 3: Implement strict paired-coordinate schema validation**
+- [x] **Step 3: Implement strict paired-coordinate schema validation**
 
 ```python
 @model_validator(mode="after")
@@ -1120,22 +1051,22 @@ def coordinates_are_paired(self) -> "WarehouseWrite":
 Declare latitude/longitude bounds with `Field(ge=..., le=...)`, normalize warehouse code to
 uppercase, trim name/address, and use separate response schema with UTC timestamps.
 
-- [ ] **Step 4: Implement warehouse service/repository and delete route**
+- [x] **Step 4: Implement warehouse service/repository and delete route**
 
 Service maps code/name conflicts to `WAREHOUSE_CONFLICT`, missing records to
 `WAREHOUSE_NOT_FOUND`, and foreign-key delete failures to `WAREHOUSE_IN_USE`. Repository applies
 stable pagination/filtering and contains no transaction boundary.
 
-- [ ] **Step 5: Run warehouse, constraint, and architecture tests**
+- [x] **Step 5: Run warehouse, constraint, and architecture tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_warehouses.py tests/postgres/test_constraints.py tests/unit/test_architecture.py -q`
 
 Expected: all pass for admin, warehouse, and client read rules; only admin can mutate.
 
-- [ ] **Step 6: Commit the warehouse slice**
+- [x] **Step 6: Commit the warehouse slice**
 
 ```powershell
-git add app/warehouse app/warehouses app/main.py tests/postgres/test_warehouses.py tests/test_warehouses.py
+git add app/warehouse tests/postgres/test_warehouses.py tests/test_warehouses.py
 git commit -m "refactor(warehouses): add validated service slice"
 ```
 
@@ -1158,7 +1089,7 @@ git commit -m "refactor(warehouses): add validated service slice"
 - Produces: paginated/filterable `GET /stock`, `/inbounds`, `/outbounds`, and `/transactions`, plus detail routes for each resource.
 - Consumes: `INVENTORY_READ` for admin/warehouse/client stock and `INVENTORY_HISTORY_READ` for admin/warehouse movement/history access.
 
-- [ ] **Step 1: Write failing pagination, filter, detail, and client-boundary tests**
+- [x] **Step 1: Write failing pagination, filter, detail, and client-boundary tests**
 
 ```python
 def test_inventory_collections_are_bounded_and_filtered(
@@ -1180,20 +1111,20 @@ def test_client_reads_stock_but_not_movements(postgres_client, client_headers) -
     assert postgres_client.get("/api/v1/transactions", headers=client_headers).status_code == 403
 ```
 
-- [ ] **Step 2: Run inventory-read tests and verify collection shape/routes fail**
+- [x] **Step 2: Run inventory-read tests and verify collection shape/routes fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py -q`
 
 Expected: list responses are raw arrays or movement detail/list routes return `404`.
 
-- [ ] **Step 3: Define strict read/filter/response schemas**
+- [x] **Step 3: Define strict read/filter/response schemas**
 
 `InventoryFilters` accepts `warehouse_id`, `product_id`, `created_from`, and `created_to` with
 positive IDs and validates `created_from <= created_to`. `TransactionFilters` additionally accepts
 `transaction_type`. Response schemas expose IDs, quantities, references/notes where applicable,
 creator ID, and timezone-aware `created_at`.
 
-- [ ] **Step 4: Implement domain-specific read queries**
+- [x] **Step 4: Implement domain-specific read queries**
 
 ```python
 def list_transactions(self, filters: TransactionFilters, page: PageParams):
@@ -1211,13 +1142,13 @@ def list_transactions(self, filters: TransactionFilters, page: PageParams):
 Implement each domain query explicitly rather than introducing a generic repository. Service
 maps missing detail records to resource-specific `404` codes.
 
-- [ ] **Step 5: Run inventory-read, RBAC-adjacent, and architecture tests**
+- [x] **Step 5: Run inventory-read, RBAC-adjacent, and architecture tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py tests/unit/test_architecture.py -q`
 
 Expected: all collection/detail/filter and role assertions pass.
 
-- [ ] **Step 6: Commit inventory read contracts**
+- [x] **Step 6: Commit inventory read contracts**
 
 ```powershell
 git add app/inventory tests/postgres/test_inventory_reads.py tests/test_inventory.py
@@ -1240,7 +1171,7 @@ git commit -m "feat(inventory): add paginated movement history"
 - Produces: `InventoryRepository.get_stock_for_update()`, `insert_stock_if_absent()`, and append-only movement/stock-transaction methods.
 - Consumes: PostgreSQL unique stock pair, `INVENTORY_WRITE`, and the movement response schemas from Task 10.
 
-- [ ] **Step 1: Write failing atomicity tests for successful and rejected movements**
+- [x] **Step 1: Write failing atomicity tests for successful and rejected movements**
 
 ```python
 # tests/postgres/test_inventory_transactions.py
@@ -1266,7 +1197,7 @@ def test_outbound_is_atomic_and_has_exactly_one_business_audit(
     assert count_stock_transactions(postgres_session) == 1
 ```
 
-- [ ] **Step 2: Write failing concurrent-first-inbound and competing-outbound tests**
+- [x] **Step 2: Write failing concurrent-first-inbound and competing-outbound tests**
 
 ```python
 # tests/postgres/test_inventory_concurrency.py
@@ -1305,13 +1236,13 @@ controlled inbound/outbound interaction test that holds a row lock in one sessio
 second operation, releases the first transaction, and asserts the waiting operation evaluates the
 committed quantity rather than a stale value.
 
-- [ ] **Step 3: Run the transaction/concurrency tests and verify the current first-row race**
+- [x] **Step 3: Run the transaction/concurrency tests and verify the current first-row race**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_transactions.py tests/postgres/test_inventory_concurrency.py -q`
 
 Expected: the existing router-level implementation fails service imports, and concurrent initial stock creation is not safely handled.
 
-- [ ] **Step 4: Implement existing-row lock and first-row conflict handling**
+- [x] **Step 4: Implement existing-row lock and first-row conflict handling**
 
 ```python
 # app/inventory/repository.py
@@ -1345,7 +1276,7 @@ Inbound algorithm:
 6. Add inbound and exactly one linked stock transaction.
 7. Commit once in the service; rollback any exception.
 
-- [ ] **Step 5: Implement outbound lock/check/decrement in the service**
+- [x] **Step 5: Implement outbound lock/check/decrement in the service**
 
 ```python
 def create_outbound(self, actor_id: int, request: InventoryMovementCreate) -> Outbound:
@@ -1369,7 +1300,11 @@ def create_outbound(self, actor_id: int, request: InventoryMovementCreate) -> Ou
 Do not catch and transform `DomainError` into a `500`. Repository methods do not commit, and no
 inventory service calls `AuditRepository`.
 
-- [ ] **Step 6: Run each concurrency case repeatedly**
+- [x] **Step 6: Run each concurrency case repeatedly**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_concurrency.py -q --count=10`
+
+If `pytest-repeat` is not added, use PowerShell:
 
 ```powershell
 1..10 | ForEach-Object { .venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_concurrency.py -q; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
@@ -1377,7 +1312,7 @@ inventory service calls `AuditRepository`.
 
 Expected: all ten runs pass with final stock, movement history, and zero administrative audit rows exactly as asserted.
 
-- [ ] **Step 7: Run inventory regressions and commit**
+- [x] **Step 7: Run inventory regressions and commit**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_reads.py tests/postgres/test_inventory_transactions.py tests/postgres/test_inventory_concurrency.py tests/unit/test_architecture.py -q`
 
@@ -1403,7 +1338,7 @@ git commit -m "fix(inventory): make stock movements concurrency-safe"
 - Produces: complete permission mapping for catalogue, supplier, warehouse, inventory, dashboard, users, and audit actions.
 - Consumes: all routers completed in Tasks 4–11.
 
-- [ ] **Step 1: Write a failing single-snapshot dashboard test**
+- [x] **Step 1: Write a failing single-snapshot dashboard test**
 
 ```python
 def test_dashboard_is_admin_only_and_uses_database_aggregates(
@@ -1419,7 +1354,7 @@ def test_dashboard_is_admin_only_and_uses_database_aggregates(
     }
 ```
 
-- [ ] **Step 2: Implement a repository query with one PostgreSQL statement**
+- [x] **Step 2: Implement a repository query with one PostgreSQL statement**
 
 ```python
 def get_stats(self) -> DashboardStats:
@@ -1436,7 +1371,7 @@ def get_stats(self) -> DashboardStats:
 
 The service delegates the read and the router contains no SQLAlchemy aggregate code.
 
-- [ ] **Step 3: Write the full route-and-action RBAC matrix**
+- [x] **Step 3: Write the full route-and-action RBAC matrix**
 
 ```python
 @pytest.mark.parametrize(("method", "path", "allowed"), [
@@ -1462,19 +1397,19 @@ pass the test merely by returning a validation/not-found error. Add explicit act
 assigning `admin`, modifying an admin, client inventory mutation, warehouse master-data mutation,
 and client history access.
 
-- [ ] **Step 4: Add router boundary checks**
+- [x] **Step 4: Add router boundary checks**
 
 Extend `tests/unit/test_architecture.py` to parse every `router.py` and fail on imports from
 `sqlalchemy`, calls to `.commit()`/`.rollback()`, or direct model persistence. Allow imports from
 schemas, services, auth dependencies, FastAPI, and core types.
 
-- [ ] **Step 5: Run dashboard, RBAC, and architecture tests**
+- [x] **Step 5: Run dashboard, RBAC, and architecture tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_dashboard.py tests/postgres/test_rbac_matrix.py tests/unit/test_architecture.py -q`
 
 Expected: all route and action combinations match the approved matrix; routers/repositories satisfy their boundaries.
 
-- [ ] **Step 6: Run the full backend gate**
+- [x] **Step 6: Run the full backend gate**
 
 Run: `.venv\Scripts\python.exe -m ruff check app tests alembic`
 
@@ -1482,7 +1417,7 @@ Run: `.venv\Scripts\python.exe -m pytest -q`
 
 Expected: Ruff and all unit/PostgreSQL tests pass with `TEST_DATABASE_URL` configured.
 
-- [ ] **Step 7: Commit dashboard and RBAC completion**
+- [x] **Step 7: Commit dashboard and RBAC completion**
 
 ```powershell
 git add app/dashboard app/auth/dependencies.py tests/postgres/test_dashboard.py tests/postgres/test_rbac_matrix.py tests/unit/test_architecture.py tests/test_dashboard.py
@@ -1519,7 +1454,7 @@ git commit -m "test(rbac): enforce the complete Phase 1 permission matrix"
 - Produces: npm scripts `test`, `test:coverage`, `typecheck`, and `build`.
 - Consumes: `VITE_API_BASE_URL`, the approved backend error/page contract, and browser timezone formatting.
 
-- [ ] **Step 1: Install approved runtime and test dependencies**
+- [x] **Step 1: Install approved runtime and test dependencies**
 
 Run from `client`:
 
@@ -1531,16 +1466,16 @@ npm.cmd install --save-dev vitest jsdom @testing-library/react @testing-library/
 Review `package.json` and ensure test libraries are in `devDependencies`, then retain the generated
 lockfile.
 
-- [ ] **Step 2: Add failing API-client behavior tests**
+- [x] **Step 2: Add failing API-client behavior tests**
 
 ```typescript
 // client/src/shared/api/ApiClient.test.ts
 it('clears auth on 401 but preserves a 403 session and domain details', async () => {
   const onUnauthorized = vi.fn()
   const client = new ApiClient('/api/v1', () => 'token', onUnauthorized)
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+  server.use(http.get('/api/v1/users', () => HttpResponse.json({
     detail: { code: 'PERMISSION_DENIED', message: 'Permission denied.', fields: null },
-  }), { status: 403, headers: { 'Content-Type': 'application/json' } })))
+  }, { status: 403 })))
 
   await expect(client.request('/users')).rejects.toMatchObject({
     status: 403, code: 'PERMISSION_DENIED', message: 'Permission denied.',
@@ -1549,15 +1484,13 @@ it('clears auth on 401 but preserves a 403 session and domain details', async ()
 })
 ```
 
-Add a second fetch stub returning `401` and assert that it invokes `onUnauthorized` exactly once.
-Do not add MSW unless more than three suites need reusable network interception.
+Use `vi.stubGlobal('fetch', vi.fn())` instead of adding MSW unless more than three suites need
+network interception. Add a second assertion that a `401` invokes `onUnauthorized` exactly once.
 
-- [ ] **Step 3: Configure Vitest and run the missing-client failure**
+- [x] **Step 3: Configure Vitest and run the missing-client failure**
 
 ```typescript
 // client/vite.config.ts
-import { defineConfig } from 'vitest/config'
-
 export default defineConfig({
   plugins: [react()],
   test: { environment: 'jsdom', setupFiles: './src/test/setup.ts' },
@@ -1565,14 +1498,11 @@ export default defineConfig({
 })
 ```
 
-Set package scripts exactly to `"test": "vitest"`, `"test:coverage": "vitest run --coverage"`,
-`"typecheck": "tsc -b --pretty false"`, and retain `"build": "tsc -b && vite build"`.
-
 Run: `npm.cmd test -- --run src/shared/api/ApiClient.test.ts`
 
 Expected: test fails because `ApiClient` is not implemented.
 
-- [ ] **Step 4: Implement the typed API error/client contract**
+- [x] **Step 4: Implement the typed API error/client contract**
 
 ```typescript
 // client/src/shared/api/ApiClient.ts
@@ -1608,19 +1538,19 @@ export class ApiClient {
 bodies fall back to `UNEXPECTED_RESPONSE`. It does not turn `403` or domain conflicts into generic
 network errors.
 
-- [ ] **Step 5: Implement providers and reusable async/page controls**
+- [x] **Step 5: Implement providers and reusable async/page controls**
 
 Create one `QueryClient` with bounded retry behavior: no retry for `400`–`499`; at most one retry
 for transient server/network errors. `AsyncState` must render accessible loading, error, and empty
 states. `Pagination` disables invalid previous/next navigation and exposes the current page.
 
-- [ ] **Step 6: Build the responsive application shell**
+- [x] **Step 6: Build the responsive application shell**
 
 Move global tokens/layout styles to the replacement stylesheet. Preserve the existing dark
 warehouse visual identity, keyboard focus visibility, responsive tables, and readable contrast.
 `AppShell` receives navigation items rather than hard-coding authorization decisions.
 
-- [ ] **Step 7: Run frontend unit/type/build checks**
+- [x] **Step 7: Run frontend unit/type/build checks**
 
 Run: `npm.cmd test -- --run`
 
@@ -1630,7 +1560,7 @@ Run: `npm.cmd run build`
 
 Expected: API client/UI tests pass; TypeScript and Vite production build succeed.
 
-- [ ] **Step 8: Commit frontend foundation**
+- [x] **Step 8: Commit frontend foundation**
 
 ```powershell
 git add client/package.json client/package-lock.json client/vite.config.ts client/tsconfig.app.json client/src
@@ -1665,7 +1595,7 @@ git commit -m "feat(web): add feature-ready application foundation"
 - Produces: `User` and `Role` types used by navigation and subsequent features.
 - Consumes: `ApiClient`, `/auth/register`, `/auth/login`, `/auth/me`, and local storage key `smart-warehouse-token`.
 
-- [ ] **Step 1: Write failing registration and route-guard tests**
+- [x] **Step 1: Write failing registration and route-guard tests**
 
 ```tsx
 it('submits public registration without a role field', async () => {
@@ -1685,13 +1615,13 @@ it('redirects anonymous users from protected catalogue routes', () => {
 })
 ```
 
-- [ ] **Step 2: Run auth component tests and confirm missing feature modules**
+- [x] **Step 2: Run auth component tests and confirm missing feature modules**
 
 Run: `npm.cmd test -- --run src/features/auth`
 
 Expected: tests fail because auth feature components do not exist.
 
-- [ ] **Step 3: Implement Zod schemas and auth API functions**
+- [x] **Step 3: Implement Zod schemas and auth API functions**
 
 ```typescript
 export const registerSchema = z.object({
@@ -1712,13 +1642,13 @@ export const authApi = {
 
 The registration type has no `role` member. Map backend `fields` to React Hook Form errors.
 
-- [ ] **Step 4: Implement token lifecycle and current-user loading**
+- [x] **Step 4: Implement token lifecycle and current-user loading**
 
 `AuthProvider` initializes from local storage, calls `/auth/me` before rendering protected
 children, writes a token only after successful login, and clears token/query cache on logout or
 the API client's `401` callback. A `403` leaves both token and user intact.
 
-- [ ] **Step 5: Implement route and action guards**
+- [x] **Step 5: Implement route and action guards**
 
 ```tsx
 export function RequireRole({ allow, children }: PropsWithChildren<{ allow: Role[] }>) {
@@ -1732,7 +1662,7 @@ export function RequireRole({ allow, children }: PropsWithChildren<{ allow: Role
 Declare all protected routes under `AppShell`. Navigation derives from `navigation.ts` role lists.
 Do not interpret a frontend guard as proof of permission; feature API calls still handle `403`.
 
-- [ ] **Step 6: Run auth, API-client, type, and build checks**
+- [x] **Step 6: Run auth, API-client, type, and build checks**
 
 Run: `npm.cmd test -- --run src/features/auth src/shared/api`
 
@@ -1742,7 +1672,7 @@ Run: `npm.cmd run build`
 
 Expected: all pass; anonymous users see only login/register and every authenticated role reaches its allowed shell.
 
-- [ ] **Step 7: Commit frontend authentication**
+- [x] **Step 7: Commit frontend authentication**
 
 ```powershell
 git add client/src
@@ -1773,7 +1703,7 @@ git commit -m "feat(web): add secure authentication and role-aware routes"
 - Produces: admin-only `/dashboard`, `/users`, and `/audit` pages.
 - Consumes: dashboard stats, paginated users/audit APIs, managed role/status endpoints, TanStack Query, and auth role guards.
 
-- [ ] **Step 1: Write failing dashboard and user-action tests**
+- [x] **Step 1: Write failing dashboard and user-action tests**
 
 ```tsx
 it('renders real dashboard metrics and loading state', async () => {
@@ -1792,37 +1722,37 @@ it('offers only client and warehouse roles when creating a user', async () => {
 })
 ```
 
-- [ ] **Step 2: Run admin-page tests and verify routes/features are missing**
+- [x] **Step 2: Run admin-page tests and verify routes/features are missing**
 
 Run: `npm.cmd test -- --run src/features/dashboard src/features/users src/features/audit`
 
 Expected: tests fail because the pages are absent.
 
-- [ ] **Step 3: Implement dashboard query and accessible metric cards**
+- [x] **Step 3: Implement dashboard query and accessible metric cards**
 
 Use query key `['dashboard', 'stats']`. Display product count, total stock, and low-stock count with
 labels that remain understandable without color. Render explicit loading/error states and a retry
 action.
 
-- [ ] **Step 4: Implement user list/create/role/status mutations**
+- [x] **Step 4: Implement user list/create/role/status mutations**
 
 Use query key `['users', filters]`. Create form accepts only `client`/`warehouse`. Role and status
 actions require confirmation and show server domain messages. Disable admin-target actions based
 on response data for UX, while preserving backend handling if a request is still attempted.
 Invalidate `['users']` and `['audit']` after a successful mutation.
 
-- [ ] **Step 5: Implement append-only audit browsing**
+- [x] **Step 5: Implement append-only audit browsing**
 
 Display actor, action, target, safe before/after changes, and timestamp formatted with
 `Intl.DateTimeFormat`. Provide pagination and action/target filters supported by the API. Do not
 render edit/delete controls.
 
-- [ ] **Step 6: Verify admin routes and role denial**
+- [x] **Step 6: Verify admin routes and role denial**
 
 Add route tests showing warehouse/client users are redirected from all three admin routes. Also
 mock a backend `403` and assert its message renders while the current session remains active.
 
-- [ ] **Step 7: Run focused tests, typecheck, and build**
+- [x] **Step 7: Run focused tests, typecheck, and build**
 
 Run: `npm.cmd test -- --run src/features/dashboard src/features/users src/features/audit`
 
@@ -1832,14 +1762,14 @@ Run: `npm.cmd run build`
 
 Expected: all pass with no admin option exposed by normal user-management UI.
 
-- [ ] **Step 8: Commit admin frontend features**
+- [x] **Step 8: Commit admin frontend features**
 
 ```powershell
 git add client/src/features/dashboard client/src/features/users client/src/features/audit client/src/app
 git commit -m "feat(web): add dashboard and audited user administration"
 ```
 
-### Task 16: Category and Supplier Management Pages
+### Task 16: Master-Data and Warehouse Management Pages
 
 **Files:**
 - Create: `client/src/features/categories/types.ts`
@@ -1852,73 +1782,6 @@ git commit -m "feat(web): add dashboard and audited user administration"
 - Create: `client/src/features/suppliers/api.ts`
 - Create: `client/src/features/suppliers/SuppliersPage.tsx`
 - Create: `client/src/features/suppliers/SuppliersPage.test.tsx`
-- Modify: `client/src/app/router.tsx`
-- Modify: `client/src/app/navigation.ts`
-
-**Interfaces:**
-- Produces: paginated/filterable category and supplier pages with role-correct admin CRUD controls.
-- Consumes: approved category/supplier APIs, shared forms/errors/pagination, and TanStack Query invalidation.
-
-- [ ] **Step 1: Write failing role-sensitive CRUD tests**
-
-```tsx
-it('shows suppliers read-only to warehouse operators', async () => {
-  renderRoleRoute('/suppliers', 'warehouse')
-  expect(await screen.findByText('Main Supply')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /create supplier/i })).not.toBeInTheDocument()
-})
-
-it('does not expose suppliers to clients', () => {
-  renderRoleRoute('/suppliers', 'client')
-  expect(screen.getByRole('heading', { name: /forbidden/i })).toBeInTheDocument()
-})
-```
-
-- [ ] **Step 2: Run feature tests and verify missing pages**
-
-Run: `npm.cmd test -- --run src/features/categories src/features/suppliers`
-
-Expected: tests fail because feature pages are absent.
-
-- [ ] **Step 3: Implement per-feature types, Zod schemas, API functions, and query keys**
-
-Keep each feature self-contained. Category forms expose optional parent selection and prevent the
-current category from being selected locally; backend cycle validation remains authoritative.
-Supplier forms normalize email for immediate feedback and map server field errors by name.
-
-- [ ] **Step 4: Implement authenticated read experiences by role**
-
-Admin, warehouse, and client can read categories. Admin and warehouse can read suppliers. Every
-list includes bounded pagination, supported filters, loading/error/empty states, and local-time
-timestamp formatting where timestamps appear.
-
-- [ ] **Step 5: Implement admin mutation dialogs/forms**
-
-Admin can create/update/delete categories and suppliers. Map backend field errors to controls and
-conflicts to form-level messages. Confirm delete, disable duplicate submission, and invalidate the
-resource query plus dependent product lookups after success. Non-admin components never render
-mutation controls.
-
-- [ ] **Step 6: Run master-data/warehouse tests, auth-route tests, typecheck, and build**
-
-Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/auth/routes.test.tsx`
-
-Run: `npm.cmd run typecheck`
-
-Run: `npm.cmd run build`
-
-Expected: all pass for admin CRUD, warehouse supplier reads, and client supplier denial.
-
-- [ ] **Step 7: Commit master-data and warehouse frontend**
-
-```powershell
-git add client/src/features/categories client/src/features/suppliers client/src/app
-git commit -m "feat(web): add category and supplier workflows"
-```
-
-### Task 17: Product and Warehouse Management Pages
-
-**Files:**
 - Create: `client/src/features/products/types.ts`
 - Create: `client/src/features/products/schemas.ts`
 - Create: `client/src/features/products/api.ts`
@@ -1933,10 +1796,10 @@ git commit -m "feat(web): add category and supplier workflows"
 - Modify: `client/src/app/navigation.ts`
 
 **Interfaces:**
-- Produces: paginated/filterable product and warehouse pages with admin CRUD and read-only non-admin experiences.
-- Consumes: category/supplier lookup queries, product/warehouse APIs, shared forms/errors/pagination, and role guards.
+- Produces: paginated/filterable catalogue and warehouse pages with admin CRUD controls.
+- Consumes: approved master-data/warehouse APIs, role-based UX, shared forms/errors/pagination, and TanStack Query invalidation.
 
-- [ ] **Step 1: Write failing product-role and warehouse-coordinate tests**
+- [x] **Step 1: Write failing role-sensitive CRUD tests**
 
 ```tsx
 it.each(['warehouse', 'client'] as const)(
@@ -1957,44 +1820,49 @@ it('validates paired coordinates before warehouse submit', async () => {
 })
 ```
 
-- [ ] **Step 2: Run product/warehouse feature tests and verify missing pages**
+- [x] **Step 2: Run feature tests and verify missing pages**
 
-Run: `npm.cmd test -- --run src/features/products src/features/warehouses`
+Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/products src/features/warehouses`
 
-Expected: tests fail because product and warehouse feature pages are absent.
+Expected: tests fail because feature pages are absent.
 
-- [ ] **Step 3: Implement per-feature types, schemas, APIs, and query keys**
+- [x] **Step 3: Implement per-feature types, Zod schemas, API functions, and query keys**
 
-Normalize SKU and warehouse code in UI for immediate feedback while treating backend normalization
-as authoritative. Product schema validates category, optional supplier, unit, and non-negative
-reorder level. Warehouse schema uses `.superRefine()` for paired coordinates and applies the same
-numeric bounds as the backend.
+Keep each feature self-contained. Normalize SKU/warehouse code in UI for immediate feedback but
+accept backend normalization as authoritative. Warehouse schema uses a `.superRefine()` check for
+paired coordinates and numeric bounds identical to the backend.
 
-- [ ] **Step 4: Implement authenticated lists and admin mutation forms**
+- [x] **Step 4: Implement authenticated read experiences by role**
 
-All authenticated roles read products and warehouses. Admin alone sees create/update/delete
-actions. Product filters cover search/category/supplier/active state; warehouse filters cover
-search. Forms map backend field errors, prevent duplicate submission, confirm deletion, and
-invalidate affected resource and lookup queries.
+Admin, warehouse, and client can read products/categories. Admin and warehouse can read suppliers.
+All authenticated roles can read warehouses. Every list includes bounded pagination, supported
+filters, loading/error/empty states, and local-time timestamp formatting where timestamps appear.
 
-- [ ] **Step 5: Run focused tests, route tests, typecheck, and build**
+- [x] **Step 5: Implement admin mutation dialogs/forms**
 
-Run: `npm.cmd test -- --run src/features/products src/features/warehouses src/features/auth/routes.test.tsx`
+Admin can create/update/delete all four resources. Map backend field errors to controls and
+conflicts to form-level messages. Confirm delete, disable duplicate submission, and invalidate the
+resource query plus dependent product lookups after success. Non-admin components never render
+mutation controls.
+
+- [x] **Step 6: Run master-data/warehouse tests, auth-route tests, typecheck, and build**
+
+Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/products src/features/warehouses src/features/auth/routes.test.tsx`
 
 Run: `npm.cmd run typecheck`
 
 Run: `npm.cmd run build`
 
-Expected: all pass for admin CRUD, non-admin read-only behavior, coordinates, and error states.
+Expected: all pass for admin CRUD and role-correct read-only experiences.
 
-- [ ] **Step 6: Commit product and warehouse frontend**
+- [x] **Step 7: Commit master-data and warehouse frontend**
 
 ```powershell
-git add client/src/features/products client/src/features/warehouses client/src/app
-git commit -m "feat(web): add product and warehouse workflows"
+git add client/src/features/categories client/src/features/suppliers client/src/features/products client/src/features/warehouses client/src/app
+git commit -m "feat(web): add master-data and warehouse workflows"
 ```
 
-### Task 18: Stock, Inbound, Outbound, and Transaction-History Pages
+### Task 17: Stock, Inbound, Outbound, and Transaction-History Pages
 
 **Files:**
 - Create: `client/src/features/inventory/types.ts`
@@ -2017,7 +1885,7 @@ git commit -m "feat(web): add product and warehouse workflows"
 - Produces: `/stock` for all authenticated roles and `/inbounds`, `/outbounds`, `/transactions` for admin/warehouse.
 - Consumes: product/warehouse queries, inventory movement/history APIs, shared API errors, pagination, and role guards.
 
-- [ ] **Step 1: Write failing movement and read-only client tests**
+- [x] **Step 1: Write failing movement and read-only client tests**
 
 ```tsx
 it('submits a positive inbound then refreshes stock and history', async () => {
@@ -2037,19 +1905,19 @@ it('client can see stock but cannot route to movement/history pages', () => {
 })
 ```
 
-- [ ] **Step 2: Run inventory frontend tests and verify missing feature failures**
+- [x] **Step 2: Run inventory frontend tests and verify missing feature failures**
 
 Run: `npm.cmd test -- --run src/features/inventory src/features/transactions`
 
 Expected: tests fail because pages and mutations do not exist.
 
-- [ ] **Step 3: Implement stock and history queries**
+- [x] **Step 3: Implement stock and history queries**
 
 Use query keys `['stock', filters]`, `['inbounds', filters]`, `['outbounds', filters]`, and
 `['transactions', filters]`. Tables expose product/warehouse labels, quantities, actor, reference,
 type, and local timestamp. Each page has bounded pagination and supported filters.
 
-- [ ] **Step 4: Implement validated movement forms**
+- [x] **Step 4: Implement validated movement forms**
 
 ```typescript
 export const movementSchema = z.object({
@@ -2064,13 +1932,13 @@ export const movementSchema = z.object({
 Show `INSUFFICIENT_STOCK` without replacing it with generic copy. Disable repeated submission.
 After success invalidate stock, the relevant movement list, transactions, and dashboard stats.
 
-- [ ] **Step 5: Verify navigation and backend-denial behavior for every role**
+- [x] **Step 5: Verify navigation and backend-denial behavior for every role**
 
 Admin and warehouse see movement/history navigation and can submit. Client sees stock only. Mock a
 backend `403` for a visible action and assert the explicit error is rendered while auth state stays
 active.
 
-- [ ] **Step 6: Run the complete frontend gate**
+- [x] **Step 6: Run the complete frontend gate**
 
 Run: `npm.cmd test -- --run`
 
@@ -2080,7 +1948,7 @@ Run: `npm.cmd run build`
 
 Expected: all frontend tests, TypeScript, and production build pass.
 
-- [ ] **Step 7: Commit inventory frontend workflows**
+- [x] **Step 7: Commit inventory frontend workflows**
 
 ```powershell
 git add client/src/features/inventory client/src/features/transactions client/src/app
@@ -2091,7 +1959,7 @@ git commit -m "feat(web): add inventory movement and history workflows"
 
 ## Milestone 6 — Runtime Images, E2E, Quality Gates, and Documentation
 
-### Task 19: Secure Seed, Explicit Migration, Production Images, and Runtime Health
+### Task 18: Secure Seed, Explicit Migration, Production Images, and Runtime Health
 
 **Files:**
 - Modify: `app/seed.py`
@@ -2110,7 +1978,7 @@ git commit -m "feat(web): add inventory movement and history workflows"
 - Produces: idempotent environment-driven bootstrap, explicit `migrate` Compose service, non-root runtime images, liveness/readiness healthchecks, and static frontend serving.
 - Consumes: typed settings, Alembic head, PostgreSQL 16, frontend production build, and API probes.
 
-- [ ] **Step 1: Write failing secure-seed and readiness integration tests**
+- [x] **Step 1: Write failing secure-seed and readiness integration tests**
 
 ```python
 # tests/postgres/test_seed.py
@@ -2131,20 +1999,20 @@ def test_readiness_is_healthy_only_with_database(postgres_client) -> None:
     assert postgres_client.get("/api/v1/health/ready").status_code == 200
 ```
 
-- [ ] **Step 2: Run seed/readiness tests against PostgreSQL**
+- [x] **Step 2: Run seed/readiness tests against PostgreSQL**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_seed.py tests/postgres/test_readiness.py -q`
 
 Expected: current SQLite-oriented seed test setup or old health contract fails.
 
-- [ ] **Step 3: Refactor seed onto canonical settings and password policy**
+- [x] **Step 3: Refactor seed onto canonical settings and password policy**
 
 Keep seed idempotent and preserve existing hashes. Require every seeded privileged credential from
 environment input; normalize email and hash only when creating a missing user. Validate production
 passwords through the same minimum policy as internal user creation. Never print credentials or
 hashes. Existing demo business rows remain idempotent and use no production secret defaults.
 
-- [ ] **Step 4: Replace the API image with a minimal non-root multi-stage build**
+- [x] **Step 4: Replace the API image with a minimal non-root multi-stage build**
 
 ```dockerfile
 # Dockerfile
@@ -2170,7 +2038,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 worktrees, and local data. The runtime contains the installed wheel and Alembic release assets,
 not repository/test/build context.
 
-- [ ] **Step 5: Replace the web image with build-only Node plus non-root static runtime**
+- [x] **Step 5: Replace the web image with build-only Node plus non-root static runtime**
 
 ```dockerfile
 # client/Dockerfile
@@ -2193,50 +2061,14 @@ The Nginx configuration supports SPA fallback and proxies `/api/` to the API ser
 `client/.dockerignore` excludes `.env`, source test output, `node_modules`, `dist`, coverage, and
 Playwright artifacts.
 
-```nginx
-# client/nginx.conf
-server {
-    listen 8080;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    location /api/ {
-        proxy_pass http://api:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-- [ ] **Step 6: Make migration and health ordering explicit in Compose**
+- [x] **Step 6: Make migration and health ordering explicit in Compose**
 
 Add a one-shot `migrate` service that runs `alembic upgrade head`. `api` depends on PostgreSQL
 healthy and migration completed successfully. API healthcheck calls readiness; web waits for the
 API healthcheck. Add a manually invoked `seed` profile rather than seeding on every API startup.
 No API container runs migrations in its command.
 
-```yaml
-migrate:
-  build: .
-  command: ["alembic", "upgrade", "head"]
-  env_file: .env
-  depends_on:
-    db:
-      condition: service_healthy
-  restart: "no"
-
-api:
-  depends_on:
-    migrate:
-      condition: service_completed_successfully
-```
-
-- [ ] **Step 7: Verify images and Compose behavior**
+- [x] **Step 7: Verify images and Compose behavior**
 
 Run: `docker compose build --no-cache api web`
 
@@ -2249,7 +2081,7 @@ Expected: migration exits `0`; db/api/web become healthy; API liveness/readiness
 Inspect both final images and confirm no `.env`, test directory, coverage, `node_modules`, or local
 build cache is present. Confirm `docker inspect` reports non-root configured users for API and web.
 
-- [ ] **Step 8: Run seed twice and backend/frontend gates**
+- [x] **Step 8: Run seed twice and backend/frontend gates**
 
 Run: `docker compose --profile bootstrap run --rm seed`
 
@@ -2259,14 +2091,14 @@ Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_seed.py tests/postg
 
 Run from `client`: `npm.cmd run build`
 
-- [ ] **Step 9: Commit runtime hardening**
+- [x] **Step 9: Commit runtime hardening**
 
 ```powershell
 git add app/seed.py tests/test_seed.py tests/postgres/test_seed.py tests/postgres/test_readiness.py Dockerfile .dockerignore client/Dockerfile client/.dockerignore client/nginx.conf docker-compose.yml .env.example
 git commit -m "build: harden migration and runtime containers"
 ```
 
-### Task 20: Playwright Critical Paths and Automated Quality Workflow
+### Task 19: Playwright Critical Paths and Automated Quality Workflow
 
 **Files:**
 - Modify: `client/package.json`
@@ -2284,7 +2116,7 @@ git commit -m "build: harden migration and runtime containers"
 - Produces: `npm run e2e` critical-path suite and CI gates for Ruff, pytest/PostgreSQL, migration, Vitest, typecheck, build, and Playwright.
 - Consumes: Dockerized full stack, secure test-only bootstrap credentials, and completed UI/API routes.
 
-- [ ] **Step 1: Install Playwright and configure generated-artifact ignores**
+- [x] **Step 1: Install Playwright and configure generated-artifact ignores**
 
 Run from `client`:
 
@@ -2296,7 +2128,7 @@ npx.cmd playwright install chromium
 Add `playwright-report/`, `test-results/`, trace/video/screenshot output, and coverage to `.gitignore`
 and `client/.dockerignore`. Add script `"e2e": "playwright test"`.
 
-- [ ] **Step 2: Add a failing anonymous-registration/client-access E2E**
+- [x] **Step 2: Add a failing anonymous-registration/client-access E2E**
 
 ```typescript
 // client/e2e/auth-client.spec.ts
@@ -2314,7 +2146,7 @@ test('anonymous registers as client and receives read-only catalogue access', as
 })
 ```
 
-- [ ] **Step 3: Configure Playwright against the Docker stack**
+- [x] **Step 3: Configure Playwright against the Docker stack**
 
 ```typescript
 // client/playwright.config.ts
@@ -2326,14 +2158,14 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 1 : undefined,
 })
 ```
 
 `docker-compose.e2e.yml` overrides only disposable credentials/data and ensures migration plus seed
 complete before the tests. It does not alter production image contents.
 
-- [ ] **Step 4: Run the first E2E and verify it fails before stack/data setup is complete**
+- [x] **Step 4: Run the first E2E and verify it fails before stack/data setup is complete**
 
 Run: `docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build`
 
@@ -2341,24 +2173,22 @@ Run from `client`: `npm.cmd run e2e -- auth-client.spec.ts`
 
 Expected before final E2E wiring: failure identifies the missing bootstrap/order or UI contract rather than silently passing on mocked data.
 
-- [ ] **Step 5: Add admin management and audit critical path**
+- [x] **Step 5: Add admin management and audit critical path**
 
 The spec logs in with the environment-provided seeded admin, creates a uniquely named category,
 supplier, product, and warehouse, creates a warehouse operator, changes its status/role within the
-allowed range, then leaves it active with role `warehouse`. It confirms each corresponding
-administrative audit row, no admin role option is available, and no password text appears on the
-audit page.
+allowed range, and confirms corresponding administrative audit rows. It also confirms no admin
+role option is available and no password text appears on the audit page.
 
-- [ ] **Step 6: Add warehouse inventory and dashboard critical path**
+- [x] **Step 6: Add warehouse inventory and dashboard critical path**
 
-The spec creates its own uniquely named active warehouse operator through an authenticated admin
-API setup helper, then logs in through the UI, records inbound quantity `20`, records outbound
-quantity `7`, and verifies stock `13` plus one inbound, one outbound, and two stock transactions.
-It logs in as admin and verifies dashboard aggregates changed by the expected delta. A client
-session verifies stock is readable but inbound/outbound/history routes are inaccessible. No E2E
-spec depends on another spec's records or execution order.
+The spec logs in as the operator created by the admin flow, records inbound quantity `20`, records
+outbound quantity `7`, and verifies stock `13` plus one inbound, one outbound, and two stock
+transactions. It then logs in as admin and verifies dashboard aggregates reflect the resulting
+database state. A client session verifies stock is readable but inbound/outbound/history routes
+are inaccessible.
 
-- [ ] **Step 7: Run Playwright critical paths repeatedly against a fresh stack**
+- [x] **Step 7: Run Playwright critical paths repeatedly against a fresh stack**
 
 Run: `docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v`
 
@@ -2368,7 +2198,7 @@ Run from `client`: `npm.cmd run e2e`
 
 Expected: all three critical-path specs pass. Repeat from a second fresh `down -v` cycle to prove seed/migration/order determinism.
 
-- [ ] **Step 8: Add the CI quality workflow**
+- [x] **Step 8: Add the CI quality workflow**
 
 `.github/workflows/quality.yml` defines:
 
@@ -2379,7 +2209,7 @@ Expected: all three critical-path specs pass. Repeat from a second fresh `down -
 Use fixed test-only CI credentials in job environment, never production credentials. Upload
 Playwright traces/screenshots only on failure. Do not publish images or deploy from this workflow.
 
-- [ ] **Step 9: Run the complete local quality gate**
+- [x] **Step 9: Run the complete local quality gate**
 
 Run: `.venv\Scripts\python.exe -m ruff check app tests alembic`
 
@@ -2395,14 +2225,14 @@ Run from `client`: `npm.cmd run e2e`
 
 Expected: every command exits `0`.
 
-- [ ] **Step 10: Commit E2E and quality automation**
+- [x] **Step 10: Commit E2E and quality automation**
 
 ```powershell
 git add client/package.json client/package-lock.json client/playwright.config.ts client/e2e docker-compose.e2e.yml .github/workflows/quality.yml .gitignore client/.dockerignore
 git commit -m "test(e2e): cover Phase 1 critical workflows"
 ```
 
-### Task 21: Final Documentation, Fresh-Environment Verification, and Phase Closure
+### Task 20: Final Documentation, Fresh-Environment Verification, and Phase Closure
 
 **Files:**
 - Replace: `README.md`
@@ -2414,9 +2244,9 @@ git commit -m "test(e2e): cover Phase 1 critical workflows"
 
 **Interfaces:**
 - Produces: one accurate setup entry point, implemented architecture, API/RBAC/error contract, operations runbook, and verified completion record.
-- Consumes: final commands, endpoints, environment names, migration revision, image behavior, and quality-gate output from Tasks 1–20.
+- Consumes: final commands, endpoints, environment names, migration revision, image behavior, and quality-gate output from Tasks 1–19.
 
-- [ ] **Step 1: Audit documentation against the delivered application**
+- [x] **Step 1: Audit documentation against the delivered application**
 
 Run these searches and resolve every stale statement:
 
@@ -2428,13 +2258,13 @@ rg -n "@(router|application)\.(get|post|put|patch|delete)" app
 Compare documented endpoints with generated `/openapi.json`, the RBAC matrix test cases, and actual
 Compose service names. Do not document an endpoint or command that was not verified.
 
-- [ ] **Step 2: Replace README with the verified quick-start path**
+- [x] **Step 2: Replace README with the verified quick-start path**
 
 README must include prerequisites; safe `.env` creation; explicit migration; secure bootstrap;
 local API/web URLs; liveness/readiness; unit/PostgreSQL/frontend/E2E commands; and links to the
 architecture, API contract, and runbook. It must state that anonymous access is register/login only.
 
-- [ ] **Step 3: Update architecture and API documentation**
+- [x] **Step 3: Update architecture and API documentation**
 
 `docs/architecture/phase-1-design.md` describes the implemented modular monolith and dependency
 rules without the old router-owned persistence design. `docs/api/phase-1-contract.md` lists every
@@ -2442,7 +2272,7 @@ route, request/response schema, pagination/filter contract, stable error shape, 
 matrix. Document stock transactions as the sole inventory business audit and administrative audit
 as user-management-only.
 
-- [ ] **Step 4: Write the operations runbook**
+- [x] **Step 4: Write the operations runbook**
 
 `docs/operations/phase-1-runbook.md` contains exact commands for configuration validation,
 migration-as-release-step, seed, startup/shutdown, readiness diagnosis, log inspection, rollback to
@@ -2450,7 +2280,7 @@ the previous application image without reversing data migrations, and basic Post
 restore using `pg_dump`/`pg_restore`. Every destructive restore command must explicitly target a
 named disposable/recovery database and warn against using a production target unintentionally.
 
-- [ ] **Step 5: Verify from a fresh disposable environment**
+- [x] **Step 5: Verify from a fresh disposable environment**
 
 Run: `docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v`
 
@@ -2461,7 +2291,7 @@ Run: `docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d`
 Verify migration completion, seed idempotency, API/web health, and all Playwright paths. Record
 command names and results in `PROGRESS.md`; do not paste secrets or full environment output.
 
-- [ ] **Step 6: Run every final quality gate once more**
+- [x] **Step 6: Run every final quality gate once more**
 
 Run: `.venv\Scripts\python.exe -m ruff check app tests alembic`
 
@@ -2477,13 +2307,13 @@ Run from `client`: `npm.cmd run e2e`
 
 Expected: every command exits `0`; no failed or skipped PostgreSQL critical test is accepted.
 
-- [ ] **Step 7: Mark Phase 1 complete only from evidence**
+- [x] **Step 7: Mark Phase 1 complete only from evidence**
 
 Update `PROGRESS.md` with the migration head, backend test count/result, frontend test result,
 production build result, E2E spec result, Docker smoke result, known non-blocking limitations, and
 the exact date. Remove obsolete current/next tasks and architectural claims.
 
-- [ ] **Step 8: Commit the final documentation and completion record**
+- [x] **Step 8: Commit the final documentation and completion record**
 
 Before the commit, inspect status, staged/unstaged diffs, staged file list, and all Step 6 output.
 

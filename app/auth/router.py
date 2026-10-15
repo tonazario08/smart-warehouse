@@ -1,13 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, status
 
 from app.auth.dependencies import get_current_user
+from app.auth.repository import UserRepository
 from app.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.auth.security import create_access_token, hash_password, verify_password
+from app.auth.security import create_access_token
+from app.auth.service import AuthService
+from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models import User
 
@@ -15,37 +15,19 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(request: RegisterRequest, session: Annotated[Session, Depends(get_session)]) -> User:
-    user = User(
-        email=request.email,
-        password_hash=hash_password(request.password),
-        role=request.role,
-    )
-    session.add(user)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
-        ) from error
-    session.refresh(user)
-    return user
+def register(request: RegisterRequest, session: Annotated[object, Depends(get_session)]) -> User:
+    return AuthService(session, UserRepository(session)).register(request.email, request.password)
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    request: LoginRequest, session: Annotated[Session, Depends(get_session)]
+    request: LoginRequest,
+    session: Annotated[object, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> TokenResponse:
-    user = session.scalar(select(User).where(User.email == request.email))
-    if (
-        user is None
-        or not user.is_active
-        or not verify_password(request.password, user.password_hash)
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    return TokenResponse(access_token=create_access_token(user.id, user.role), user=user)
+    service = AuthService(session, UserRepository(session))
+    user = service.authenticate(request.email, request.password)
+    return TokenResponse(access_token=create_access_token(user.id, settings), user=user)
 
 
 @router.get("/me", response_model=UserResponse)
