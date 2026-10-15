@@ -102,3 +102,55 @@ def test_migrations_build_expected_schema(
         "warehouses",
         "audit_logs",
     }
+
+
+def test_migration_blocks_legacy_normalization_collisions_without_mutating_data(
+    postgres_url: str,
+) -> None:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", postgres_url)
+    engine = create_engine(postgres_url)
+    try:
+        command.downgrade(config, "base")
+        command.upgrade(config, "20260829_0001")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (email, password_hash, role, is_active) VALUES "
+                    "('Client@Example.com', 'hash-1', 'client', true), "
+                    "(' client@example.com ', 'hash-2', 'client', true)"
+                )
+            )
+            connection.execute(text("INSERT INTO categories (name) VALUES ('Fasteners')"))
+            connection.execute(
+                text(
+                    "INSERT INTO products (sku, name, category_id, unit) VALUES "
+                    "('bolt-001', 'Bolt', 1, 'piece'), "
+                    "(' BOLT-001 ', 'Nut', 1, 'piece')"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO warehouses (code, name, address) VALUES "
+                    "('hcm-01', 'Central', '1 Nguyen Hue'), "
+                    "(' HCM-01 ', 'Overflow', '2 Nguyen Hue')"
+                )
+            )
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"users\.email, products\.sku, warehouses\.code",
+        ):
+            command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == "20260829_0001"
+            assert connection.execute(
+                text("SELECT email FROM users ORDER BY id")
+            ).scalars().all() == ["Client@Example.com", " client@example.com "]
+    finally:
+        command.downgrade(config, "base")
+        command.upgrade(config, "head")
+        engine.dispose()

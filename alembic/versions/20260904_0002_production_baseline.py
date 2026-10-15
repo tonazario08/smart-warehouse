@@ -17,7 +17,34 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _normalization_collisions() -> list[str]:
+    connection = op.get_bind()
+    checks = (
+        (
+            "users.email",
+            "SELECT 1 FROM users GROUP BY lower(trim(email)) HAVING count(*) > 1 LIMIT 1",
+        ),
+        (
+            "products.sku",
+            "SELECT 1 FROM products GROUP BY upper(trim(sku)) HAVING count(*) > 1 LIMIT 1",
+        ),
+        (
+            "warehouses.code",
+            "SELECT 1 FROM warehouses GROUP BY upper(trim(code)) HAVING count(*) > 1 LIMIT 1",
+        ),
+    )
+    return [label for label, query in checks if connection.execute(sa.text(query)).first()]
+
+
 def upgrade() -> None:
+    collisions = _normalization_collisions()
+    if collisions:
+        fields = ", ".join(collisions)
+        raise RuntimeError(
+            f"Migration blocked by normalization collisions in: {fields}. "
+            "Resolve duplicate legacy values before retrying the upgrade."
+        )
+
     op.execute("UPDATE users SET email = lower(trim(email))")
     op.execute("UPDATE products SET sku = upper(trim(sku))")
     op.execute("UPDATE warehouses SET code = upper(trim(code))")
