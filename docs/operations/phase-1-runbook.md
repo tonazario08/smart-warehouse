@@ -198,8 +198,8 @@ Set-Location client
 npm.cmd test -- --run
 npm.cmd run typecheck
 npm.cmd run build
-npm.cmd run e2e
 Set-Location ..
+docker compose -f docker-compose.test.yml down -v
 ```
 
-No failed or skipped PostgreSQL critical test is acceptable. Remove only the explicitly named disposable test/E2E resources after evidence is captured.
+No failed or skipped PostgreSQL critical test is acceptable. After this backend/frontend block passes and the test database is removed, execute the entire **Fresh disposable E2E verification** procedure above, starting with its test-only environment values and project-name guard and ending with its exact `down -v` cleanup. Its isolated stack must be running before `npm.cmd run e2e`; the `db_test` service alone is not an E2E application stack. Remove only the explicitly named disposable test/E2E resources after evidence is captured.
