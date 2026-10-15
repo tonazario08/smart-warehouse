@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models import TransactionType
 
+MAX_STOCK_QUANTITY = 2_147_483_647
+
 
 class InventoryFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -38,8 +40,8 @@ class TransactionFilters(InventoryFilters):
 class InventoryMovementCreate(BaseModel):
     warehouse_id: int
     product_id: int
-    quantity: int = Field(gt=0)
-    reference: str | None = None
+    quantity: int = Field(gt=0, le=MAX_STOCK_QUANTITY)
+    reference: str | None = Field(default=None, max_length=120)
     note: str | None = None
 
 

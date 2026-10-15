@@ -117,6 +117,48 @@ def test_competing_outbounds_cannot_oversell(postgres_session, postgres_engine) 
         assert counts(check) == {"inbounds": 0, "outbounds": 1, "transactions": 1, "audits": 0}
 
 
+def test_concurrent_first_inbounds_reject_stock_overflow_atomically(
+    postgres_session, postgres_engine, monkeypatch
+) -> None:
+    operator_id, warehouse_id, product_id = seed_inventory(postgres_session)
+    barrier = Barrier(2)
+    original_lock = InventoryRepository.get_stock_for_update
+
+    def synchronize_missing_stock(repository, selected_warehouse, selected_product):
+        stock = original_lock(repository, selected_warehouse, selected_product)
+        if stock is None:
+            barrier.wait(timeout=10)
+        return stock
+
+    monkeypatch.setattr(InventoryRepository, "get_stock_for_update", synchronize_missing_stock)
+
+    def receive(quantity: int) -> tuple[int, str]:
+        with Session(postgres_engine) as session:
+            try:
+                InventoryService(InventoryRepository(session)).create_inbound(
+                    operator_id,
+                    InventoryMovementCreate(
+                        warehouse_id=warehouse_id, product_id=product_id, quantity=quantity
+                    ),
+                )
+                return quantity, "ok"
+            except DomainError as error:
+                return quantity, error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(receive, quantity) for quantity in (2_147_483_647, 1)]
+        results = [future.result(timeout=20) for future in futures]
+
+    assert sorted(code for _, code in results) == ["STOCK_QUANTITY_LIMIT_EXCEEDED", "ok"]
+    accepted_quantity = next(quantity for quantity, code in results if code == "ok")
+    with Session(postgres_engine) as check:
+        stock_rows = list(check.scalars(select(Stock)))
+        assert len(stock_rows) == 1 and stock_rows[0].quantity == accepted_quantity
+        assert check.scalar(select(Inbound)).quantity == accepted_quantity
+        assert check.scalar(select(StockTransaction)).quantity == accepted_quantity
+        assert counts(check) == {"inbounds": 1, "outbounds": 0, "transactions": 1, "audits": 0}
+
+
 def test_waiting_outbound_uses_quantity_committed_by_inbound(
     postgres_session, postgres_engine
 ) -> None:

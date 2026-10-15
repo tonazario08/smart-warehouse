@@ -3,7 +3,12 @@
 from app.core.errors import DomainError
 from app.core.pagination import PageParams
 from app.inventory.repository import InventoryRepository
-from app.inventory.schemas import InventoryFilters, InventoryMovementCreate, TransactionFilters
+from app.inventory.schemas import (
+    MAX_STOCK_QUANTITY,
+    InventoryFilters,
+    InventoryMovementCreate,
+    TransactionFilters,
+)
 from app.models import Inbound, Outbound, Stock, StockTransaction
 
 
@@ -12,6 +17,15 @@ class InventoryService:
 
     def __init__(self, repository: InventoryRepository) -> None:
         self.repository = repository
+
+    def _increment_stock(self, stock: Stock, quantity: int) -> None:
+        if stock.quantity > MAX_STOCK_QUANTITY - quantity:
+            raise DomainError(
+                409,
+                "STOCK_QUANTITY_LIMIT_EXCEEDED",
+                "Stock quantity would exceed the supported limit.",
+            )
+        stock.quantity += quantity
 
     def _require_movement_references(self, request: InventoryMovementCreate) -> None:
         if self.repository.get_warehouse(request.warehouse_id) is None:
@@ -35,9 +49,9 @@ class InventoryService:
                     )
                     if stock is None:
                         raise DomainError(409, "STOCK_CONFLICT", "Stock could not be created.")
-                    stock.quantity += request.quantity
+                    self._increment_stock(stock, request.quantity)
             else:
-                stock.quantity += request.quantity
+                self._increment_stock(stock, request.quantity)
 
             inbound = self.repository.add_inbound(request, actor_id)
             self.repository.flush()

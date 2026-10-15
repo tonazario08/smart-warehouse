@@ -82,6 +82,65 @@ def test_successful_movements_commit_stock_and_one_linked_business_audit(invento
     assert count_rows(session, AuditLog) == 0
 
 
+def test_inbound_stock_overflow_returns_conflict_without_partial_writes(
+    postgres_client, inventory_data, unit_settings
+) -> None:
+    data = inventory_data
+    session = data["session"]
+    session.add(
+        Stock(
+            warehouse_id=data["warehouse"].id,
+            product_id=data["product"].id,
+            quantity=2_147_483_647,
+        )
+    )
+    session.commit()
+    token = create_access_token(data["operator"].id, unit_settings)
+
+    response = postgres_client.post(
+        "/api/v1/inbounds",
+        json={
+            "warehouse_id": data["warehouse"].id,
+            "product_id": data["product"].id,
+            "quantity": 1,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "STOCK_QUANTITY_LIMIT_EXCEEDED"
+    session.expire_all()
+    assert session.scalar(select(Stock)).quantity == 2_147_483_647
+    for model in (Inbound, Outbound, StockTransaction, AuditLog):
+        assert count_rows(session, model) == 0
+
+
+@pytest.mark.parametrize("resource", ["inbounds", "outbounds"])
+@pytest.mark.parametrize("invalid", [{"quantity": 2_147_483_648}, {"reference": "R" * 121}])
+def test_inventory_write_rejects_database_bound_violations_without_writes(
+    postgres_client, inventory_data, unit_settings, resource: str, invalid: dict
+) -> None:
+    data = inventory_data
+    token = create_access_token(data["operator"].id, unit_settings)
+    response = postgres_client.post(
+        f"/api/v1/{resource}",
+        json={
+            "warehouse_id": data["warehouse"].id,
+            "product_id": data["product"].id,
+            "quantity": 1,
+            **invalid,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "REQUEST_VALIDATION_ERROR"
+    assert next(iter(invalid)) in detail["fields"]
+    for model in (Stock, Inbound, Outbound, StockTransaction, AuditLog):
+        assert count_rows(data["session"], model) == 0
+
+
 def test_rejected_outbound_rolls_back_without_partial_movement_or_audit(inventory_data) -> None:
     data = inventory_data
     session = data["session"]
