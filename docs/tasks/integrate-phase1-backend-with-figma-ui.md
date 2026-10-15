@@ -2,14 +2,14 @@
 
 ## Metadata
 
-- Status: IN_PROGRESS
+- Status: DONE
 - Phase: Phase 1 integration and history reconciliation, not Phase 2 business implementation
 - Plan: docs/superpowers/plans/2026-10-15-integrate-phase1-backend-with-figma-ui.md
 - Specification: user-approved integration brief in this conversation, 2026-10-15; docs/superpowers/specs/2026-09-04-phase-1-production-ready-design.md for backend behavior
 - Depends on: docs/tasks/ui-figma-remediation.md
 - Created: 2026-10-15
 - Started: 2026-10-15
-- Completed: not completed
+- Completed: 2026-10-16
 
 ## Goal
 
@@ -44,13 +44,13 @@ Reconcile the existing Phase 1 production backend history and verified pending c
 
 ## Acceptance Criteria
 
-- [ ] AC-1 — Source HEADs, dirty-file ownership/exclusions and approved related changes are recorded; original dirty work is preserved and logical checkpoints contain no unknown/local/secret/generated files.
-- [ ] AC-2 — Original frontend and backend commit ancestry is retained; integrated history contains both verified sources without rebase, amend, backdating or push.
-- [ ] AC-3 — Verified seed/migration corrections are retained; disposable PostgreSQL migration/seed checks and applicable integrity/concurrency tests pass, with no writes to the current development database.
-- [ ] AC-4 — Integrated auth uses configured JWT settings and expiry/required claims, prevents anonymous administrator creation, enforces current database RBAC, and preserves frontend token hydration/logout/401 cleanup.
-- [ ] AC-5 — Figma shell/pages remain the visible frontend; real catalogue/directory/warehouse/stock/movement/history contracts, pagination beyond 100 and structured Vietnamese error handling work without mock runtime data.
-- [ ] AC-6 — Integrated focused tests, full backend/frontend tests, type checking/build, relevant PostgreSQL/runtime/browser verification and diff checks pass; unavailable verification remains explicitly NOT VERIFIED and prevents completion where mandatory.
-- [ ] AC-7 — Independent review resolves required findings; verification counts, commit hashes/ancestry, changed files, preserved exclusions, remaining limitations and actual target-branch merge status are reported. No publication or destructive operation occurs.
+- [x] AC-1 — Source HEADs, dirty-file ownership/exclusions and approved related changes are recorded; original dirty work is preserved and logical checkpoints contain no unknown/local/secret/generated files.
+- [x] AC-2 — Original frontend and backend commit ancestry is retained; integrated history contains both verified sources without rebase, amend, backdating or push.
+- [x] AC-3 — Verified seed/migration corrections are retained; disposable PostgreSQL migration/seed checks and applicable integrity/concurrency tests pass, with no writes to the current development database.
+- [x] AC-4 — Integrated auth uses configured JWT settings and expiry/required claims, prevents anonymous administrator creation, enforces current database RBAC, and preserves frontend token hydration/logout/401 cleanup.
+- [x] AC-5 — Figma shell/pages remain the visible frontend; real catalogue/directory/warehouse/stock/movement/history contracts, pagination beyond 100 and structured Vietnamese error handling work without mock runtime data.
+- [x] AC-6 — Integrated focused tests, full backend/frontend tests, type checking/build, relevant PostgreSQL/runtime/browser verification and diff checks pass; unavailable verification remains explicitly NOT VERIFIED and prevents completion where mandatory.
+- [x] AC-7 — Independent review resolves required findings; verification counts, commit hashes/ancestry, changed files, preserved exclusions, remaining limitations and actual target-branch merge status are reported. No publication or destructive operation occurs.
 
 ## Verification Commands
 
@@ -182,6 +182,11 @@ Reconcile the existing Phase 1 production backend history and verified pending c
 - Staged-path exclusion and conflict-marker checks pass. Bounded private-key/JWT/provider-token signature scan of all 200 non-deleted staged text files found zero matches, with values suppressed. Environment-example assignments are empty or explicit placeholders. An initial scanner false positive came from a whitespace matcher crossing an empty password line into the following configuration key; a horizontal-whitespace-only matcher confirmed the empty value without printing it. Markdown fences and staged/unstaged diff checks pass.
 - The first exact `git add` attempt safely stopped on two already-staged backend deletions absent from both index and working files. The corrected explicit allowlist includes only existing/indexed paths and retains those already-staged deletions; no source file was deleted by this staging step. No unexpected path was staged. Review remains APPROVED; the next checkpoint is a normal two-parent local merge, not history rewriting or adoption into the original checkout.
 
+### 2026-10-16 — REVIEWING -> DONE
+
+- Normal two-parent merge checkpoint `663ce56` was created after all independent gates and exact staging checks; ancestry proofs pass for frontend `1cba4cb`, backend checkpoint `77e5c4d` and original backend `3446ae3`. Final reachable-history scan: 570 text blobs and two environment blobs, zero bounded candidates, values suppressed. Original frontend HEAD and unrelated working-plan blob remain unchanged.
+- All seven selected-task ACs have concrete evidence in the final matrix. Review round 2 is APPROVED with no required finding. Mark only this selected integration task DONE; historical tasks remain provenance. Final task-only handoff records the merge hash, changed-file manifest, remaining scope limitations and the explicitly deferred target-branch adoption. No publication or destructive operation is authorized or performed.
+
 ## Verification Evidence
 
 ### Focused
@@ -200,15 +205,241 @@ Reconcile the existing Phase 1 production backend history and verified pending c
 ### Static and Diff
 
 - Repeated `git diff --check`: PASS. Backend runtime/test equivalence and Figma runtime/layout preservation checks: no unexpected diff. Approved security amendment changes only source-map-js version/resolution/integrity metadata from 1.2.1 to 1.2.2 relative to backend lockfile; no other dependency upgrade.
-- Bounded secret scan of 511 distinct local-history text blobs found zero private-key/JWT-literal/common provider-token signature matches. Complementary inspection of two environment-history blobs found zero non-placeholder credential candidates; only counts/paths, never credential values, were logged. Pattern-based scans are not a guarantee against every possible secret. Final staged-path/content scan and ancestry checks are required before completion.
+- Initial bounded secret scan of 511 distinct local-history text blobs found zero private-key/JWT-literal/common provider-token signature matches. Complementary inspection of two environment-history blobs found zero non-placeholder credential candidates; only counts/paths, never credential values, were logged. Final staged-path/content scan and actual merge-ancestry checks also completed, followed by the 570-blob reachable-history scan recorded in Completion Evidence. Pattern-based scans are not a guarantee against every possible secret.
 - Source frontend HEAD remains `1cba4cb`; its unrelated production-plan working blob remains `a01e78aecfc230e2d31d98b1f1624b8d3e31453b`. Twelve original dirty backend files were hash-compared with their preserved snapshots. Unknown files, `.env`, personal `.docx`, local configuration, generated artifacts and dependencies remain excluded. No push, destructive Git or source-worktree cleanup occurred.
 
 ## Review Result
 
-- Result: APPROVED (main-agent independent review round 2; final staging/ancestry checks pending)
+- Result: APPROVED (main-agent independent review round 2; exact staging, secret scans and actual merge-ancestry proof completed)
 - Round 1 required finding: inherited operational/architecture/API documentation did not accurately describe the integrated runtime and complete verification command. Corrected by the sole native implementer; independently reviewed and resolved in round 2.
 - No unresolved required code/runtime finding. Scope limitations remain explicit: historical backend-only management features have no newly approved Figma UI; password recovery is unavailable; visual verification is bounded, not a full pixel-perfect audit.
 
+### Final acceptance review matrix
+
+| Criterion | Verified evidence | Result |
+| --- | --- | --- |
+| AC-1 | Recorded source HEADs, original dirty-file hashes/ownership, exact allowlists and exclusions; six separate backend correction checkpoints and separate frontend checkpoint; original source worktrees preserved. | VERIFIED |
+| AC-2 | Actual merge `663ce56bc8b31d5eb4942bfb2645655be8eea861` has parents `1cba4cb001aea4b81b95e93d150672b38410e100` and `77e5c4dfbb926f9eeadccc5418ea6e989256a05e`; ancestry assertions pass for both parents and original backend `3446ae3`. | VERIFIED |
+| AC-3 | Disposable PostgreSQL migration/seed/constraint/concurrency tests in 459-test suite, production migration/bootstrap ordering and repeat bootstrap; isolated targets identified in evidence. | VERIFIED |
+| AC-4 | Required JWT claim/configuration/expiry tests; client-only registration and current-database RBAC; active provider race tests and real login/me/refresh/logout/401/403 E2E. | VERIFIED |
+| AC-5 | Figma runtime/layout unchanged from approved checkpoint; real facade/page contract tests and E2E, beyond-100 lookups, Vietnamese errors; manual bounded desktop/mobile shell comparison against node 5:3. | VERIFIED |
+| AC-6 | Main independently completed backend 459, Vitest 156, Node-host 90, production E2E 8, Ruff/build/application and E2E TypeScript, dependency audit zero, production builds and diff checks. | VERIFIED |
+| AC-7 | Main independent review round 2 resolved required documentation finding; commits, exact file manifest, preservation/exclusions and limitations recorded. Target checkout explicitly not merged; no remote publication/history rewrite. | VERIFIED |
+
 ## Completion Evidence
 
-- Not completed.
+- Completed on isolated branch `codex/integrate-phase1-backend-figma` with verified integration merge `663ce56bc8b31d5eb4942bfb2645655be8eea861`. Both source ancestries are retained; original frontend checkout remains at `1cba4cb` with its pre-existing unrelated production-plan edit and unselected files untouched. The integration working tree was clean immediately after the merge; this final task-only completion record is the subsequent logical documentation checkpoint.
+- Logical checkpoints: `5ff2691` task/plan gates; `1cba4cb` approved Figma frontend; `0da69fe` seed; `0cdd573` migration preflight; `a4a2685` required JWT claims; `84f361b` atomic stock bounds; `88f312a` complete lookups; `77e5c4d` isolated runbook prerequisites; `663ce56` reviewed two-parent integration and Figma compatibility/security verification. Original backend `3446ae3` remains an ancestor without re-authoring its commits.
+- Final history scan covered 570 distinct reachable local text blobs absent from `origin/main`, including two environment blobs: zero bounded private-key/JWT/provider-token or non-placeholder environment credential candidates, with values suppressed. Staged exclusions and placeholder checks also pass. This scan is bounded, not an assertion that every conceivable secret is detectable.
+- No remaining required finding or mandatory unverified gate for this selected integration task. Two dependency deprecation warnings remain non-blocking. Backend-only administration/directory/registration/transaction UI and unavailable password recovery are explicit scope limitations, not silently completed features. Figma visual evidence is limited to the recorded shell/viewport comparisons and preserved approved assets, not a new whole-application pixel-perfect certification. Historical Phase 1 corrective task remains unchanged and IN_PROGRESS; this completion does not mark it or every historical phase complete.
+- Target adoption is deliberately deferred by the user's explicit decision. No merge into `feat/figma-ui-v2`, push, PR, deployment, history rewrite, source-file discard, worktree removal or Docker data reset occurred. Isolated verification resources and ignored evidence are retained, not committed.
+
+### Final handoff and changed-file manifest
+
+- Every selected-task AC is linked to concrete code/test/runtime/manual review evidence in the acceptance matrix. Final review is APPROVED after round 2; the actual local merge and ancestry checks satisfy the last historical-retention gate. Completion is based on that combined evidence, not test/build counts alone.
+- The exact first-parent changed-file manifest for merge `663ce56` follows. It contains inherited backend changes as well as reviewed compatibility corrections, not 202 newly implemented files. `A`, `M`, and `D` are Git add/modify/delete statuses; the two test-file deletions were already part of the preserved backend parent and are covered by replacement tests. Final completion changes only this selected task file.
+
+```text
+A	.dockerignore
+M	.env.example
+A	.github/workflows/quality.yml
+M	.gitignore
+M	Dockerfile
+M	PROGRESS.md
+M	README.md
+M	alembic/env.py
+A	alembic/versions/20260904_0002_production_baseline.py
+A	app/audit/__init__.py
+A	app/audit/models.py
+A	app/audit/repository.py
+A	app/audit/router.py
+A	app/audit/schemas.py
+A	app/audit/service.py
+M	app/auth/dependencies.py
+A	app/auth/repository.py
+M	app/auth/router.py
+M	app/auth/schemas.py
+M	app/auth/security.py
+A	app/auth/service.py
+M	app/core/config.py
+M	app/core/errors.py
+A	app/dashboard/repository.py
+M	app/dashboard/router.py
+A	app/dashboard/service.py
+A	app/inventory/repository.py
+M	app/inventory/router.py
+M	app/inventory/schemas.py
+A	app/inventory/service.py
+M	app/main.py
+A	app/master_data/repository.py
+M	app/master_data/router.py
+M	app/master_data/schemas.py
+A	app/master_data/service.py
+M	app/models/__init__.py
+M	app/models/domain.py
+M	app/seed.py
+A	app/users/__init__.py
+A	app/users/repository.py
+A	app/users/router.py
+A	app/users/schemas.py
+A	app/users/service.py
+A	app/warehouse/repository.py
+M	app/warehouse/router.py
+M	app/warehouse/schemas.py
+A	app/warehouse/service.py
+A	client/.dockerignore
+M	client/Dockerfile
+A	client/e2e/admin-management.spec.ts
+A	client/e2e/auth-client.spec.ts
+A	client/e2e/helpers.ts
+A	client/e2e/inventory-flow.spec.ts
+A	client/nginx.conf
+M	client/package-lock.json
+M	client/package.json
+A	client/playwright.config.ts
+A	client/src/api.integration.test.ts
+M	client/src/api.ts
+A	client/src/app/AppShell.test.tsx
+A	client/src/app/AppShell.tsx
+A	client/src/app/AuthProvider.integration.test.tsx
+M	client/src/app/AuthProvider.tsx
+A	client/src/app/Providers.test.tsx
+A	client/src/app/Providers.tsx
+A	client/src/app/navigation.ts
+A	client/src/app/router.integration.test.tsx
+A	client/src/features/audit/AuditPage.test.tsx
+A	client/src/features/audit/AuditPage.tsx
+A	client/src/features/audit/api.ts
+A	client/src/features/audit/types.ts
+A	client/src/features/auth/AuthProvider.test.tsx
+A	client/src/features/auth/AuthProvider.tsx
+A	client/src/features/auth/LoginPage.tsx
+A	client/src/features/auth/RegisterPage.test.tsx
+A	client/src/features/auth/RegisterPage.tsx
+A	client/src/features/auth/RequireAuth.tsx
+A	client/src/features/auth/RequireRole.tsx
+A	client/src/features/auth/api.ts
+A	client/src/features/auth/routes.test.tsx
+A	client/src/features/auth/schemas.ts
+A	client/src/features/auth/types.ts
+A	client/src/features/auth/useAuth.ts
+A	client/src/features/categories/CategoriesPage.test.tsx
+A	client/src/features/categories/CategoriesPage.tsx
+A	client/src/features/categories/api.ts
+A	client/src/features/categories/schemas.ts
+A	client/src/features/categories/types.ts
+A	client/src/features/dashboard/DashboardPage.test.tsx
+A	client/src/features/dashboard/DashboardPage.tsx
+A	client/src/features/dashboard/api.ts
+A	client/src/features/inventory/InboundPage.tsx
+A	client/src/features/inventory/InventoryFilters.tsx
+A	client/src/features/inventory/InventoryLabels.tsx
+A	client/src/features/inventory/MovementForm.test.tsx
+A	client/src/features/inventory/MovementForm.tsx
+A	client/src/features/inventory/MovementPage.test.tsx
+A	client/src/features/inventory/MovementPage.tsx
+A	client/src/features/inventory/OutboundPage.tsx
+A	client/src/features/inventory/StockPage.test.tsx
+A	client/src/features/inventory/StockPage.tsx
+A	client/src/features/inventory/api.ts
+A	client/src/features/inventory/schemas.ts
+A	client/src/features/inventory/types.ts
+A	client/src/features/products/ProductsPage.test.tsx
+A	client/src/features/products/ProductsPage.tsx
+A	client/src/features/products/api.ts
+A	client/src/features/products/schemas.ts
+A	client/src/features/products/types.ts
+A	client/src/features/suppliers/SuppliersPage.test.tsx
+A	client/src/features/suppliers/SuppliersPage.tsx
+A	client/src/features/suppliers/api.ts
+A	client/src/features/suppliers/schemas.ts
+A	client/src/features/suppliers/types.ts
+A	client/src/features/transactions/TransactionsPage.test.tsx
+A	client/src/features/transactions/TransactionsPage.tsx
+A	client/src/features/transactions/api.ts
+A	client/src/features/transactions/types.ts
+A	client/src/features/users/UserActions.tsx
+A	client/src/features/users/UserCreateForm.tsx
+A	client/src/features/users/UsersPage.test.tsx
+A	client/src/features/users/UsersPage.tsx
+A	client/src/features/users/api.ts
+A	client/src/features/users/schemas.ts
+A	client/src/features/users/types.ts
+A	client/src/features/warehouses/WarehousesPage.test.tsx
+A	client/src/features/warehouses/WarehousesPage.tsx
+A	client/src/features/warehouses/api.ts
+A	client/src/features/warehouses/schemas.ts
+A	client/src/features/warehouses/types.ts
+M	client/src/pages/AuthPages.tsx
+M	client/src/pages/DashboardPage.tsx
+M	client/src/pages/InventoryPage.tsx
+M	client/src/pages/MovementPages.tsx
+M	client/src/pages/ProductFormPage.tsx
+M	client/src/pages/ProductsPage.tsx
+M	client/src/pages/StockDetailPage.tsx
+M	client/src/pages/WarehouseDetailPage.tsx
+M	client/src/pages/WarehouseFormPage.tsx
+M	client/src/pages/WarehousesPage.tsx
+A	client/src/shared/api/ApiClient.test.ts
+A	client/src/shared/api/ApiClient.ts
+A	client/src/shared/api/ApiError.ts
+A	client/src/shared/api/collectAllPages.ts
+A	client/src/shared/api/types.ts
+M	client/src/shared/lib/dashboard.ts
+A	client/src/shared/ui/AsyncState.test.tsx
+A	client/src/shared/ui/AsyncState.tsx
+A	client/src/shared/ui/FormFieldError.tsx
+A	client/src/shared/ui/Pagination.test.tsx
+A	client/src/shared/ui/Pagination.tsx
+A	client/src/test/LegacyAppRouter.tsx
+A	client/src/test/renderRoleRoute.tsx
+A	client/src/test/setup.ts
+M	client/src/types.ts
+M	client/tests/movement-list.test.js
+M	client/tests/product-pagination.test.js
+M	client/tests/products-warehouses-remediation.test.js
+A	client/tests/run-host-tests.mjs
+M	client/vite.config.ts
+A	docker-compose.e2e.yml
+A	docker-compose.test.yml
+M	docker-compose.yml
+A	docs/api/phase-1-contract.md
+M	docs/architecture/phase-1-design.md
+A	docs/operations/phase-1-runbook.md
+M	docs/superpowers/plans/2026-09-04-phase-1-production-ready.md
+M	docs/tasks/integrate-phase1-backend-with-figma-ui.md
+A	docs/tasks/phase-1/P1-C01-phase-1-corrective.md
+M	pyproject.toml
+A	tests/postgres/__init__.py
+A	tests/postgres/conftest.py
+A	tests/postgres/test_auth_integration.py
+A	tests/postgres/test_categories.py
+A	tests/postgres/test_constraints.py
+A	tests/postgres/test_dashboard.py
+A	tests/postgres/test_inventory_concurrency.py
+A	tests/postgres/test_inventory_reads.py
+A	tests/postgres/test_inventory_transactions.py
+A	tests/postgres/test_migrations.py
+A	tests/postgres/test_products.py
+A	tests/postgres/test_rbac_matrix.py
+A	tests/postgres/test_readiness.py
+A	tests/postgres/test_seed.py
+A	tests/postgres/test_suppliers.py
+A	tests/postgres/test_users_audit.py
+A	tests/postgres/test_warehouses.py
+M	tests/test_auth.py
+M	tests/test_dashboard.py
+M	tests/test_error_contract.py
+M	tests/test_health.py
+M	tests/test_inventory.py
+D	tests/test_master_data.py
+D	tests/test_migration.py
+A	tests/test_migrations.py
+M	tests/test_seed.py
+M	tests/test_warehouses.py
+A	tests/unit/test_architecture.py
+A	tests/unit/test_audit_payload.py
+A	tests/unit/test_auth_schemas.py
+M	tests/unit/test_config.py
+M	tests/unit/test_pagination.py
+```
