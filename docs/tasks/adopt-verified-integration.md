@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- Status: REVIEWING
+- Status: DONE
 - Plan: docs/superpowers/plans/2026-10-16-adopt-verified-integration.md
 - Specification: user-approved local-adoption brief in this conversation, 2026-10-16; declared dependency for retained runtime contracts and integration evidence
 - Depends on: docs/tasks/integrate-phase1-backend-with-figma-ui.md
 - Created: 2026-10-16
 - Started: 2026-10-16
-- Completed: not completed
+- Completed: 2026-10-16
 
 ## Goal
 
@@ -41,13 +41,13 @@ Adopt the verified integration commit into `feat/figma-ui-v2`, preserve the exis
 
 ## Acceptance Criteria
 
-- [ ] AC-1 — Explicit preservation policy is approved before mutation; the dirty plan's exact original blob is recoverable from its own local checkpoint. All unrelated source files remain untouched and excluded.
-- [ ] AC-2 — Target `feat/figma-ui-v2` retains verified integration `2abdabe`, original frontend `1cba4cb` and backend `3446ae3`/`77e5c4d` ancestry without rewriting history. The current historical plan follows the approved resolution policy.
-- [ ] AC-3 — Adopted runtime source/configuration/lockfile matches the independently verified integration, except any separately approved, tested correction. No legacy shell is activated and no unapproved functional change is introduced.
-- [ ] AC-4 — Full backend/PostgreSQL tests and Ruff, frontend Vitest/host tests, application/E2E TypeScript, production build and dependency audit complete with actual counts/results; missing required evidence is NOT VERIFIED.
-- [ ] AC-5 — Isolated runtime/browser evidence corresponds to the adopted runtime: real login/me/refresh/logout/invalid-token cleanup, role guards, product/warehouse flows and movement atomic rejection/stock/history. No development data writes or mock runtime data.
-- [ ] AC-6 — Main independently reviews all adoption/resolution diffs and links every AC to evidence; required findings are fixed and verified within at most three rounds, or a blocker is reported without DONE.
-- [ ] AC-7 — Exact local commit hashes/subjects, changed files, original draft recovery reference, test results, preserved exclusions and remaining limitations are reported. No forbidden/secret/generated files are committed and no push occurs.
+- [x] AC-1 — Explicit preservation policy is approved before mutation; the dirty plan's exact original blob is recoverable from its own local checkpoint. All unrelated source files remain untouched and excluded.
+- [x] AC-2 — Target `feat/figma-ui-v2` retains verified integration `2abdabe`, original frontend `1cba4cb` and backend `3446ae3`/`77e5c4d` ancestry without rewriting history. The current historical plan follows the approved resolution policy.
+- [x] AC-3 — Adopted runtime source/configuration/lockfile matches the independently verified integration, except any separately approved, tested correction. No legacy shell is activated and no unapproved functional change is introduced.
+- [x] AC-4 — Full backend/PostgreSQL tests and Ruff, frontend Vitest/host tests, application/E2E TypeScript, production build and dependency audit complete with actual counts/results; missing required evidence is NOT VERIFIED.
+- [x] AC-5 — Isolated runtime/browser evidence corresponds to the adopted runtime: real login/me/refresh/logout/invalid-token cleanup, role guards, product/warehouse flows and movement atomic rejection/stock/history. No development data writes or mock runtime data.
+- [x] AC-6 — Main independently reviews all adoption/resolution diffs and links every AC to evidence; required findings are fixed and verified within at most three rounds, or a blocker is reported without DONE.
+- [x] AC-7 — Exact local commit hashes/subjects, changed files, original draft recovery reference, test results, preserved exclusions and remaining limitations are reported. No forbidden/secret/generated files are committed and no push occurs.
 
 ## Verification Commands
 
@@ -123,6 +123,14 @@ Adopt the verified integration commit into `feat/figma-ui-v2`, preserve the exis
 - Main independently repeated test discovery for the approved new loopback port (eight tests / three files), then four negative guard classes: external host, HTTPS, credential URL, unrelated 18082. All results matched their expected exits; invalid URL details were suppressed. Root clean locked dependency install completed without lifecycle scripts; package manifest/lockfile are unchanged.
 - Main enters independent REVIEWING: verify exact approved three-file delta versus source integration (this task, its stable plan and the one-line test guard), original draft recovery/current-plan blob, unchanged Figma/runtime/API/configuration, unknown-file exclusions and source ancestry. Required findings must return to IN_PROGRESS before implementation; no further runtime changes are proposed.
 
+### 2026-10-16 — Actual target merge and final acceptance; REVIEWING -> DONE
+
+- Created normal two-parent target merge `6aa9ba9db7b6a25f3e5b65f31bb1664dadfe6c1d` (`chore: adopt verified integration with isolated E2E port`) after independent verification/review and exact staged path/content checks. Parents are preserved-draft target `b46455ada3e7188bf078645896c726a3812b7453` and verified integration `2abdabeea5969deaf7611f7478621219499b2fc7`. Main ancestry checks pass for source integration, original frontend `1cba4cb`, original backend `3446ae3`, corrected backend `77e5c4d` and preserved draft `b46455a`.
+- Final delta versus verified integration is exactly three paths: this selected task, its new stable adoption plan and the one-line approved E2E port guard. Backend/frontend runtime, tests, package/lockfile, Docker/runtime configuration and Figma presentation remain identical. Historical documents/tasks travel unchanged from the integration parent except the explicitly resolved historical plan, whose incoming blob is proven exact.
+- Bounded candidate-history scan of current adoption/incoming histories absent from `origin/main`: 574 distinct text blobs and two environment blobs, zero private-key/JWT/provider-token signatures or non-placeholder environment credential candidates; values suppressed. Final staged allowlist/secret/conflict/diff checks also pass. Pattern scans are bounded, not proof against every conceivable secret.
+- Main final spec/quality review is APPROVED, with all seven ACs evidenced in the matrix below. Mark only this adoption task DONE. Direct dirty-target frontend build remains NOT VERIFIED because unknown local source is excluded deliberately; this is not reported as a passing root build. The mandatory tracked-runtime/build/real E2E gates are independently verified via exact source/artifact equivalence.
+- No remaining required finding or task blocker. User-authorized preservation, adoption and test-port amendment are complete; no feature phase is started, no historical completion claim is changed, no push/PR/deployment/destructive cleanup occurs. Final documentation-only completion checkpoint changes only this selected task and cannot change verified runtime behavior.
+
 ## Verification Evidence
 
 - Source preservation: original draft checkpoint `b46455a` contains exactly blob `a01e78aecfc230e2d31d98b1f1624b8d3e31453b`; resolved current historical-plan blob is `4e4ed99cd50872e42fdcfab8f27d8091386b2587`. Expected sole merge conflict is resolved, with no runtime resolution edits.
@@ -130,14 +138,242 @@ Adopt the verified integration commit into `feat/figma-ui-v2`, preserve the exis
 - Main frontend after proving tracked runtime equivalence to clean integration HEAD: locked clean install; `npm.cmd run test:all` **156 Vitest tests / 22 files + 90 Node-host tests**, zero failures/skips; build 90 modules; application TypeScript; standalone E2E/config TypeScript; npm audit **zero vulnerabilities**, all PASS. Runs use the clean tracked-source checkout to exclude unknown local source, not copied prior results. Direct dirty-target application frontend build is explicitly **NOT VERIFIED**.
 - Main additional production-proxy build with Docker's `VITE_API_BASE_URL=/api/v1`: PASS; SHA256 of generated HTML/JS/CSS/Inter font all four matches running task-owned production web on loopback 18081. Readiness and deep-link HTTP 200; web user 101. No app code, framework, package, environment file, system network policy or development database change.
 - Main real adopted-checkout E2E at `http://127.0.0.1:18081`: **8 passed / zero skipped, 11.3 seconds**. Scenarios cover real login/me/refresh/logout/401, three roles/navigation/route guards, live role-change 403 session retention, product/warehouse CRUD and conflicts, inbound/outbound/409 stock atomicity/history/dashboard; API-only capabilities are explicitly identified by existing tests. E2E/config TypeScript PASS; no credential capture, fake business data or development-origin writes.
-- Main independent guard verification: accepted loopback 18081 discovers eight tests; non-loopback/HTTPS/credential-bearing/unapproved-port targets all reject. Native recorded prepatch RED/postpatch GREEN and compatibility of original ports. Staged/unstaged diff checks, conflict-marker checks, exact staged scope and bounded secret scan pass; final ancestry checks await actual merge commit.
+- Main independent guard verification: accepted loopback 18081 discovers eight tests; non-loopback/HTTPS/credential-bearing/unapproved-port targets all reject. Native recorded prepatch RED/postpatch GREEN and compatibility of original ports. Staged/unstaged diff checks, conflict-marker checks, exact staged scope and bounded secret scan pass. Actual merge-ancestry assertions pass after `6aa9ba9`.
 
 ## Review Result
 
-- Result: APPROVED (main independent review, pending final exact staged checks and actual local merge-ancestry proof)
+- Result: APPROVED (main independent spec/quality review; exact staging, preserved-blob and actual target merge-ancestry checks completed)
 - Spec compliance and quality: preservation policy matches explicit user approval; exact incoming plan is retained while its predecessor is recoverable from a separate checkpoint. Runtime/API/Figma files match verified integration; the only code/config delta is the explicitly approved one-line E2E port addition, covered by RED/GREEN, negative guards, TypeScript and actual E2E.
 - No unresolved required finding. Direct dirty-target frontend build remains NOT VERIFIED by design to exclude unrelated source; clean tracked-runtime gates and artifact equivalence are the stated evidence, never represented as a dirty-target build. Existing operational documentation still lists the original E2E ports; the approved additional port is documented in this task, with no unauthorized expansion to historical documentation. Scope limitations of the dependency remain unchanged.
 
+### Final acceptance matrix
+
+| Criterion | Concrete evidence | Result |
+| --- | --- | --- |
+| AC-1 | Explicit detailed-policy approval; separate draft checkpoint b46455a; original blob a01e78a retained exactly; unknown paths excluded, LegacyProductsPage SHA256 unchanged. | VERIFIED |
+| AC-2 | Target merge 6aa9ba9 has parents b46455a/2abdabe; ancestry checks include original frontend/backend/correction/draft; current plan blob 4e4ed99 matches approved integration. | VERIFIED |
+| AC-3 | Compared with 2abdabe, only adoption task/plan and approved one-line E2E guard differ; app, frontend runtime, packages, API/security, Figma assets and runtime configuration unchanged. | VERIFIED |
+| AC-4 | Fresh target backend 459 plus Ruff; equivalent clean tracked frontend 156+90, install/build/app and E2E types/audit zero; direct dirty-root app build explicitly NOT VERIFIED, not substituted or claimed PASS. | VERIFIED |
+| AC-5 | Actual adopted-target E2E eight passed on isolated production at loopback18081; four production artifact hashes match fresh same-environment build; no mocks/development-data writes. | VERIFIED |
+| AC-6 | Main independently reviewed implementation, one-line guard, native RED/GREEN, actual results, exact source delta, recovery blobs and ancestry; no unresolved required finding. | VERIFIED |
+| AC-7 | Logical local checkpoints/recovery/source hashes, full changed-file manifest, counts, limits/exclusions and target status recorded; no forbidden files/secret findings/push. | VERIFIED |
+
 ## Completion Evidence
 
-- Not completed. Task/plan and original draft checkpoints exist; approved target merge is resolved but not committed while mandatory verification is pending. No push or development data change occurred. Owned disposable verification services were restarted; no Docker data was reset or removed.
+- Completed on target branch `feat/figma-ui-v2`, adoption merge `6aa9ba9db7b6a25f3e5b65f31bb1664dadfe6c1d`. Local checkpoints: `32ece07` (`docs: define verified integration adoption and preservation gates`), `b46455a` (`docs: preserve pre-adoption Phase 1 planning draft`), `6aa9ba9` (`chore: adopt verified integration with isolated E2E port`), followed by the task-only final completion record. Existing integration/correction branches and all original ancestry remain intact.
+- Exact recovery reference for the old draft: `b46455a:docs/superpowers/plans/2026-09-04-phase-1-production-ready.md` (blob `a01e78aecfc230e2d31d98b1f1624b8d3e31453b`). Current plan uses integration blob `4e4ed99cd50872e42fdcfab8f27d8091386b2587`. No history rewrite, stash, silent discard or unknown-file move/delete.
+- User-owned exclusions remain untracked and untouched: `.vscode/`, personal root `.docx`, `client/src/pages/LegacyProductsPage.tsx`, `docs/plans/`, `docs/report/`, unselected rule/testing documents and the untracked Phase 2 specification. `.env`, caches, generated E2E/build output, dependencies and virtual environments are not committed. Tracked working state is clean after completion commit; the whole checkout is deliberately NOT globally clean because these user-owned untracked files remain.
+- Mandatory results: 459 backend tests, Ruff, 156 Vitest + 90 host tests, build/app/E2E types, dependency audit zero, eight real E2E and Git/diff/source/artifact/preservation checks PASS. Two dependency deprecation warnings remain non-blocking. Earlier OneDrive cache warning was avoided with cache provider disabled, not by deleting user files. Direct dirty-target app build is NOT VERIFIED; no assertion that unknown source compiles is made.
+- Browser preview is `http://127.0.0.1:18081/login`; task-owned web runs non-root101 on loopback, with the existing isolated API/DB network. Original 58081 web stays stopped because Windows reserves that range. No reserved-port/firewall/registry change, volume/data reset, source-worktree cleanup, push, PR or deployment occurred. Verification services/evidence are retained, not committed.
+- Main decisions and costs: use the approved target in place (dirty-target blockers require safe stop); keep one native agent/main independent review and sole task ledger (fewer review seats, compensated by direct checks); verify unknown-free equivalent tracked frontend in the clean integration checkout (direct dirty-root app build remains NOT VERIFIED). These recorded rulings introduce no new features or silent scope expansion.
+
+### Changed-file manifest
+
+The following exact Git status/path manifest is `git diff 1cba4cb 6aa9ba9 --name-status`, covering the full adoption sequence from its original target baseline. Inherited source files are not newly authored features. Final completion changes only this selected task file. The small delta relative to verified integration is the three explicitly reviewed paths identified above.
+
+```text
+A	.dockerignore
+M	.env.example
+A	.github/workflows/quality.yml
+M	.gitignore
+M	Dockerfile
+M	PROGRESS.md
+M	README.md
+M	alembic/env.py
+A	alembic/versions/20260904_0002_production_baseline.py
+A	app/audit/__init__.py
+A	app/audit/models.py
+A	app/audit/repository.py
+A	app/audit/router.py
+A	app/audit/schemas.py
+A	app/audit/service.py
+M	app/auth/dependencies.py
+A	app/auth/repository.py
+M	app/auth/router.py
+M	app/auth/schemas.py
+M	app/auth/security.py
+A	app/auth/service.py
+M	app/core/config.py
+M	app/core/errors.py
+A	app/dashboard/repository.py
+M	app/dashboard/router.py
+A	app/dashboard/service.py
+A	app/inventory/repository.py
+M	app/inventory/router.py
+M	app/inventory/schemas.py
+A	app/inventory/service.py
+M	app/main.py
+A	app/master_data/repository.py
+M	app/master_data/router.py
+M	app/master_data/schemas.py
+A	app/master_data/service.py
+M	app/models/__init__.py
+M	app/models/domain.py
+M	app/seed.py
+A	app/users/__init__.py
+A	app/users/repository.py
+A	app/users/router.py
+A	app/users/schemas.py
+A	app/users/service.py
+A	app/warehouse/repository.py
+M	app/warehouse/router.py
+M	app/warehouse/schemas.py
+A	app/warehouse/service.py
+A	client/.dockerignore
+M	client/Dockerfile
+A	client/e2e/admin-management.spec.ts
+A	client/e2e/auth-client.spec.ts
+A	client/e2e/helpers.ts
+A	client/e2e/inventory-flow.spec.ts
+A	client/nginx.conf
+M	client/package-lock.json
+M	client/package.json
+A	client/playwright.config.ts
+A	client/src/api.integration.test.ts
+M	client/src/api.ts
+A	client/src/app/AppShell.test.tsx
+A	client/src/app/AppShell.tsx
+A	client/src/app/AuthProvider.integration.test.tsx
+M	client/src/app/AuthProvider.tsx
+A	client/src/app/Providers.test.tsx
+A	client/src/app/Providers.tsx
+A	client/src/app/navigation.ts
+A	client/src/app/router.integration.test.tsx
+A	client/src/features/audit/AuditPage.test.tsx
+A	client/src/features/audit/AuditPage.tsx
+A	client/src/features/audit/api.ts
+A	client/src/features/audit/types.ts
+A	client/src/features/auth/AuthProvider.test.tsx
+A	client/src/features/auth/AuthProvider.tsx
+A	client/src/features/auth/LoginPage.tsx
+A	client/src/features/auth/RegisterPage.test.tsx
+A	client/src/features/auth/RegisterPage.tsx
+A	client/src/features/auth/RequireAuth.tsx
+A	client/src/features/auth/RequireRole.tsx
+A	client/src/features/auth/api.ts
+A	client/src/features/auth/routes.test.tsx
+A	client/src/features/auth/schemas.ts
+A	client/src/features/auth/types.ts
+A	client/src/features/auth/useAuth.ts
+A	client/src/features/categories/CategoriesPage.test.tsx
+A	client/src/features/categories/CategoriesPage.tsx
+A	client/src/features/categories/api.ts
+A	client/src/features/categories/schemas.ts
+A	client/src/features/categories/types.ts
+A	client/src/features/dashboard/DashboardPage.test.tsx
+A	client/src/features/dashboard/DashboardPage.tsx
+A	client/src/features/dashboard/api.ts
+A	client/src/features/inventory/InboundPage.tsx
+A	client/src/features/inventory/InventoryFilters.tsx
+A	client/src/features/inventory/InventoryLabels.tsx
+A	client/src/features/inventory/MovementForm.test.tsx
+A	client/src/features/inventory/MovementForm.tsx
+A	client/src/features/inventory/MovementPage.test.tsx
+A	client/src/features/inventory/MovementPage.tsx
+A	client/src/features/inventory/OutboundPage.tsx
+A	client/src/features/inventory/StockPage.test.tsx
+A	client/src/features/inventory/StockPage.tsx
+A	client/src/features/inventory/api.ts
+A	client/src/features/inventory/schemas.ts
+A	client/src/features/inventory/types.ts
+A	client/src/features/products/ProductsPage.test.tsx
+A	client/src/features/products/ProductsPage.tsx
+A	client/src/features/products/api.ts
+A	client/src/features/products/schemas.ts
+A	client/src/features/products/types.ts
+A	client/src/features/suppliers/SuppliersPage.test.tsx
+A	client/src/features/suppliers/SuppliersPage.tsx
+A	client/src/features/suppliers/api.ts
+A	client/src/features/suppliers/schemas.ts
+A	client/src/features/suppliers/types.ts
+A	client/src/features/transactions/TransactionsPage.test.tsx
+A	client/src/features/transactions/TransactionsPage.tsx
+A	client/src/features/transactions/api.ts
+A	client/src/features/transactions/types.ts
+A	client/src/features/users/UserActions.tsx
+A	client/src/features/users/UserCreateForm.tsx
+A	client/src/features/users/UsersPage.test.tsx
+A	client/src/features/users/UsersPage.tsx
+A	client/src/features/users/api.ts
+A	client/src/features/users/schemas.ts
+A	client/src/features/users/types.ts
+A	client/src/features/warehouses/WarehousesPage.test.tsx
+A	client/src/features/warehouses/WarehousesPage.tsx
+A	client/src/features/warehouses/api.ts
+A	client/src/features/warehouses/schemas.ts
+A	client/src/features/warehouses/types.ts
+M	client/src/pages/AuthPages.tsx
+M	client/src/pages/DashboardPage.tsx
+M	client/src/pages/InventoryPage.tsx
+M	client/src/pages/MovementPages.tsx
+M	client/src/pages/ProductFormPage.tsx
+M	client/src/pages/ProductsPage.tsx
+M	client/src/pages/StockDetailPage.tsx
+M	client/src/pages/WarehouseDetailPage.tsx
+M	client/src/pages/WarehouseFormPage.tsx
+M	client/src/pages/WarehousesPage.tsx
+A	client/src/shared/api/ApiClient.test.ts
+A	client/src/shared/api/ApiClient.ts
+A	client/src/shared/api/ApiError.ts
+A	client/src/shared/api/collectAllPages.ts
+A	client/src/shared/api/types.ts
+M	client/src/shared/lib/dashboard.ts
+A	client/src/shared/ui/AsyncState.test.tsx
+A	client/src/shared/ui/AsyncState.tsx
+A	client/src/shared/ui/FormFieldError.tsx
+A	client/src/shared/ui/Pagination.test.tsx
+A	client/src/shared/ui/Pagination.tsx
+A	client/src/test/LegacyAppRouter.tsx
+A	client/src/test/renderRoleRoute.tsx
+A	client/src/test/setup.ts
+M	client/src/types.ts
+M	client/tests/movement-list.test.js
+M	client/tests/product-pagination.test.js
+M	client/tests/products-warehouses-remediation.test.js
+A	client/tests/run-host-tests.mjs
+M	client/vite.config.ts
+A	docker-compose.e2e.yml
+A	docker-compose.test.yml
+M	docker-compose.yml
+A	docs/api/phase-1-contract.md
+M	docs/architecture/phase-1-design.md
+A	docs/operations/phase-1-runbook.md
+M	docs/superpowers/plans/2026-09-04-phase-1-production-ready.md
+A	docs/superpowers/plans/2026-10-16-adopt-verified-integration.md
+A	docs/tasks/adopt-verified-integration.md
+M	docs/tasks/integrate-phase1-backend-with-figma-ui.md
+A	docs/tasks/phase-1/P1-C01-phase-1-corrective.md
+M	pyproject.toml
+A	tests/postgres/__init__.py
+A	tests/postgres/conftest.py
+A	tests/postgres/test_auth_integration.py
+A	tests/postgres/test_categories.py
+A	tests/postgres/test_constraints.py
+A	tests/postgres/test_dashboard.py
+A	tests/postgres/test_inventory_concurrency.py
+A	tests/postgres/test_inventory_reads.py
+A	tests/postgres/test_inventory_transactions.py
+A	tests/postgres/test_migrations.py
+A	tests/postgres/test_products.py
+A	tests/postgres/test_rbac_matrix.py
+A	tests/postgres/test_readiness.py
+A	tests/postgres/test_seed.py
+A	tests/postgres/test_suppliers.py
+A	tests/postgres/test_users_audit.py
+A	tests/postgres/test_warehouses.py
+M	tests/test_auth.py
+M	tests/test_dashboard.py
+M	tests/test_error_contract.py
+M	tests/test_health.py
+M	tests/test_inventory.py
+D	tests/test_master_data.py
+D	tests/test_migration.py
+A	tests/test_migrations.py
+M	tests/test_seed.py
+M	tests/test_warehouses.py
+A	tests/unit/test_architecture.py
+A	tests/unit/test_audit_payload.py
+A	tests/unit/test_auth_schemas.py
+M	tests/unit/test_config.py
+M	tests/unit/test_pagination.py
+```
