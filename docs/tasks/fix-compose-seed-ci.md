@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- Status: VERIFYING
+- Status: DONE
 - Plan: embedded single-milestone plan in this file, identifier `fix-compose-seed-ci`
 - Specification: user-approved CI-only repair brief, 2026-10-16; required non-empty bootstrap credentials in `docker-compose.yml` and `docs/operations/phase-1-runbook.md`
 - Depends on: docs/tasks/adopt-verified-integration.md
 - Created: 2026-10-16
 - Started: 2026-10-16
-- Completed: not completed
+- Completed: 2026-10-16
 
 ## Goal
 
@@ -46,7 +46,7 @@ Correct the Compose/seed test-isolation defect responsible for the failed backen
 - [x] AC-3 — Complete baseline succeeds; missing/blank coverage and strict expected-variable assertions remain intact. Focused regression catches reintroducing the all-missing baseline or using ambient credential values. Production Compose/runtime contracts remain unchanged.
 - [x] AC-4 — Native RED/GREEN and main independent focused/repeated Compose verification, full backend/PostgreSQL suite and Ruff pass with actual counts; relevant Linux/CI-equivalent checks are recorded, unavailable checks explicitly NOT VERIFIED.
 - [x] AC-5 — Main independently reviews the entire scoped diff and fixes required findings within at most three rounds; no unrelated file, security bypass or dependency change is introduced.
-- [ ] AC-6 — Actual new GitHub Quality result for the patched commit is confirmed after separately approved publication. Until then this criterion is NOT VERIFIED, remote CI remains the baseline failure, and the task must not be marked DONE.
+- [x] AC-6 — Actual new GitHub Quality result for the patched commit is confirmed after separately approved publication. Until then this criterion is NOT VERIFIED, remote CI remains the baseline failure, and the task must not be marked DONE.
 - [x] AC-7 — Report exact changed files, local verification and pending remote evidence. Preserve baseline HEAD/index, personal files and existing services/data; no stage/commit/push without additional explicit authorization.
 
 ## Embedded Implementation Plan
@@ -115,20 +115,22 @@ Single executable milestone `fix-compose-seed-ci`; no separate workstream task i
 - Main Windows full backend/PostgreSQL: 462 passed, two dependency warnings, exit 0; Ruff passed.
 - Main Linux/Python 3.12.15 full backend/PostgreSQL: 462 passed, one dependency warning, exit 0 in 117.14 seconds; Ruff passed. Same approved test-only patch over tracked baseline; no developer secrets/unknown source mounted. This confirms Linux behavior, not the exact future hosted runner/package snapshot.
 - Main Linux Compose v2.40.3: unpatched RED 10 failed / three passed / 31 deselected; three patched GREEN processes each 16 passed / 31 deselected, no skips. Native Windows Compose v5.5.0: focused 47 passed and three separate Compose processes each 16 passed / 31 deselected; native regression RED and setdefault mutation failure recorded above.
-- `git diff --check`: passed. Only tracked implementation change is tests/test_seed.py, 23 additions/two deletions. This new task file is the only new in-scope file; no staging was performed.
-- Remote baseline failure observed: Quality [38872221924](https://github.com/tonazario08/smart-warehouse/actions/runs/38872221924) at `98e2cbdd48af69fe2d41f2b8da0c1a5a675ee3d4`, backend 448 passed/11 failed; frontend success; E2E skipped. Patched GitHub backend/frontend/E2E result: **NOT VERIFIED**. Frontend was not modified or locally rebuilt for this test-only patch; the baseline frontend job is not evidence for a new patched remote run. Browser/Figma verification is outside this CI-only task.
+- Fresh pre-publication Linux full backend/PostgreSQL rerun: 462 passed, one dependency warning in 98.21 seconds; Ruff passed. `git diff --check` and staged check passed. Published implementation diff remains tests/test_seed.py, 23 additions/two deletions; this task is the only other published file. Completion evidence below is captured in the separately approved documentation-only checkpoint; no implementation change follows the verified code commit.
+- Historical failure: Quality [38872221924](https://github.com/tonazario08/smart-warehouse/actions/runs/38872221924) at `98e2cbdd48af69fe2d41f2b8da0c1a5a675ee3d4`, backend 448 passed/11 failed; frontend success; E2E skipped. It remains an immutable RED record.
+- Patched hosted verification: Quality [38876837987](https://github.com/tonazario08/smart-warehouse/actions/runs/38876837987) at `0d759ad0905380aa20f14a875ddf13b2df5d977f`, completed success. Backend: 462 passed, one warning, Ruff and PostgreSQL migrations passed. Frontend: 156 Vitest plus 90 host tests passed, typecheck and production build passed. Real disposable-stack Playwright: 8 passed. All three jobs succeeded; E2E was not skipped. Browser/Figma visual verification beyond those critical paths remains outside this CI-only task; no claim of all project features or phases being complete is made.
 
 ## Review Result
 
 - Local patch review: **PASS**, main independent spec/quality review, round 1 of maximum 3; no required findings or further implementation correction. Reviewed the entire test diff and this task ledger against the approved bounded CI repair.
 - The root cause is fixture setup, not relaxed bootstrap security. All twelve strict real-Compose negative cases remain; the exact six-value baseline regression rejects absent, empty and ambient credentials. The unchanged production Compose, seed/auth/API/RBAC/frontend/workflow/dependencies retain their existing contracts.
-- Final task approval: **PENDING**, because AC-6 is NOT VERIFIED. No REVIEWING/DONE transition is claimed while the mandatory new remote Quality evidence is missing.
+- Final task review: **APPROVED**, main independent review of the native change and actual hosted run, round 1 with no required findings. AC-6 now has exact patched SHA/run/job/test evidence. All seven task ACs are verified; no production/API/frontend/workflow change or new feature is inferred from this bounded CI fix.
 
 ## Completion Evidence
 
-- Not completed; status remains **VERIFYING**. AC-1 through AC-5 and AC-7 have local evidence above. AC-6 requires a real patched GitHub Quality run, including its backend/frontend/E2E outcomes.
-- Exact in-scope handoff: modified tests/test_seed.py and new docs/tasks/fix-compose-seed-ci.md. HEAD remains `98e2cbd`, index empty. Personal/unrelated untracked files remain excluded and untouched. Existing checkpoint DB and isolated application services remain running; no volumes/data were reset or removed. Only task-owned ephemeral diagnostic containers used `--rm`; ignored archive/context/image remain available.
-- Required human decision: authorize a logical local commit and push of only these two reviewed files to existing `origin/feat/figma-ui-v2`, then read/monitor the resulting new Quality run. No merge to main, PR, deployment or history rewrite is proposed. Without that new publication authority, stop here and do not stage/commit/push.
+- **DONE / APPROVED**, after actual patched CI verification and independent REVIEWING; all seven ACs checked with evidence in this file, not test/build extrapolation alone.
+- Published checkpoint: `0d759ad0905380aa20f14a875ddf13b2df5d977f`, `test: isolate Compose bootstrap credential cases`, on approved `origin/feat/figma-ui-v2`. Exact two-file scope: tests/test_seed.py and docs/tasks/fix-compose-seed-ci.md. Remote feature HEAD confirmed; no merge to main, PR, deployment or rewritten history.
+- Human separately approved publishing this task's post-CI evidence/state update on 2026-10-16. The completion checkpoint changes only this task, with final commit hash and remote/working-tree checks reported in the conversation handoff rather than introducing self-referential commit metadata. Unrelated untracked personal/editor/legacy/report/spec/testing files remain excluded and untouched, including the unchanged LegacyProductsPage hash. Existing checkpoint DB and isolated application services were not reset/removed. Ignored diagnostic resources are retained; only self-created ephemeral containers used `--rm`.
+- No required finding/blocker remains within this CI task. Hosted action-runtime/runner migration annotations are non-blocking follow-up considerations outside scope; resolving them or adding missing business features requires its own explicit task authority.
 
 ## Progress Log Continuation
 
@@ -148,3 +150,23 @@ Single executable milestone `fix-compose-seed-ci`; no separate workstream task i
 
 - Main reran the complete Linux/Python 3.12 suite against the guarded disposable PostgreSQL DB with the reviewed one-file patch: **462 passed / one dependency warning**, exit 0 in 98.21 seconds. Subsequent Ruff returned **All checks passed**. Production/app/frontend files remain unchanged; frontend build/tests will be freshly checked by the new Quality workflow, not inferred from the old run.
 - Pre-stage review inspected git status, full unstaged implementation diff, empty staged diff, exact branch/remote and remote feature HEAD. Only tests/test_seed.py and this task are authorized for staging/publication. Missing/blank assertions and all twelve real-Compose cases remain unchanged. No real credential or secret value is added; all credential-like strings in the implementation diff are explicit test-only dummy values.
+
+### 2026-10-16 — Published checkpoint and actual Quality success
+
+- After inspecting full status/unstaged/staged diff and the two-file staged allowlist, created `0d759ad0905380aa20f14a875ddf13b2df5d977f`, `test: isolate Compose bootstrap credential cases` (only tests/test_seed.py and this task). Pushed normally to approved `origin/feat/figma-ui-v2`; read-only remote check confirms the exact SHA. No PR/merge/history rewrite or unrelated staging occurred.
+- Push-triggered Quality [38876837987](https://github.com/tonazario08/smart-warehouse/actions/runs/38876837987) completed **success** at exact patched SHA `0d759ad0905380aa20f14a875ddf13b2df5d977f`. Main read the run identity, all job outcomes and filtered test-summary logs without printing secret values. Frontend job 116893805528 succeeded (41 seconds): **156 Vitest tests across 22 files plus 90 host tests**, typecheck and build passed. Backend job 116893806665 succeeded (83 seconds): Ruff and PostgreSQL migrations passed; **462 passed / one dependency warning** in 49.45 seconds. E2E job 116894322914 succeeded (99 seconds): disposable Compose validation/build/start and **8 Playwright tests passed** in 12.4 seconds; cleanup succeeded. These are new actual hosted results, not the baseline failed run or local-only extrapolation.
+- Non-blocking hosted annotations note deprecated action Node 20 targets being run on Node 24 and the forthcoming ubuntu-latest image migration. They did not fail any job. Updating action pins/runner policy is outside the approved test-only task; no workflow upgrade was introduced.
+
+### 2026-10-16 — VERIFYING -> REVIEWING
+
+- All mandatory verification evidence is now present, including AC-6. Main starts final independent review of the published source diff, per-AC evidence, publication exclusions and completion ledger. No further implementation edit is proposed. The later completion-evidence changes in this task remain local until an additional documentation checkpoint is authorized; published checkpoint accurately retained VERIFYING while CI was pending.
+
+### 2026-10-16 — REVIEWING -> DONE
+
+- Main completed independent spec/quality review with no required findings. AC-1: remote/root-cause RED recorded. AC-2: all twelve targeted negative cases preserved and verified with real Compose. AC-3: positive baseline and three ambient-isolation regressions/mutation evidence present, production contracts unchanged. AC-4: native/main repeated checks plus Windows/Linux full PostgreSQL/Ruff evidence present. AC-5: entire approved source/task diff reviewed in round 1. AC-6: patched Quality 38876837987 succeeded for exact published SHA, all backend/frontend/E2E jobs verified. AC-7: exact two-file publication allowlist, preserved unrelated files/data, empty index and task-only remaining local evidence diff verified.
+- Set DONE/APPROVED only now, after VERIFYING -> REVIEWING and actual hosted evidence. No additional code fix or scope extension required. The local completion-evidence diff is not another published commit; report it explicitly rather than claiming a completely clean checkout or silently committing again.
+
+### 2026-10-16 — Documentation-only completion checkpoint authorized
+
+- Approver: human user, replying `duyet` to the explicit proposal to commit/push only the remaining completion documentation. This authorizes exactly this task file on existing origin/feat/figma-ui-v2; no source, historical task, unknown file, merge, PR or history change is included. Task remains DONE; this is approved publication bookkeeping, not reopened implementation or a new review claim.
+- Requeried exact code-commit Quality 38876837987: completed success, all frontend/backend/E2E jobs succeeded at `0d759ad0905380aa20f14a875ddf13b2df5d977f`. Existing test evidence is retained as historical verified evidence; no new local test/build run is claimed for this Markdown-only checkpoint. Validate unstaged/staged diffs and whitespace, exact one-file allowlist, branch/remote identity and remote fast-forward before publication. Final publication outcome is reported in the handoff; no follow-on task edit is needed solely to record this documentation commit's own hash.
