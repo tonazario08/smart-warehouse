@@ -48,13 +48,13 @@ export async function signOut(page: Page) {
   expect(await storedToken(page) === null).toBe(true)
 }
 export async function createManagedUser(page: Page, credentials: Credentials, role: 'client' | 'warehouse') {
-  // No approved management UI: this remains explicit real backend API coverage.
+  // API fixture/security coverage; management-ui.spec.ts separately exercises the active UI.
   const user = await realApi<{ id: number; role: string; is_active: boolean }>(page, '/users', 'POST', { ...credentials, role }, 201)
   expect(user.role === role && user.is_active).toBe(true)
   return user
 }
 export async function createMasterData(page: Page, names: MasterDataNames) {
-  // Directory mutations are API-only; product/warehouse creation uses the active Figma UI.
+  // Fixture setup through real APIs; separate management UI scenarios cover directory mutations.
   const category = await realApi<{ id: number }>(page, '/categories', 'POST', { name: names.category, parent_id: null }, 201)
   const supplier = await realApi<{ id: number }>(page, '/suppliers', 'POST', { name: names.supplier, email: names.supplierEmail, phone: '+84-28-5555-0101', address: '19 E2E Street' }, 201)
   await page.goto('/products/new')

@@ -8,7 +8,7 @@ test('Figma product/warehouse CRUD plus real API directory, managed-user and pas
   await expect(page).toHaveURL(/\/dashboard$/)
   const ids = await createMasterData(page, names)
 
-  // Management and audit have no approved Figma screens: prove the real API, not a legacy UI.
+  // Retain direct API/security coverage alongside the separate active management UI scenarios.
   const managed = await createManagedUser(page, operator, 'warehouse')
   await realApi(page, '/users', 'POST', { email: 'denied-' + uniqueRunId() + '@example.com', password: operator.password, role: 'admin' }, 422)
   const role = await realApi<{ role: string }>(page, '/users/' + managed.id + '/role', 'PATCH', { role: 'client' })

@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 declare const process: { env: Record<string, string | undefined> }
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:58080'
 const target = new URL(baseURL)
-if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(target.hostname) || !['58080', '58081', '18081'].includes(target.port) || target.username || target.password) {
+if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(target.hostname) || !['58080', '58081', '18081', '18082'].includes(target.port) || target.username || target.password) {
   throw new Error('E2E writes require the explicitly isolated loopback web port.')
 }
 
