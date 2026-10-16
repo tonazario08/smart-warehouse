@@ -12,6 +12,15 @@ export function onApiUnauthorized(listener: (token: string, generation: number) 
 }
 
 const errorMessages: Record<string, string> = {
+  USER_EMAIL_CONFLICT: 'Email đã được sử dụng. Vui lòng chọn email khác.',
+  USER_ROLE_UNCHANGED: 'Vai trò hiện tại không thay đổi.',
+  USER_STATUS_UNCHANGED: 'Trạng thái hiện tại không thay đổi.',
+  USER_ROLE_INVALID: 'Vai trò này không được phép thay đổi.',
+  CATEGORY_NAME_CONFLICT: 'Tên danh mục đã tồn tại.',
+  CATEGORY_PARENT_CYCLE: 'Danh mục cha tạo vòng lặp. Vui lòng chọn lại.',
+  CATEGORY_IN_USE: 'Không thể xóa danh mục đang được sử dụng.',
+  SUPPLIER_CONFLICT: 'Thông tin nhà cung cấp bị trùng. Vui lòng kiểm tra lại.',
+  SUPPLIER_IN_USE: 'Không thể xóa nhà cung cấp đang được sử dụng.',
   INVALID_CREDENTIALS: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra và thử lại.',
   PRODUCT_IN_USE: 'Không thể xóa sản phẩm vì đang được tham chiếu trong dữ liệu tồn kho.',
   PRODUCT_NOT_FOUND: 'Không tìm thấy sản phẩm.',
@@ -47,7 +56,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const generation = sessionGeneration
   const response = await fetch(apiBaseUrl + path, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...options.headers } })
   if (!response.ok) {
