@@ -43,7 +43,7 @@ def compose_config_command(directory: Path) -> tuple[list[str], dict[str, str]]:
     (directory / ".env").write_text("", encoding="utf-8")
     environment = os.environ.copy()
     for name in SEED_ENVIRONMENT_NAMES:
-        environment.pop(name, None)
+        environment[name] = f"compose-test-{name.lower()}"
     environment.update(
         {
             "POSTGRES_PASSWORD": "compose-test-password",
@@ -134,9 +134,30 @@ def test_compose_config_fails_closed_for_missing_or_blank_bootstrap_credentials(
     assert name in result.stderr + result.stdout
 
 
+@pytest.mark.parametrize("ambient_value", [None, "", "ambient-value-must-not-be-used"])
+def test_compose_config_uses_complete_credentials_independent_of_host_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient_value: str | None
+) -> None:
+    for name in SEED_ENVIRONMENT_NAMES:
+        if ambient_value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, ambient_value)
+
+    _, environment = compose_config_command(tmp_path)
+
+    assert {name: environment.get(name) for name in SEED_ENVIRONMENT_NAMES} == {
+        "SEED_ADMIN_EMAIL": "compose-test-seed_admin_email",
+        "SEED_ADMIN_PASSWORD": "compose-test-seed_admin_password",
+        "SEED_WAREHOUSE_EMAIL": "compose-test-seed_warehouse_email",
+        "SEED_WAREHOUSE_PASSWORD": "compose-test-seed_warehouse_password",
+        "SEED_CLIENT_EMAIL": "compose-test-seed_client_email",
+        "SEED_CLIENT_PASSWORD": "compose-test-seed_client_password",
+    }
+
+
 def test_compose_config_accepts_complete_bootstrap_credentials(tmp_path: Path) -> None:
     command, environment = compose_config_command(tmp_path)
-    environment.update({name: f"compose-test-{name.lower()}" for name in SEED_ENVIRONMENT_NAMES})
 
     result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
 
