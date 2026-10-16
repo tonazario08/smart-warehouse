@@ -8,7 +8,7 @@ import kpiGreen from '../shared/assets/figma/kpi-green.svg'
 import kpiWarning from '../shared/assets/figma/kpi-warning.svg'
 import { buildDashboardOverview, type DashboardStockRow, type DashboardTransactionRow } from '../shared/lib/dashboard'
 import { inventoryStatusLabels, inventoryStatusVariants } from '../shared/lib/inventory'
-import { formatNumber, formatQuantity } from '../shared/lib/formatters'
+import { formatDateTime, formatNumber, formatQuantity } from '../shared/lib/formatters'
 import { can } from '../shared/lib/permissions'
 import { Badge } from '../shared/ui/Badge'
 import { Button } from '../shared/ui/Button'
@@ -33,8 +33,8 @@ const transactionColumns: DataTableColumn<DashboardTransactionRow>[] = [
   { id: 'product', header: 'Sản phẩm', render: row => row.productName },
   { id: 'warehouse', header: 'Kho', render: row => row.warehouseName },
   { id: 'quantity', header: 'Thay đổi', render: row => <strong className={`dashboard-transaction-change dashboard-transaction-change--${row.kind}`}>{row.kind === 'inbound' ? '+' : '−'}{formatQuantity(row.quantity, row.unit)}</strong> },
-  { id: 'time', header: 'Thời gian', render: () => <span title="Chưa có dữ liệu thời gian">—</span> },
-  { id: 'actor', header: 'Người thực hiện', render: () => <span title="Chưa có dữ liệu người thực hiện">—</span> },
+  { id: 'time', header: 'Thời gian', render: row => formatDateTime(row.createdAt) },
+  { id: 'actor', header: 'Người thực hiện', render: row => row.createdById === undefined ? '—' : `Tài khoản #${row.createdById}` },
 ]
 
 export function DashboardPage() {
@@ -49,13 +49,13 @@ export function DashboardPage() {
     let active = true
     setOverview(null)
     setError('')
-    void Promise.all([api.dashboardStats(token), api.productsAll(), api.warehouses(token), api.stock(token), api.transactions(token)])
+    void Promise.all([api.dashboardStats(token), api.productsAll(token), api.warehouses(token), api.stock(token), api.transactions(token)])
       .then(([stats, products, warehouses, stock, transactions]) => {
         if (active) setOverview(buildDashboardOverview({ stats, products, warehouses, stock, transactions }))
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setError('Không thể tải dữ liệu bảng điều khiển. Vui lòng thử lại.')
       })
     return () => { active = false }
@@ -99,6 +99,6 @@ export function DashboardPage() {
         })}</div>
       </article>
     </section>
-    <article className="dashboard-panel dashboard-panel--transactions"><div className="dashboard-panel__header"><h2>Giao dịch kho gần đây</h2></div><DataTable caption="Giao dịch nhập và xuất kho theo mã giao dịch mới nhất" columns={transactionColumns} emptyMessage="Chưa có giao dịch kho." getRowKey={row => row.id} rows={recentTransactions} /><p className="dashboard-unavailable">Thời gian và người thực hiện chưa khả dụng. Các giao dịch được sắp theo mã mới nhất.</p></article>
+    <article className="dashboard-panel dashboard-panel--transactions"><div className="dashboard-panel__header"><h2>Giao dịch kho gần đây</h2></div><DataTable caption="Giao dịch nhập và xuất kho theo mã giao dịch mới nhất" columns={transactionColumns} emptyMessage="Chưa có giao dịch kho." getRowKey={row => row.id} rows={recentTransactions} /><p className="dashboard-unavailable">Người thực hiện được hiển thị theo mã tài khoản; chưa có tên tài khoản trong dữ liệu giao dịch.</p></article>
   </section>
 }

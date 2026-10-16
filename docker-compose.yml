@@ -15,21 +15,67 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
+  migrate:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    command: ["alembic", "upgrade", "head"]
     depends_on:
       db:
         condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   web:
     build: ./client
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "5173:5173"
+      - "8080:8080"
+
+  bootstrap:
+    build: .
+    profiles: ["bootstrap"]
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?set SEED_ADMIN_EMAIL in .env}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD in .env}
+      SEED_WAREHOUSE_EMAIL: ${SEED_WAREHOUSE_EMAIL:?set SEED_WAREHOUSE_EMAIL in .env}
+      SEED_WAREHOUSE_PASSWORD: ${SEED_WAREHOUSE_PASSWORD:?set SEED_WAREHOUSE_PASSWORD in .env}
+      SEED_CLIENT_EMAIL: ${SEED_CLIENT_EMAIL:?set SEED_CLIENT_EMAIL in .env}
+      SEED_CLIENT_PASSWORD: ${SEED_CLIENT_PASSWORD:?set SEED_CLIENT_PASSWORD in .env}
+    command: ["python", "-m", "app.seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

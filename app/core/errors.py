@@ -66,7 +66,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         fields: dict[str, list[str]] = {}
         for item in exc.errors():
             key = ".".join(str(part) for part in item["loc"] if part != "body") or "request"
-            fields.setdefault(key, []).append(str(item["msg"]))
+            fields.setdefault(key, []).append("Invalid value.")
         return _error_response(
             422,
             "REQUEST_VALIDATION_ERROR",

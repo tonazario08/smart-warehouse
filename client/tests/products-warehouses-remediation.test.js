@@ -68,8 +68,8 @@ function server() {
       : /\/products\/\d+$/.test(url.pathname) ? products.find(product => product.id === Number(url.pathname.split('/').pop()))
       : url.pathname.endsWith('/categories') ? { items: [{ id: 1, name: 'Danh mục', parent_id: null }], page: 1, page_size: 100, total: 1 }
       : url.pathname.endsWith('/suppliers') ? { items: [{ id: 1, name: 'Supplier One', email: null, phone: null, address: null }, { id: 2, name: 'Supplier Two', email: null, phone: null, address: null }], page: 1, page_size: 100, total: 2 }
-      : url.pathname.endsWith('/stock') ? stock : url.pathname.endsWith('/warehouses/1') ? warehouses[0] : warehouses
-    if (!/\/products(?:\/\d+)?$/.test(url.pathname) && !url.pathname.endsWith('/categories')) assert.equal(options.headers.Authorization, 'Bearer test-token')
+      : url.pathname.endsWith('/stock') ? { items: stock, total: stock.length, page, page_size: 100 } : url.pathname.endsWith('/warehouses/1') ? warehouses[0] : { items: warehouses, total: warehouses.length, page, page_size: 100 }
+    assert.equal(options.headers.Authorization, 'Bearer test-token')
     return { ok: true, status: 200, json: async () => payload }
   } }
 }
@@ -393,7 +393,7 @@ test('movement preview ignores stale stock responses after changing the selectio
   let finishOldRequest, stockRequests = 0
   globalThis.fetch = async (input, options) => {
     if (new URL(String(input)).pathname.endsWith('/stock') && ++stockRequests === 1) {
-      return new Promise(resolveRequest => { finishOldRequest = () => resolveRequest({ ok: true, status: 200, json: async () => [{ id: 1, warehouse_id: 1, product_id: 1, quantity: 999 }] }) })
+      return new Promise(resolveRequest => { finishOldRequest = () => resolveRequest({ ok: true, status: 200, json: async () => ({ items: [{ id: 1, warehouse_id: 1, product_id: 1, quantity: 999 }], total: 1, page: 1, page_size: 100 }) }) })
     }
     return data.fetch(input, options)
   }

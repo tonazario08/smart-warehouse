@@ -43,7 +43,7 @@ export function InventoryPage() {
     let active = true
     setLoading(true)
     setError('')
-    void Promise.all([api.stock(token), api.productsAll(), api.warehouses(token)])
+    void Promise.all([api.stock(token), api.productsAll(token), api.warehouses(token)])
       .then(([stocks, productList, warehouseList]) => {
         if (!active) return
         setRows(buildInventoryRows({ stocks, products: productList, warehouses: warehouseList }))
@@ -52,12 +52,12 @@ export function InventoryPage() {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setError('Không thể tải dữ liệu tồn kho. Vui lòng thử lại.')
       })
       .finally(() => { if (active) setLoading(false) })
     // Category names enrich the filter; a failed lookup must not hide stock data.
-    void api.categories().then(result => { if (active) setCategoryNames(new Map(result.items.map(category => [category.id, category.name]))) }).catch(() => {})
+    void api.categories(token).then(result => { if (active) setCategoryNames(new Map(result.items.map(category => [category.id, category.name]))) }).catch(() => {})
     return () => { active = false }
   }, [logout, reload, token])
 

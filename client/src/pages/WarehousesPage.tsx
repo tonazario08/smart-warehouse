@@ -39,7 +39,7 @@ export function WarehousesPage() {
     if (!token) return
     let active = true
     setLoading(true); setError('')
-    void Promise.all([api.warehouses(token), api.stock(token), api.productsAll()])
+    void Promise.all([api.warehouses(token), api.stock(token), api.productsAll(token)])
       .then(([warehouseList, stocks, products]) => {
         if (!active) return
         const rows: InventoryRow[] = buildInventoryRows({ warehouses: warehouseList, stocks, products })
@@ -47,7 +47,7 @@ export function WarehousesPage() {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setError(errorMessage(cause))
       })
       .finally(() => { if (active) setLoading(false) })

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -129,6 +130,15 @@ class Product(IdentifierMixin, TimestampMixin, Base):
 
 class Warehouse(IdentifierMixin, TimestampMixin, Base):
     __tablename__ = "warehouses"
+    __table_args__ = (
+        CheckConstraint("code = upper(trim(code))", name="ck_warehouses_code_normalized"),
+        CheckConstraint(
+            "(latitude IS NULL AND longitude IS NULL) OR "
+            "(latitude IS NOT NULL AND longitude IS NOT NULL AND "
+            "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)",
+            name="ck_warehouses_coordinates_paired_and_ranged",
+        ),
+    )
 
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
@@ -212,6 +222,11 @@ class StockTransaction(IdentifierMixin, Base):
     __tablename__ = "transactions"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_transactions_quantity_positive"),
+        CheckConstraint(
+            "(transaction_type = 'inbound' AND inbound_id IS NOT NULL AND outbound_id IS NULL) OR "
+            "(transaction_type = 'outbound' AND outbound_id IS NOT NULL AND inbound_id IS NULL)",
+            name="ck_transactions_exactly_one_movement",
+        ),
         Index(
             "ix_transactions_warehouse_product_type_created_at",
             "warehouse_id",
@@ -297,3 +312,8 @@ class RouteLog(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+Index("uq_users_email_lower", func.lower(User.email), unique=True)
+Index("uq_products_sku_upper", func.upper(Product.sku), unique=True)
+Index("uq_warehouses_code_upper", func.upper(Warehouse.code), unique=True)

@@ -1,0 +1,16 @@
+name: smart-warehouse-test
+
+services:
+  db_test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smart_warehouse_test
+      POSTGRES_USER: smart_warehouse_test
+      POSTGRES_PASSWORD: test-only
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smart_warehouse_test -d smart_warehouse_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

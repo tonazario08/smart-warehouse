@@ -86,6 +86,7 @@ function fakeServer(data, { failPage = 0, gate = null } = {}) {
       const url = new URL(String(input))
       requests.push({ url, options })
       assert.equal(url.origin, 'http://localhost:8000')
+      assert.equal(options.headers.Authorization, 'Bearer test-token')
       if (url.pathname === '/api/v1/products') {
         const page = Number(url.searchParams.get('page'))
         assert.equal(url.searchParams.get('page_size'), '100')
@@ -96,7 +97,7 @@ function fakeServer(data, { failPage = 0, gate = null } = {}) {
       assert.equal(options.headers.Authorization, 'Bearer test-token')
       const payload = { '/api/v1/stock': data.stock, '/api/v1/warehouses': data.warehouses, '/api/v1/warehouses/1': data.warehouses[0], '/api/v1/dashboard/stats': data.stats, '/api/v1/transactions': data.transactions }[url.pathname]
       assert.ok(payload, `Unexpected request: ${url}`)
-      return { ok: true, status: 200, json: async () => payload }
+      return { ok: true, status: 200, json: async () => Array.isArray(payload) ? { items: payload, total: payload.length, page: Number(url.searchParams.get('page') || 1), page_size: 100 } : payload }
     },
   }
 }
@@ -157,14 +158,14 @@ test('productsAll returns all 201 records across three API pages while products 
   try {
     const compiled = readFileSync(resolve(sourceRoot, 'api.js'), 'utf8')
     const module = { exports: {} }
-    new Function('require', 'module', 'exports', compiled)(require, module, module.exports)
+    new Function('require', 'module', 'exports', compiled)(createRequire(resolve(sourceRoot, 'api.js')), module, module.exports)
     const { api } = module.exports
-    const products = await api.productsAll()
+    const products = await api.productsAll('test-token')
     assert.equal(products.length, 201)
     assert.equal(products[100].id, 101)
     assert.equal(products[200].id, 201)
     assert.deepEqual(server.requests.map(({ url }) => Number(url.searchParams.get('page'))), [1, 2, 3])
-    const page = await api.products()
+    const page = await api.products('test-token')
     assert.equal(page.items.length, 100)
     assert.equal(page.total, 201)
   } finally { globalThis.fetch = originalFetch }

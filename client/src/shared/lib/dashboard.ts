@@ -39,6 +39,8 @@ export type DashboardTransactionRow = {
   warehouseName: string
   quantity: number
   unit: string
+  createdAt?: string
+  createdById?: number
 }
 
 export function buildDashboardOverview({ products, stats, stock, transactions, warehouses }: DashboardInput) {
@@ -89,6 +91,8 @@ export function buildDashboardOverview({ products, stats, stock, transactions, w
       warehouseName: warehouse?.name ?? 'Kho không xác định',
       quantity: transaction.quantity,
       unit: product?.unit ?? '',
+      ...(transaction.created_at ? { createdAt: transaction.created_at } : {}),
+      ...(transaction.created_by_id !== undefined ? { createdById: transaction.created_by_id } : {}),
     }
   })
 

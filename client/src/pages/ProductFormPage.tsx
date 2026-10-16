@@ -16,7 +16,7 @@ const message = (cause: unknown) => {
     if (cause.status === 403) return 'Bạn không có quyền quản lý sản phẩm.'
     if (cause.status === 404) return 'Không tìm thấy sản phẩm.'
     if (cause.status === 409) return 'Mã SKU đã tồn tại. Vui lòng chọn mã khác.'
-    if (cause.status === 422) return 'Thông tin sản phẩm chưa hợp lệ. Vui lòng kiểm tra lại.'
+    if (cause.status === 422) return cause.message
   }
   return 'Không thể tải hoặc lưu sản phẩm. Vui lòng thử lại.'
 }
@@ -46,7 +46,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
       setLoading(false)
       return
     }
-    void Promise.all([api.categories(), api.suppliers(token), mode === 'edit' ? api.product(Number(id)) : Promise.resolve(null)])
+    void Promise.all([api.categories(token), api.suppliers(token), mode === 'edit' ? api.product(token, Number(id)) : Promise.resolve(null)])
       .then(([categoryPage, supplierPage, product]) => {
         if (!active) return
         setCategories(categoryPage.items)
@@ -60,7 +60,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
       })
       .catch((cause: unknown) => {
         if (!active) return
-        if (cause instanceof ApiError && cause.status === 401) logout()
+        if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
         else setError(message(cause))
       })
       .finally(() => { if (active) setLoading(false) })
@@ -81,7 +81,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
       else await api.updateProduct(token, Number(id), draft)
       navigate('/products', { replace: true })
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 401) logout()
+      if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
       else setError(message(cause))
     } finally { setBusy(false) }
   }

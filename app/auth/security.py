@@ -1,11 +1,10 @@
-import os
 from datetime import UTC, datetime, timedelta
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from app.models import UserRole
+from app.core.config import Settings
 
 JWT_ALGORITHM = "HS256"
 password_hasher = PasswordHasher()
@@ -23,16 +22,28 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(
-    user_id: int, role: UserRole, expires_delta: timedelta | None = None
+    user_id: int, settings: Settings, expires_delta: timedelta | None = None
 ) -> str:
-    expires_at = datetime.now(UTC) + (expires_delta or timedelta(minutes=30))
-    payload = {"sub": str(user_id), "role": role.value, "exp": expires_at}
-    return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
+    if not isinstance(settings, Settings):
+        raise TypeError("settings must be a Settings instance")
+    issued_at = datetime.now(UTC)
+    lifetime = (
+        expires_delta
+        if expires_delta is not None
+        else timedelta(minutes=settings.jwt_expire_minutes)
+    )
+    payload = {"sub": str(user_id), "iat": issued_at, "exp": issued_at + lifetime}
+    return jwt.encode(
+        payload,
+        settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )
 
 
-def decode_access_token(token: str) -> dict[str, object]:
-    return jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
-
-
-def _jwt_secret() -> str:
-    return os.getenv("JWT_SECRET", "local-development-secret-change-me")
+def decode_access_token(token: str, settings: Settings) -> dict[str, object]:
+    return jwt.decode(
+        token,
+        settings.jwt_secret_key.get_secret_value(),
+        algorithms=[settings.jwt_algorithm],
+        options={"require": ["sub", "iat", "exp"]},
+    )
