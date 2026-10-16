@@ -1,4 +1,5 @@
 import type { ApiClient } from '../../shared/api/ApiClient'
+import { collectAllPages } from '../../shared/api/collectAllPages'
 import type { CategoryInput, CategoryPage, Category } from './types'
 
 export interface CategoryFilters { page: number; pageSize: number }
@@ -9,6 +10,7 @@ export const categoryKeys = {
 }
 
 export const createCategoriesApi = (client: ApiClient) => ({
+  listAll: async (): Promise<Category[]> => (await collectAllPages(page => client.request<CategoryPage>(`/categories?page=${page}&page_size=100`))).items,
   list: (filters: CategoryFilters) => client.request<CategoryPage>(`/categories?page=${filters.page}&page_size=${filters.pageSize}`),
   create: (input: CategoryInput) => client.request<Category>('/categories', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: number, input: CategoryInput) => client.request<Category>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(input) }),

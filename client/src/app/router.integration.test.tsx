@@ -70,7 +70,7 @@ describe('active Figma routes and data', () => {
       if (url.pathname.endsWith('/products/7') && init?.method === 'PUT') { written = JSON.parse(String(init.body)); return reply(product) }
     })
     await screen.findByRole('button', { name: 'Lưu thay đổi' })
-    await waitFor(() => expect(within(screen.getByLabelText('Danh mục')).getByRole('option', { name: 'Mục cuối' })).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('combobox', { name: 'Danh mục' })).getByRole('option', { name: 'Mục cuối' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     await waitFor(() => expect(written).toEqual({ sku: 'SP-7', name: 'Sản phẩm thử', description: 'Mô tả cần giữ', category_id: 101, supplier_id: 101, unit: 'cái', reorder_level: 3, is_active: false }))
   })

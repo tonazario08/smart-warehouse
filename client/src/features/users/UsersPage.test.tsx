@@ -1,180 +1,114 @@
-import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { QueryObserver } from '@tanstack/react-query'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AppRouter } from '../../test/LegacyAppRouter'
-import { AuthProvider } from '../auth/AuthProvider'
-
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { 'Content-Type': 'application/json' },
-})
+import { jsonResponse as json, renderManagementRoute } from '../../test/renderManagementRoute'
 const admin = { id: 1, email: 'admin@example.com', role: 'admin', is_active: true }
 const client = { id: 2, email: 'client@example.com', role: 'client', is_active: true }
-const warehouse = { id: 3, email: 'worker@example.com', role: 'warehouse', is_active: false }
-
-function renderUsers(
-  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-) {
-  localStorage.setItem('smart-warehouse-token', 'admin-token')
-  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
-    if (url.endsWith('/auth/me')) return Promise.resolve(json(admin))
-    return Promise.resolve(handler(url, init))
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  render(<QueryClientProvider client={queryClient}>
-    <AuthProvider><MemoryRouter initialEntries={['/users']}><AppRouter /></MemoryRouter></AuthProvider>
-  </QueryClientProvider>)
-  return fetchMock
-}
-
+const worker = { id: 3, email: 'worker@example.com', role: 'warehouse', is_active: false }
+const page = (items: unknown[], total = items.length, number = 1) => ({ items, total, page: number, page_size: 20 })
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
 
-it('lists paginated users and never offers admin account creation', async () => {
-  const fetchMock = renderUsers((url) => json(url.includes('page=2')
-    ? { items: [warehouse], total: 21, page: 2, page_size: 20 }
-    : { items: [admin, client], total: 21, page: 1, page_size: 20 }))
-  const user = userEvent.setup()
-  expect(await screen.findByText('client@example.com')).toBeInTheDocument()
-  const role = screen.getByLabelText('Role', { selector: '#create-user-role' })
-  expect(within(role).queryByRole('option', { name: /admin/i })).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /change role for admin@example.com/i })).toBeDisabled()
-  expect(screen.getByRole('button', { name: /change status for admin@example.com/i })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: 'Next page' }))
-  expect(await screen.findByText('worker@example.com')).toBeInTheDocument()
-  expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
-  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/users?page=2&page_size=20'))).toBe(true)
+it('lists server pages without admin creation or admin record mutations', async () => {
+  const view = renderManagementRoute('/users', 'admin', url => json(url.includes('page=2') ? page([worker], 21, 2) : page([admin, client], 21)))
+  await screen.findByText(client.email)
+  expect(within(screen.getByLabelText('Vai trò', { selector: '#create-user-role' })).queryByRole('option', { name: /Quản trị/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Đổi vai trò cho ' + admin.email })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Đổi trạng thái cho ' + admin.email })).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+  expect(await screen.findByText(worker.email)).toBeInTheDocument()
+  expect(screen.getByText('Trang 2 / 2')).toBeInTheDocument()
+  expect(view.fetchMock.mock.calls.some(([url]) => String(url).includes('/users?page=2&page_size=20'))).toBe(true)
 })
-
-it('validates a new user, creates a managed account, and refreshes the roster', async () => {
-  let created = false
-  let rosterReads = 0
-  const fetchMock = renderUsers((url, init) => {
-    if (url.includes('/users?')) { rosterReads += 1; return json({ items: created ? [client] : [], total: created ? 1 : 0, page: 1, page_size: 20 }) }
-    if (url.endsWith('/users') && init?.method === 'POST') { created = true; return json(client, 201) }
-    throw new Error(`Unexpected request: ${url}`)
+it('validates and creates managed users, refreshes roster and clears password only on success', async () => {
+  let created = false, reads = 0
+  const view = renderManagementRoute('/users', 'admin', (url, init) => {
+    if (init?.method === 'POST') { created = true; return json(client, 201) }
+    reads++; return json(page(created ? [client] : []))
   })
-  const user = userEvent.setup()
-  await screen.findByText('No users found.')
-  await user.click(screen.getByRole('button', { name: 'Create user' }))
-  expect(screen.getByText(/valid email/i)).toBeInTheDocument()
-  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
-  await user.type(screen.getByLabelText('Email'), 'client@example.com')
-  await user.type(screen.getByLabelText('Password'), 'strong-password-1')
-  await user.click(screen.getByRole('button', { name: 'Create user' }))
-  expect(await screen.findByText('client@example.com')).toBeInTheDocument()
-  expect(rosterReads).toBeGreaterThan(1)
+  await screen.findByText('Chưa có người dùng.')
+  await userEvent.click(screen.getByRole('button', { name: 'Tạo người dùng' }))
+  expect(await screen.findByText('Nhập email hợp lệ.')).toBeInTheDocument()
+  expect(view.fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  await userEvent.type(screen.getByLabelText('Email'), client.email)
+  await userEvent.type(screen.getByLabelText('Mật khẩu'), 'synthetic-password-1')
+  await userEvent.click(screen.getByRole('button', { name: 'Tạo người dùng' }))
+  await screen.findByText(client.email)
+  expect(reads).toBeGreaterThan(1)
+  expect(screen.getByLabelText('Mật khẩu')).toHaveValue('')
+  expect(JSON.stringify(view.queryClient.getQueryCache().getAll().map(q => q.queryKey))).not.toContain('synthetic-password')
 })
-
-it('attaches server field errors to their controls while keeping the domain error visible', async () => {
-  renderUsers((url, init) => {
-    if (url.includes('/users?')) return json({ items: [], total: 0, page: 1, page_size: 20 })
-    if (url.endsWith('/users') && init?.method === 'POST') return json({ detail: {
-      code: 'REQUEST_VALIDATION_ERROR', message: 'Request validation failed.',
-      fields: { email: ['Email is already in use.'], password: ['Password is not accepted.'] },
-    } }, 422)
-    throw new Error(`Unexpected request: ${url}`)
-  })
-  const user = userEvent.setup()
-  await screen.findByText('No users found.')
-  await user.type(screen.getByLabelText('Email'), 'taken@example.com')
-  await user.type(screen.getByLabelText('Password'), 'strong-password-1')
-  await user.click(screen.getByRole('button', { name: 'Create user' }))
-
-  const email = screen.getByLabelText('Email')
-  const password = screen.getByLabelText('Password')
-  expect(await screen.findByRole('alert')).toHaveTextContent('Request validation failed.')
-  expect(email).toHaveAttribute('aria-invalid', 'true')
-  expect(password).toHaveAttribute('aria-invalid', 'true')
-  expect(email).toHaveAccessibleDescription('Email is already in use.')
-  expect(password).toHaveAccessibleDescription('Password is not accepted.')
+it.each([409, 422])('keeps draft and associates sanitized server fields on %s', async status => {
+  renderManagementRoute('/users', 'admin', (_, init) => init?.method === 'POST' ? json({ detail: { code: status === 409 ? 'USER_EMAIL_CONFLICT' : 'REQUEST_VALIDATION_ERROR', message: 'internal raw message', fields: { email: ['raw email'], password: ['raw password'] } } }, status) : json(page([])))
+  await screen.findByText('Chưa có người dùng.')
+  await userEvent.type(screen.getByLabelText('Email'), 'taken@example.com')
+  await userEvent.type(screen.getByLabelText('Mật khẩu'), 'synthetic-password-1')
+  await userEvent.click(screen.getByRole('button', { name: 'Tạo người dùng' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(/Email|Dữ liệu/)
+  for (const label of ['Email', 'Mật khẩu']) {
+    expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(label)).toHaveAccessibleDescription('Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.')
+  }
+  expect(screen.getByLabelText('Mật khẩu')).toHaveValue('synthetic-password-1')
+  expect(screen.queryByText(/internal raw/)).not.toBeInTheDocument()
 })
-
-it('requires a visible confirmation for role changes and surfaces domain failures', async () => {
-  const fetchMock = renderUsers((url, init) => {
-    if (url.includes('/users?')) return json({ items: [client], total: 1, page: 1, page_size: 20 })
-    if (url.endsWith('/users/2/role') && init?.method === 'PATCH') return json({ detail: { code: 'USER_ROLE_UNCHANGED', message: 'User already has that role.', fields: null } }, 409)
-    throw new Error(`Unexpected request: ${url}`)
-  })
-  const user = userEvent.setup()
-  await screen.findByText('client@example.com')
-  await user.click(screen.getByRole('button', { name: 'Change role for client@example.com' }))
-  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
-  expect(screen.getByLabelText(/confirm role change for client@example.com/i)).toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Confirm role change' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('User already has that role.')
-  expect(screen.getByText('admin@example.com')).toBeInTheDocument()
-})
-
-it('defaults each new role confirmation from the current role after a successful refetch', async () => {
-  let currentRole: 'client' | 'warehouse' = 'client'
-  let rosterReads = 0
-  const submittedRoles: string[] = []
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const auditFetch = vi.fn().mockResolvedValue({ items: [] })
-  const auditObserver = new QueryObserver(queryClient, { queryKey: ['audit', { page: 1 }], queryFn: auditFetch })
-  const stopAuditObserver = auditObserver.subscribe(() => undefined)
-  await waitFor(() => expect(auditFetch).toHaveBeenCalledTimes(1))
-  renderUsers((url, init) => {
-    if (url.includes('/users?')) { rosterReads += 1; return json({ items: [{ ...client, role: currentRole }], total: 1, page: 1, page_size: 20 }) }
-    if (url.endsWith('/users/2/role') && init?.method === 'PATCH') {
-      const requested = (JSON.parse(String(init.body)) as { role: 'client' | 'warehouse' }).role
-      submittedRoles.push(requested)
-      if (requested === currentRole) return json({ detail: { code: 'USER_ROLE_UNCHANGED', message: 'User already has that role.', fields: null } }, 409)
-      currentRole = requested
-      return json({ ...client, role: currentRole })
+it('confirms, cancels and retries role changes without losing roster or current selection', async () => {
+  let currentRole = 'client', attempts = 0, reads = 0
+  const sent: string[] = []
+  const auditFetch = vi.fn(async () => ({ items: [] }))
+  let stop: () => void = () => {}
+  const view = renderManagementRoute('/users', 'admin', (_, init) => {
+    if (init?.method === 'PATCH') {
+      const role = JSON.parse(String(init.body)).role; sent.push(role); attempts++
+      if (attempts === 1) return json({ detail: { code: 'USER_ROLE_UNCHANGED', fields: null } }, 409)
+      currentRole = role; return json({ ...client, role })
     }
-    throw new Error(`Unexpected request: ${url}`)
-  }, queryClient)
-  const user = userEvent.setup()
-  const account = await screen.findByText('client@example.com')
-  const row = account.closest('tr') as HTMLTableRowElement
-
-  await user.click(within(row).getByRole('button', { name: 'Change role for client@example.com' }))
-  expect(within(row).getByLabelText(/confirm role change for client@example.com/i)).toHaveValue('warehouse')
-  await user.click(within(row).getByRole('button', { name: 'Confirm role change' }))
-  await waitFor(() => expect(within(row).getByText('warehouse')).toBeInTheDocument())
-  expect(rosterReads).toBeGreaterThan(1)
-
-  await user.click(within(row).getByRole('button', { name: 'Change role for client@example.com' }))
-  const roleSelect = within(row).getByLabelText(/confirm role change for client@example.com/i)
-  expect(roleSelect).toHaveValue('client')
-  await user.selectOptions(roleSelect, 'warehouse')
-  const readsBeforeRefresh = rosterReads
-  await user.click(screen.getByRole('button', { name: 'Refresh roster' }))
-  await waitFor(() => expect(rosterReads).toBeGreaterThan(readsBeforeRefresh))
-  expect(roleSelect).toHaveValue('warehouse')
-  await user.selectOptions(roleSelect, 'client')
-  await user.click(within(row).getByRole('button', { name: 'Confirm role change' }))
-  await waitFor(() => expect(within(row).getByText('client')).toBeInTheDocument())
-  expect(submittedRoles).toEqual(['warehouse', 'client'])
+    reads++; return json(page([{ ...client, role: currentRole }]))
+  }, cache => { stop = new QueryObserver(cache, { queryKey: ['audit', { page: 1 }], queryFn: auditFetch }).subscribe(() => undefined) })
+  await screen.findByText(client.email)
+  await userEvent.click(screen.getByRole('button', { name: 'Đổi vai trò cho ' + client.email }))
+  expect(view.fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
+  await userEvent.click(screen.getByRole('button', { name: 'Hủy' }))
+  expect(attempts).toBe(0)
+  await userEvent.click(screen.getByRole('button', { name: 'Đổi vai trò cho ' + client.email }))
+  expect(screen.getByLabelText('Vai trò mới')).toHaveValue('warehouse')
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận đổi vai trò' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Vai trò hiện tại không thay đổi.')
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận đổi vai trò' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(reads).toBeGreaterThan(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Đổi vai trò cho ' + client.email }))
+  expect(screen.getByLabelText('Vai trò mới')).toHaveValue('client')
+  await userEvent.selectOptions(screen.getByLabelText('Vai trò mới'), 'warehouse')
+  await userEvent.click(screen.getByRole('button', { name: 'Tải lại người dùng' }))
+  expect(screen.getByLabelText('Vai trò mới')).toHaveValue('warehouse')
+  await userEvent.selectOptions(screen.getByLabelText('Vai trò mới'), 'client')
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận đổi vai trò' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(screen.getByRole('table').getElementsByTagName('tbody')[0]).toHaveTextContent('Khách hàng')
+  expect(sent).toEqual(['warehouse', 'warehouse', 'client'])
   await waitFor(() => expect(auditFetch).toHaveBeenCalledTimes(3))
-  stopAuditObserver()
+  stop()
 })
-
-it('confirms status changes and refreshes the roster and audit cache', async () => {
+it('blocks duplicate status submissions and invalidates roster plus observed audit data', async () => {
+  let finish!: (response: Response) => void
   let changed = false
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  queryClient.setQueryData(['audit', { page: 1 }], { items: ['stale'] })
-  localStorage.setItem('smart-warehouse-token', 'admin-token')
-  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
-    if (url.endsWith('/auth/me')) return Promise.resolve(json(admin))
-    if (url.includes('/users?')) return Promise.resolve(json({ items: [{ ...client, is_active: !changed }], total: 1, page: 1, page_size: 20 }))
-    if (url.endsWith('/users/2/status') && init?.method === 'PATCH') { changed = true; return Promise.resolve(json({ ...client, is_active: false })) }
-    throw new Error(`Unexpected request: ${url}`)
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  render(<QueryClientProvider client={queryClient}>
-    <AuthProvider><MemoryRouter initialEntries={['/users']}><AppRouter /></MemoryRouter></AuthProvider>
-  </QueryClientProvider>)
-  const user = userEvent.setup()
-  await screen.findByText('client@example.com')
-  await user.click(screen.getByRole('button', { name: 'Deactivate client@example.com' }))
-  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
-  await user.click(screen.getByRole('button', { name: 'Confirm deactivation' }))
-  expect(await screen.findByText('Inactive')).toBeInTheDocument()
-  expect(queryClient.getQueryState(['audit', { page: 1 }])?.isInvalidated).toBe(true)
+  const auditFetch = vi.fn(async () => ({ items: [] }))
+  let stop: () => void = () => {}
+  const view = renderManagementRoute('/users', 'admin', (_, init) => {
+    if (init?.method === 'PATCH') return new Promise<Response>(resolve => { finish = resolve })
+    return json(page([{ ...client, is_active: !changed }]))
+  }, cache => { stop = new QueryObserver(cache, { queryKey: ['audit', { page: 1 }], queryFn: auditFetch }).subscribe(() => undefined) })
+  await screen.findByText(client.email)
+  await userEvent.click(screen.getByRole('button', { name: 'Vô hiệu hóa ' + client.email }))
+  expect(view.fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận vô hiệu hóa' }))
+  expect(screen.getByRole('button', { name: 'Hủy' })).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận vô hiệu hóa' }))
+  expect(view.fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1)
+  changed = true; await act(async () => { finish(json({ ...client, is_active: false })) })
+  expect(await screen.findByText('Đã vô hiệu hóa')).toBeInTheDocument()
+  await waitFor(() => expect(auditFetch).toHaveBeenCalledTimes(2))
+  stop()
 })

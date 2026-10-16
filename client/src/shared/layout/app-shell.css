@@ -22,3 +22,6 @@
 .topbar-notification:disabled {
   opacity: 0.55;
 }
+.sidebar-nav{min-height:0;overflow-y:auto;flex-shrink:1;padding-bottom:12px}
+.sidebar-footer,.brand,.sidebar-label{flex-shrink:0}
+@media(pointer:coarse){.sidebar-link{min-height:44px}}

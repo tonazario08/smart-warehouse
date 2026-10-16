@@ -105,30 +105,32 @@ export function useInventoryLabels(client: ApiClient, productIds: number[], ware
 export function InventoryLabelStatus({
   lookup,
   subject,
+  locale = 'en',
 }: {
   lookup: ReturnType<typeof useInventoryLabels>
+  locale?: 'en' | 'vi'
   subject: 'stock ledger' | 'movement history' | 'transaction history'
 }) {
-  if (lookup.loading) return <p className="async-state" role="status">Resolving product and warehouse labels for {subject}…</p>
+  if (lookup.loading) return <p className="async-state" role="status">{locale === 'vi' ? 'Đang tải tên sản phẩm và kho hàng…' : <>Resolving product and warehouse labels for {subject}…</>}</p>
   if (!lookup.error) return null
   return <p className="async-state async-state-error" role="alert">
-    {subject} labels could not be resolved: {lookup.error instanceof Error ? lookup.error.message : 'Lookup failed.'}
-    {' '}<button type="button" className="quiet" onClick={() => void lookup.retry()}>Retry label lookup</button>
+    {locale === 'vi' ? 'Không thể tải tên sản phẩm và kho hàng.' : <>{subject} labels could not be resolved: {lookup.error instanceof Error ? lookup.error.message : 'Lookup failed.'}</>}
+    {' '}<button type="button" className="quiet" onClick={() => void lookup.retry()}>{locale === 'vi' ? 'Thử lại tên hiển thị' : 'Retry label lookup'}</button>
   </p>
 }
 
-export function ProductIdentity({ id, lookup }: { id: number; lookup: ReturnType<typeof useInventoryLabels> }) {
+export function ProductIdentity({ id, lookup, locale = 'en' }: { id: number; lookup: ReturnType<typeof useInventoryLabels>; locale?: 'en' | 'vi' }) {
   const result = lookup.product(id)
   return <div className="inventory-identity">
-    <strong className="scan-code">{result.record?.sku ?? `Product #${id}`}</strong>
-    <small>{result.record?.name ?? (result.loading ? 'Resolving label…' : result.error ? 'Label lookup failed' : 'Record unavailable')}</small>
+    <strong className="scan-code">{result.record?.sku ?? (locale === 'vi' ? 'Sản phẩm #' + id : `Product #${id}`)}</strong>
+    <small>{result.record?.name ?? (locale === 'vi' ? result.loading ? 'Đang tải tên…' : result.error ? 'Không thể tải tên' : 'Không có thông tin' : result.loading ? 'Resolving label…' : result.error ? 'Label lookup failed' : 'Record unavailable')}</small>
   </div>
 }
 
-export function WarehouseIdentity({ id, lookup }: { id: number; lookup: ReturnType<typeof useInventoryLabels> }) {
+export function WarehouseIdentity({ id, lookup, locale = 'en' }: { id: number; lookup: ReturnType<typeof useInventoryLabels>; locale?: 'en' | 'vi' }) {
   const result = lookup.warehouse(id)
   return <div className="inventory-identity">
-    <strong className="scan-code">{result.record?.code ?? `Warehouse #${id}`}</strong>
-    <small>{result.record?.name ?? (result.loading ? 'Resolving label…' : result.error ? 'Label lookup failed' : 'Record unavailable')}</small>
+    <strong className="scan-code">{result.record?.code ?? (locale === 'vi' ? 'Kho hàng #' + id : `Warehouse #${id}`)}</strong>
+    <small>{result.record?.name ?? (locale === 'vi' ? result.loading ? 'Đang tải tên…' : result.error ? 'Không thể tải tên' : 'Không có thông tin' : result.loading ? 'Resolving label…' : result.error ? 'Label lookup failed' : 'Record unavailable')}</small>
   </div>
 }

@@ -209,9 +209,9 @@ test('Topbar presents unsupported search and notifications as explicitly unavail
 })
 
 for (const [role, expectedLinks] of [
-  ['admin', [['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho']]],
-  ['warehouse', [['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho']]],
-  ['client', [['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng']]],
+  ['admin', [['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
+  ['warehouse', [['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
+  ['client', [['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/categories', 'Danh mục']]],
 ]) test(`${role} sidebar destinations retain accessible names when responsive CSS hides visible labels`, () => {
   const user = { id: 1, email: `${role}@example.com`, role, is_active: true }
   const host = componentHost('shared/layout/Sidebar.js', 'Sidebar', { user, onLogout() {} })
@@ -239,6 +239,8 @@ test('breadcrumbs keep the resource area on create, edit and detail routes with 
     ['/inventory/1/2', 'Tồn kho'], ['/warehouses/new', 'Kho hàng'],
     ['/warehouses/3', 'Kho hàng'], ['/warehouses/3/edit', 'Kho hàng'],
     ['/inbound/new', 'Nhập kho'], ['/outbound/new', 'Xuất kho'],
+    ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'],
+    ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị'],
     ['/dashboard', 'Bảng điều khiển'], ['/', 'Bảng điều khiển'], ['/unknown/thing', 'Chi tiết'],
   ]) {
     const host = componentHost('shared/layout/Breadcrumbs.js', 'Breadcrumbs', {}, {}, pathname)

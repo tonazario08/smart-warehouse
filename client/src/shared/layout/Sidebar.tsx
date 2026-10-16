@@ -13,6 +13,11 @@ import inventoryActiveIcon from '../assets/figma/inventory-active.svg'
 import warehousesIcon from '../assets/figma/warehouses.svg'
 import inboundIcon from '../assets/figma/inbound.svg'
 import outboundIcon from '../assets/figma/outbound.svg'
+import usersIcon from '../assets/icons/users.svg'
+import categoriesIcon from '../assets/icons/categories.svg'
+import suppliersIcon from '../assets/icons/suppliers.svg'
+import transactionsIcon from '../assets/icons/transactions.svg'
+import auditIcon from '../assets/icons/audit.svg'
 
 type Item = { to: string; label: string; permission: Permission; roles: Role[]; icon: string; activeIcon?: string }
 const items: Item[] = [
@@ -22,5 +27,10 @@ const items: Item[] = [
   { to: '/warehouses', label: 'Kho hàng', permission: 'warehouse:read', roles: ['admin', 'warehouse', 'client'], icon: warehousesIcon },
   { to: '/inbound', label: 'Nhập kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: inboundIcon },
   { to: '/outbound', label: 'Xuất kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: outboundIcon },
+  { to: '/users', label: 'Người dùng', permission: 'user:manage', roles: ['admin'], icon: usersIcon },
+  { to: '/categories', label: 'Danh mục', permission: 'catalog:read', roles: ['admin', 'warehouse', 'client'], icon: categoriesIcon },
+  { to: '/suppliers', label: 'Nhà cung cấp', permission: 'supplier:read', roles: ['admin', 'warehouse'], icon: suppliersIcon },
+  { to: '/transactions', label: 'Giao dịch', permission: 'inventory:history:read', roles: ['admin', 'warehouse'], icon: transactionsIcon },
+  { to: '/audit', label: 'Nhật ký quản trị', permission: 'audit:read', roles: ['admin'], icon: auditIcon },
 ]
 export function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) { return <aside className="app-sidebar"><div className="brand"><span className="brand__mark"><img alt="" src={warehouseIcon} /></span><span><strong>Kho thông minh</strong><small>Nền tảng vận hành kho</small></span></div><p className="sidebar-label">KHÔNG GIAN LÀM VIỆC</p><nav className="sidebar-nav" aria-label="Điều hướng chính">{items.filter((item) => item.roles.includes(user.role) && can(user.role, item.permission)).map((item) => <NavLink aria-label={item.label} title={item.label} className={({ isActive }) => `sidebar-link${isActive ? ' sidebar-link--active' : ''}`} key={item.to} to={item.to}>{({ isActive }) => <><img alt="" src={isActive ? item.activeIcon ?? item.icon : item.icon} /><span>{item.label}</span></>}</NavLink>)}</nav><div className="sidebar-footer"><UserMenu onLogout={onLogout} user={user} /></div></aside> }
