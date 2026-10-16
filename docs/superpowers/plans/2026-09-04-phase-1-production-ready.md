@@ -64,7 +64,7 @@ The checked-in test Compose file owns only disposable test data. A developer mus
 | `tests/unit/` | Database-independent rules and schema tests |
 | `tests/postgres/` | PostgreSQL migration, integration, constraint, and concurrency tests |
 | `client/src/app/` | Providers, routes, layout, and navigation |
-| `client/src/features/` | Feature-grouped auth, dashboard, users, audit, master data, warehouses, and inventory modules |
+| `client/src/features/` | Auth, dashboard, users, audit, master data, warehouses, and inventory |
 | `client/src/shared/` | API client, common types, forms, errors, and UI primitives |
 | `client/e2e/` | Playwright critical-path specifications |
 
@@ -84,7 +84,6 @@ The checked-in test Compose file owns only disposable test data. A developer mus
 - Modify: `.env.example`
 - Create: `tests/unit/test_config.py`
 - Create: `tests/unit/test_pagination.py`
-- Create: `tests/conftest.py`
 - Modify: `tests/test_health.py`
 - Create: `tests/test_error_contract.py`
 
@@ -145,7 +144,7 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_expire_minutes: int = Field(default=30, ge=5, le=1440)
-    cors_origins: list[str] = Field(default_factory=list)
+    cors_origins: list[str] = []
 
     @model_validator(mode="after")
     def reject_unsafe_production_values(self) -> "Settings":
@@ -170,24 +169,12 @@ class PageParams(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
-    @property
-    def offset(self) -> int:
-        return (self.page - 1) * self.page_size
-
 class Page(BaseModel, Generic[T]):
     items: list[T]
     total: int
     page: int
     page_size: int
 ```
-
-Create `tests/conftest.py` with a `unit_settings` fixture that explicitly supplies an in-memory
-SQLite URL, a test-only JWT secret of at least 32 characters, and empty CORS origins. Its
-`test_client` fixture calls `create_app(unit_settings)` so tests never depend on the developer's
-`.env`. At module import time, use `os.environ.setdefault()` for `APP_ENV=test`, the test-only
-SQLite URL, and the test-only JWT secret so importing the module-level `app = create_app()` is also
-independent of `.env`. Change the factory signature to
-`create_app(settings: Settings | None = None) -> FastAPI`.
 
 - [ ] **Step 4: Write failing error-contract and probe tests**
 
@@ -204,22 +191,7 @@ def test_liveness_does_not_touch_database(test_client) -> None:
     response = test_client.get("/api/v1/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "alive"}
-
-def test_readiness_reports_database_failure(unit_settings) -> None:
-    class BrokenSession:
-        def execute(self, _statement):
-            raise SQLAlchemyError("database detail that must not escape")
-    application = create_app(unit_settings)
-    application.dependency_overrides[get_session] = lambda: BrokenSession()
-    response = TestClient(application, raise_server_exceptions=False).get("/api/v1/health/ready")
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "DATABASE_UNAVAILABLE"
-    assert "database detail" not in response.text
 ```
-
-Add a test-only route that raises `RuntimeError("secret internal detail")` and assert the global
-handler returns `500`, code `INTERNAL_SERVER_ERROR`, and no exception text when the client uses
-`raise_server_exceptions=False`.
 
 - [ ] **Step 5: Implement the common error model and exception handlers**
 
@@ -298,7 +270,7 @@ Expected: all listed tests pass and no error body contains SQL or an exception s
 - [ ] **Step 8: Commit the core contract**
 
 ```powershell
-git add .env.example app/core app/db/session.py app/main.py tests/conftest.py tests/unit tests/test_error_contract.py tests/test_health.py
+git add .env.example app/core app/db/session.py app/main.py tests/unit tests/test_error_contract.py tests/test_health.py
 git commit -m "feat(core): add safe configuration and API contracts"
 ```
 
@@ -369,8 +341,6 @@ services:
 # tests/postgres/conftest.py
 import os
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -385,9 +355,6 @@ def postgres_url() -> str:
 @pytest.fixture(scope="session")
 def postgres_engine(postgres_url: str):
     engine = create_engine(postgres_url, pool_pre_ping=True)
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", postgres_url)
-    command.upgrade(config, "head")
     yield engine
     engine.dispose()
 
@@ -404,11 +371,8 @@ def postgres_session(postgres_engine):
         ))
 ```
 
-Add `postgres_client` by creating `create_app(test_settings)`, overriding `get_session` with the
-fixture session, and yielding a `TestClient`. Add `make_user(email, role=UserRole.CLIENT)` and
-`auth_headers(user)` fixture helpers so later PostgreSQL tests share one identity setup path.
-Configure the `postgres` marker in `pyproject.toml` so unknown markers fail under the existing
-strict setting.
+Add `postgres_client` by overriding `get_session` with the fixture session. Configure the
+`postgres` marker in `pyproject.toml` so unknown markers fail under the existing strict setting.
 
 - [ ] **Step 5: Start PostgreSQL and run the migration test**
 
@@ -508,19 +472,6 @@ The revision must normalize existing email/SKU/warehouse codes before adding che
 `audit_logs` table and indexes, and add named constraints/indexes:
 
 ```python
-op.execute("UPDATE users SET email = lower(btrim(email))")
-op.execute("UPDATE suppliers SET email = lower(btrim(email)) WHERE email IS NOT NULL")
-op.execute("UPDATE products SET sku = upper(btrim(sku))")
-op.execute("UPDATE warehouses SET code = upper(btrim(code))")
-op.create_check_constraint("ck_users_email_normalized", "users", "email = lower(btrim(email))")
-op.create_check_constraint(
-    "ck_suppliers_email_normalized", "suppliers",
-    "email IS NULL OR email = lower(btrim(email))",
-)
-op.create_check_constraint("ck_products_sku_normalized", "products", "sku = upper(btrim(sku))")
-op.create_check_constraint(
-    "ck_warehouses_code_normalized", "warehouses", "code = upper(btrim(code))",
-)
 op.create_check_constraint(
     "ck_warehouses_coordinates_paired_and_ranged",
     "warehouses",
@@ -528,9 +479,6 @@ op.create_check_constraint(
     "(latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)",
 )
 op.create_index("uq_users_email_lower", "users", [sa.text("lower(email)")], unique=True)
-op.create_index(
-    "uq_suppliers_email_lower", "suppliers", [sa.text("lower(email)")], unique=True,
-)
 op.create_index("uq_products_sku_upper", "products", [sa.text("upper(sku)")], unique=True)
 op.create_check_constraint(
     "ck_transactions_exactly_one_movement",
@@ -565,23 +513,18 @@ git commit -m "feat(db): harden constraints and add audit log"
 ### Task 4: Refactor Authentication into Router, Service, and Repository
 
 **Files:**
+- Create: `app/auth/repository.py`
 - Create: `app/auth/service.py`
-- Create: `app/users/__init__.py`
-- Create: `app/users/repository.py`
 - Modify: `app/auth/schemas.py`
 - Modify: `app/auth/security.py`
 - Modify: `app/auth/dependencies.py`
 - Modify: `app/auth/router.py`
 - Replace: `tests/test_auth.py`
-- Modify: `tests/test_master_data.py`
-- Modify: `tests/test_warehouses.py`
-- Modify: `tests/test_inventory.py`
-- Modify: `tests/test_dashboard.py`
 - Create: `tests/unit/test_auth_schemas.py`
 - Create: `tests/postgres/test_auth_integration.py`
 
 **Interfaces:**
-- Produces: the user domain interface `UserRepository.get_by_id()`, `get_by_email()`, `add()` for authentication and later administration.
+- Produces: `UserRepository.get_by_id()`, `get_by_email()`, `add()`.
 - Produces: `AuthService.register(email, password) -> User` and `authenticate(email, password) -> User`.
 - Produces: `create_access_token(user_id: int, settings: Settings, expires_delta=None) -> str` containing `sub`, `iat`, and `exp` only.
 - Produces: strict `RegisterRequest`, `LoginRequest`, `TokenResponse`, and `UserResponse`.
@@ -660,11 +603,7 @@ response and contains no SQLAlchemy query or commit.
 Update `get_current_user` to decode only `sub`, query `UserRepository.get_by_id`, and reject a
 missing/disabled user. Preserve the centralized `Permission -> frozenset[UserRole]` mapping; add
 `CATALOG_READ`, `SUPPLIER_WRITE`, `USER_MANAGE`, and `AUDIT_READ` instead of reusing unrelated
-permissions. Apply `CATALOG_READ` immediately to existing category/product list and detail routes,
-and change their legacy public-read tests to use authenticated client headers.
-
-Update every existing test token helper to call `create_access_token(user.id, settings=unit_settings)`;
-remove the obsolete positional role argument so intermediate commits keep the entire suite green.
+permissions.
 
 - [ ] **Step 6: Run auth, error-contract, and security regressions**
 
@@ -672,22 +611,19 @@ Run: `.venv\Scripts\python.exe -m pytest tests/unit/test_auth_schemas.py tests/p
 
 Expected: all pass; responses and audit-capable serializers contain no `password_hash` field.
 
-Run: `.venv\Scripts\python.exe -m pytest -q`
-
-Expected: the full current suite passes after all legacy token helpers and catalogue expectations are updated.
-
 - [ ] **Step 7: Commit the authentication boundary**
 
 ```powershell
-git add pyproject.toml app/auth app/master_data/router.py app/users/__init__.py app/users/repository.py tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py tests/test_master_data.py tests/test_warehouses.py tests/test_inventory.py tests/test_dashboard.py
+git add pyproject.toml app/auth tests/unit/test_auth_schemas.py tests/postgres/test_auth_integration.py tests/test_auth.py
 git commit -m "fix(auth): secure registration and database-backed authorization"
 ```
 
 ### Task 5: Admin User Management with Atomic Administrative Audit
 
 **Files:**
+- Create: `app/users/__init__.py`
 - Create: `app/users/schemas.py`
-- Modify: `app/users/repository.py`
+- Create: `app/users/repository.py`
 - Create: `app/users/service.py`
 - Create: `app/users/router.py`
 - Create: `app/audit/schemas.py`
@@ -701,12 +637,8 @@ git commit -m "fix(auth): secure registration and database-backed authorization"
 **Interfaces:**
 - Produces: `POST /api/v1/users`, `GET /users`, `GET /users/{id}`, `PATCH /users/{id}/role`, and `PATCH /users/{id}/status`.
 - Produces: `GET /api/v1/audit-logs` and `GET /audit-logs/{id}`; no audit mutation route.
-- Produces: `AuditService.record(actor_id, action, target_type, target_id, before, after) -> AuditLog` with allowlisted user fields.
+- Produces: `AuditService.record_user_event(actor, action, before, after) -> AuditLog` with allowlisted fields.
 - Consumes: `PageParams`, `Page`, `DomainError`, `Permission.USER_MANAGE`, and `Permission.AUDIT_READ`.
-
-User listing accepts `search`, `role`, and `is_active`. Audit listing accepts `actor_user_id`,
-`action`, and `target_type`. Both use bounded `PageParams`, stable descending/ascending ID ordering
-as documented by their response contract, and identical filters for item/count queries.
 
 - [ ] **Step 1: Write failing admin-action and self-protection tests**
 
@@ -1065,13 +997,10 @@ git commit -m "refactor(products): add secure product service slice"
 ### Task 9: Warehouse Repository, Service, Coordinates, and Protected Delete
 
 **Files:**
-- Create: `app/warehouses/__init__.py`
-- Create: `app/warehouses/repository.py`
-- Create: `app/warehouses/service.py`
-- Move: `app/warehouse/schemas.py` to `app/warehouses/schemas.py`
-- Move: `app/warehouse/router.py` to `app/warehouses/router.py`
-- Delete: `app/warehouse/__init__.py`
-- Modify: `app/main.py`
+- Create: `app/warehouse/repository.py`
+- Create: `app/warehouse/service.py`
+- Modify: `app/warehouse/schemas.py`
+- Modify: `app/warehouse/router.py`
 - Create: `tests/postgres/test_warehouses.py`
 - Modify: `tests/test_warehouses.py` (retain only database-independent unit coverage)
 
@@ -1135,7 +1064,7 @@ Expected: all pass for admin, warehouse, and client read rules; only admin can m
 - [ ] **Step 6: Commit the warehouse slice**
 
 ```powershell
-git add app/warehouse app/warehouses app/main.py tests/postgres/test_warehouses.py tests/test_warehouses.py
+git add app/warehouse tests/postgres/test_warehouses.py tests/test_warehouses.py
 git commit -m "refactor(warehouses): add validated service slice"
 ```
 
@@ -1371,6 +1300,10 @@ inventory service calls `AuditRepository`.
 
 - [ ] **Step 6: Run each concurrency case repeatedly**
 
+Run: `.venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_concurrency.py -q --count=10`
+
+If `pytest-repeat` is not added, use PowerShell:
+
 ```powershell
 1..10 | ForEach-Object { .venv\Scripts\python.exe -m pytest tests/postgres/test_inventory_concurrency.py -q; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
 ```
@@ -1538,9 +1471,9 @@ lockfile.
 it('clears auth on 401 but preserves a 403 session and domain details', async () => {
   const onUnauthorized = vi.fn()
   const client = new ApiClient('/api/v1', () => 'token', onUnauthorized)
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+  server.use(http.get('/api/v1/users', () => HttpResponse.json({
     detail: { code: 'PERMISSION_DENIED', message: 'Permission denied.', fields: null },
-  }), { status: 403, headers: { 'Content-Type': 'application/json' } })))
+  }, { status: 403 })))
 
   await expect(client.request('/users')).rejects.toMatchObject({
     status: 403, code: 'PERMISSION_DENIED', message: 'Permission denied.',
@@ -1549,24 +1482,19 @@ it('clears auth on 401 but preserves a 403 session and domain details', async ()
 })
 ```
 
-Add a second fetch stub returning `401` and assert that it invokes `onUnauthorized` exactly once.
-Do not add MSW unless more than three suites need reusable network interception.
+Use `vi.stubGlobal('fetch', vi.fn())` instead of adding MSW unless more than three suites need
+network interception. Add a second assertion that a `401` invokes `onUnauthorized` exactly once.
 
 - [ ] **Step 3: Configure Vitest and run the missing-client failure**
 
 ```typescript
 // client/vite.config.ts
-import { defineConfig } from 'vitest/config'
-
 export default defineConfig({
   plugins: [react()],
   test: { environment: 'jsdom', setupFiles: './src/test/setup.ts' },
   server: { host: '0.0.0.0', port: 5173 },
 })
 ```
-
-Set package scripts exactly to `"test": "vitest"`, `"test:coverage": "vitest run --coverage"`,
-`"typecheck": "tsc -b --pretty false"`, and retain `"build": "tsc -b && vite build"`.
 
 Run: `npm.cmd test -- --run src/shared/api/ApiClient.test.ts`
 
@@ -1839,7 +1767,7 @@ git add client/src/features/dashboard client/src/features/users client/src/featu
 git commit -m "feat(web): add dashboard and audited user administration"
 ```
 
-### Task 16: Category and Supplier Management Pages
+### Task 16: Master-Data and Warehouse Management Pages
 
 **Files:**
 - Create: `client/src/features/categories/types.ts`
@@ -1852,73 +1780,6 @@ git commit -m "feat(web): add dashboard and audited user administration"
 - Create: `client/src/features/suppliers/api.ts`
 - Create: `client/src/features/suppliers/SuppliersPage.tsx`
 - Create: `client/src/features/suppliers/SuppliersPage.test.tsx`
-- Modify: `client/src/app/router.tsx`
-- Modify: `client/src/app/navigation.ts`
-
-**Interfaces:**
-- Produces: paginated/filterable category and supplier pages with role-correct admin CRUD controls.
-- Consumes: approved category/supplier APIs, shared forms/errors/pagination, and TanStack Query invalidation.
-
-- [ ] **Step 1: Write failing role-sensitive CRUD tests**
-
-```tsx
-it('shows suppliers read-only to warehouse operators', async () => {
-  renderRoleRoute('/suppliers', 'warehouse')
-  expect(await screen.findByText('Main Supply')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /create supplier/i })).not.toBeInTheDocument()
-})
-
-it('does not expose suppliers to clients', () => {
-  renderRoleRoute('/suppliers', 'client')
-  expect(screen.getByRole('heading', { name: /forbidden/i })).toBeInTheDocument()
-})
-```
-
-- [ ] **Step 2: Run feature tests and verify missing pages**
-
-Run: `npm.cmd test -- --run src/features/categories src/features/suppliers`
-
-Expected: tests fail because feature pages are absent.
-
-- [ ] **Step 3: Implement per-feature types, Zod schemas, API functions, and query keys**
-
-Keep each feature self-contained. Category forms expose optional parent selection and prevent the
-current category from being selected locally; backend cycle validation remains authoritative.
-Supplier forms normalize email for immediate feedback and map server field errors by name.
-
-- [ ] **Step 4: Implement authenticated read experiences by role**
-
-Admin, warehouse, and client can read categories. Admin and warehouse can read suppliers. Every
-list includes bounded pagination, supported filters, loading/error/empty states, and local-time
-timestamp formatting where timestamps appear.
-
-- [ ] **Step 5: Implement admin mutation dialogs/forms**
-
-Admin can create/update/delete categories and suppliers. Map backend field errors to controls and
-conflicts to form-level messages. Confirm delete, disable duplicate submission, and invalidate the
-resource query plus dependent product lookups after success. Non-admin components never render
-mutation controls.
-
-- [ ] **Step 6: Run master-data/warehouse tests, auth-route tests, typecheck, and build**
-
-Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/auth/routes.test.tsx`
-
-Run: `npm.cmd run typecheck`
-
-Run: `npm.cmd run build`
-
-Expected: all pass for admin CRUD, warehouse supplier reads, and client supplier denial.
-
-- [ ] **Step 7: Commit master-data and warehouse frontend**
-
-```powershell
-git add client/src/features/categories client/src/features/suppliers client/src/app
-git commit -m "feat(web): add category and supplier workflows"
-```
-
-### Task 17: Product and Warehouse Management Pages
-
-**Files:**
 - Create: `client/src/features/products/types.ts`
 - Create: `client/src/features/products/schemas.ts`
 - Create: `client/src/features/products/api.ts`
@@ -1933,10 +1794,10 @@ git commit -m "feat(web): add category and supplier workflows"
 - Modify: `client/src/app/navigation.ts`
 
 **Interfaces:**
-- Produces: paginated/filterable product and warehouse pages with admin CRUD and read-only non-admin experiences.
-- Consumes: category/supplier lookup queries, product/warehouse APIs, shared forms/errors/pagination, and role guards.
+- Produces: paginated/filterable catalogue and warehouse pages with admin CRUD controls.
+- Consumes: approved master-data/warehouse APIs, role-based UX, shared forms/errors/pagination, and TanStack Query invalidation.
 
-- [ ] **Step 1: Write failing product-role and warehouse-coordinate tests**
+- [ ] **Step 1: Write failing role-sensitive CRUD tests**
 
 ```tsx
 it.each(['warehouse', 'client'] as const)(
@@ -1957,44 +1818,49 @@ it('validates paired coordinates before warehouse submit', async () => {
 })
 ```
 
-- [ ] **Step 2: Run product/warehouse feature tests and verify missing pages**
+- [ ] **Step 2: Run feature tests and verify missing pages**
 
-Run: `npm.cmd test -- --run src/features/products src/features/warehouses`
+Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/products src/features/warehouses`
 
-Expected: tests fail because product and warehouse feature pages are absent.
+Expected: tests fail because feature pages are absent.
 
-- [ ] **Step 3: Implement per-feature types, schemas, APIs, and query keys**
+- [ ] **Step 3: Implement per-feature types, Zod schemas, API functions, and query keys**
 
-Normalize SKU and warehouse code in UI for immediate feedback while treating backend normalization
-as authoritative. Product schema validates category, optional supplier, unit, and non-negative
-reorder level. Warehouse schema uses `.superRefine()` for paired coordinates and applies the same
-numeric bounds as the backend.
+Keep each feature self-contained. Normalize SKU/warehouse code in UI for immediate feedback but
+accept backend normalization as authoritative. Warehouse schema uses a `.superRefine()` check for
+paired coordinates and numeric bounds identical to the backend.
 
-- [ ] **Step 4: Implement authenticated lists and admin mutation forms**
+- [ ] **Step 4: Implement authenticated read experiences by role**
 
-All authenticated roles read products and warehouses. Admin alone sees create/update/delete
-actions. Product filters cover search/category/supplier/active state; warehouse filters cover
-search. Forms map backend field errors, prevent duplicate submission, confirm deletion, and
-invalidate affected resource and lookup queries.
+Admin, warehouse, and client can read products/categories. Admin and warehouse can read suppliers.
+All authenticated roles can read warehouses. Every list includes bounded pagination, supported
+filters, loading/error/empty states, and local-time timestamp formatting where timestamps appear.
 
-- [ ] **Step 5: Run focused tests, route tests, typecheck, and build**
+- [ ] **Step 5: Implement admin mutation dialogs/forms**
 
-Run: `npm.cmd test -- --run src/features/products src/features/warehouses src/features/auth/routes.test.tsx`
+Admin can create/update/delete all four resources. Map backend field errors to controls and
+conflicts to form-level messages. Confirm delete, disable duplicate submission, and invalidate the
+resource query plus dependent product lookups after success. Non-admin components never render
+mutation controls.
+
+- [ ] **Step 6: Run master-data/warehouse tests, auth-route tests, typecheck, and build**
+
+Run: `npm.cmd test -- --run src/features/categories src/features/suppliers src/features/products src/features/warehouses src/features/auth/routes.test.tsx`
 
 Run: `npm.cmd run typecheck`
 
 Run: `npm.cmd run build`
 
-Expected: all pass for admin CRUD, non-admin read-only behavior, coordinates, and error states.
+Expected: all pass for admin CRUD and role-correct read-only experiences.
 
-- [ ] **Step 6: Commit product and warehouse frontend**
+- [ ] **Step 7: Commit master-data and warehouse frontend**
 
 ```powershell
-git add client/src/features/products client/src/features/warehouses client/src/app
-git commit -m "feat(web): add product and warehouse workflows"
+git add client/src/features/categories client/src/features/suppliers client/src/features/products client/src/features/warehouses client/src/app
+git commit -m "feat(web): add master-data and warehouse workflows"
 ```
 
-### Task 18: Stock, Inbound, Outbound, and Transaction-History Pages
+### Task 17: Stock, Inbound, Outbound, and Transaction-History Pages
 
 **Files:**
 - Create: `client/src/features/inventory/types.ts`
@@ -2091,7 +1957,7 @@ git commit -m "feat(web): add inventory movement and history workflows"
 
 ## Milestone 6 — Runtime Images, E2E, Quality Gates, and Documentation
 
-### Task 19: Secure Seed, Explicit Migration, Production Images, and Runtime Health
+### Task 18: Secure Seed, Explicit Migration, Production Images, and Runtime Health
 
 **Files:**
 - Modify: `app/seed.py`
@@ -2193,48 +2059,12 @@ The Nginx configuration supports SPA fallback and proxies `/api/` to the API ser
 `client/.dockerignore` excludes `.env`, source test output, `node_modules`, `dist`, coverage, and
 Playwright artifacts.
 
-```nginx
-# client/nginx.conf
-server {
-    listen 8080;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    location /api/ {
-        proxy_pass http://api:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
 - [ ] **Step 6: Make migration and health ordering explicit in Compose**
 
 Add a one-shot `migrate` service that runs `alembic upgrade head`. `api` depends on PostgreSQL
 healthy and migration completed successfully. API healthcheck calls readiness; web waits for the
 API healthcheck. Add a manually invoked `seed` profile rather than seeding on every API startup.
 No API container runs migrations in its command.
-
-```yaml
-migrate:
-  build: .
-  command: ["alembic", "upgrade", "head"]
-  env_file: .env
-  depends_on:
-    db:
-      condition: service_healthy
-  restart: "no"
-
-api:
-  depends_on:
-    migrate:
-      condition: service_completed_successfully
-```
 
 - [ ] **Step 7: Verify images and Compose behavior**
 
@@ -2266,7 +2096,7 @@ git add app/seed.py tests/test_seed.py tests/postgres/test_seed.py tests/postgre
 git commit -m "build: harden migration and runtime containers"
 ```
 
-### Task 20: Playwright Critical Paths and Automated Quality Workflow
+### Task 19: Playwright Critical Paths and Automated Quality Workflow
 
 **Files:**
 - Modify: `client/package.json`
@@ -2326,7 +2156,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 1 : undefined,
 })
 ```
 
@@ -2345,18 +2175,16 @@ Expected before final E2E wiring: failure identifies the missing bootstrap/order
 
 The spec logs in with the environment-provided seeded admin, creates a uniquely named category,
 supplier, product, and warehouse, creates a warehouse operator, changes its status/role within the
-allowed range, then leaves it active with role `warehouse`. It confirms each corresponding
-administrative audit row, no admin role option is available, and no password text appears on the
-audit page.
+allowed range, and confirms corresponding administrative audit rows. It also confirms no admin
+role option is available and no password text appears on the audit page.
 
 - [ ] **Step 6: Add warehouse inventory and dashboard critical path**
 
-The spec creates its own uniquely named active warehouse operator through an authenticated admin
-API setup helper, then logs in through the UI, records inbound quantity `20`, records outbound
-quantity `7`, and verifies stock `13` plus one inbound, one outbound, and two stock transactions.
-It logs in as admin and verifies dashboard aggregates changed by the expected delta. A client
-session verifies stock is readable but inbound/outbound/history routes are inaccessible. No E2E
-spec depends on another spec's records or execution order.
+The spec logs in as the operator created by the admin flow, records inbound quantity `20`, records
+outbound quantity `7`, and verifies stock `13` plus one inbound, one outbound, and two stock
+transactions. It then logs in as admin and verifies dashboard aggregates reflect the resulting
+database state. A client session verifies stock is readable but inbound/outbound/history routes
+are inaccessible.
 
 - [ ] **Step 7: Run Playwright critical paths repeatedly against a fresh stack**
 
@@ -2402,7 +2230,7 @@ git add client/package.json client/package-lock.json client/playwright.config.ts
 git commit -m "test(e2e): cover Phase 1 critical workflows"
 ```
 
-### Task 21: Final Documentation, Fresh-Environment Verification, and Phase Closure
+### Task 20: Final Documentation, Fresh-Environment Verification, and Phase Closure
 
 **Files:**
 - Replace: `README.md`
@@ -2414,7 +2242,7 @@ git commit -m "test(e2e): cover Phase 1 critical workflows"
 
 **Interfaces:**
 - Produces: one accurate setup entry point, implemented architecture, API/RBAC/error contract, operations runbook, and verified completion record.
-- Consumes: final commands, endpoints, environment names, migration revision, image behavior, and quality-gate output from Tasks 1–20.
+- Consumes: final commands, endpoints, environment names, migration revision, image behavior, and quality-gate output from Tasks 1–19.
 
 - [ ] **Step 1: Audit documentation against the delivered application**
 
