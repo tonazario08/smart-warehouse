@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import (
     JSON,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
 )
 from sqlalchemy import Enum as SqlEnum
@@ -261,6 +263,98 @@ class StockTransaction(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+class StockTransfer(IdentifierMixin, Base):
+    """One immediate transfer with immutable original balance snapshots."""
+
+    __tablename__ = "stock_transfers"
+    __table_args__ = (
+        UniqueConstraint("created_by_id", "idempotency_key", name="uq_transfers_actor_key"),
+        UniqueConstraint("outbound_id", name="uq_transfers_outbound"),
+        UniqueConstraint("inbound_id", name="uq_transfers_inbound"),
+        UniqueConstraint("outbound_transaction_id", name="uq_transfers_outbound_transaction"),
+        UniqueConstraint("inbound_transaction_id", name="uq_transfers_inbound_transaction"),
+        CheckConstraint(
+            "source_warehouse_id <> destination_warehouse_id",
+            name="ck_transfers_distinct_warehouses",
+        ),
+        CheckConstraint(
+            "quantity BETWEEN 1 AND 2147483647", name="ck_transfers_quantity_bounds"
+        ),
+        CheckConstraint(
+            "source_quantity_before BETWEEN 0 AND 2147483647 AND "
+            "source_quantity_after BETWEEN 0 AND 2147483647 AND "
+            "destination_quantity_before BETWEEN 0 AND 2147483647 AND "
+            "destination_quantity_after BETWEEN 0 AND 2147483647",
+            name="ck_transfers_balance_bounds",
+        ),
+        Index("ix_transfers_created_at_id", "created_at", "id"),
+    )
+
+    source_warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+    )
+    destination_warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(120))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_quantity_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_quantity_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    destination_quantity_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    destination_quantity_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    outbound_id: Mapped[int] = mapped_column(
+        ForeignKey("outbounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    inbound_id: Mapped[int] = mapped_column(
+        ForeignKey("inbounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    outbound_transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+    inbound_transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+
+
+class MovementProvenance(Base):
+    """Purpose is provenance, never a sales or demand assertion."""
+
+    __tablename__ = "movement_provenance"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound', "
+            "'transfer_in', 'transfer_out')", name="ck_provenance_purpose"
+        ),
+        CheckConstraint(
+            "(purpose IN ('transfer_in', 'transfer_out') AND transfer_id IS NOT NULL) OR "
+            "(purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound') "
+            "AND transfer_id IS NULL)", name="ck_provenance_transfer_link"
+        ),
+        Index("ix_provenance_transfer_id", "transfer_id"),
+    )
+
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), primary_key=True
+    )
+    purpose: Mapped[str] = mapped_column(String(30), nullable=False)
+    transfer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("stock_transfers.id", ondelete="RESTRICT"), nullable=True
+    )
+    transaction: Mapped[StockTransaction] = relationship("StockTransaction")
 
 
 class Region(IdentifierMixin, TimestampMixin, Base):

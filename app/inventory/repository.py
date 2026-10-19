@@ -8,6 +8,7 @@ from app.core.pagination import PageParams
 from app.inventory.schemas import InventoryFilters, InventoryMovementCreate, TransactionFilters
 from app.models import (
     Inbound,
+    MovementProvenance,
     Outbound,
     Product,
     Stock,
@@ -195,7 +196,10 @@ class InventoryRepository:
             inbound_id=inbound.id,
             created_by_id=actor_id,
         )
-        self.session.add(transaction)
+        self.session.add_all([
+            transaction,
+            MovementProvenance(transaction=transaction, purpose="standard_inbound"),
+        ])
         return transaction
 
     def add_stock_transaction_for_outbound(
@@ -209,7 +213,10 @@ class InventoryRepository:
             outbound_id=outbound.id,
             created_by_id=actor_id,
         )
-        self.session.add(transaction)
+        self.session.add_all([
+            transaction,
+            MovementProvenance(transaction=transaction, purpose="standard_outbound"),
+        ])
         return transaction
 
     def flush(self) -> None:
