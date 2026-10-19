@@ -89,3 +89,23 @@ export async function createMasterData(page: Page, names: MasterDataNames) {
   await expect(page.getByRole('heading', { name: names.warehouse, exact: true })).toBeVisible()
   return { categoryId: category.id, supplierId: supplier.id, productId: product.id, warehouseId: warehouse.id }
 }
+
+export function assertTransferTarget(page: Page) {
+  const target = new URL(page.url())
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || target.port !== '58080' || target.username || target.password) throw new Error('Transfer fixtures require the separately guarded M3 loopback target.')
+}
+
+export async function createTransferFixture(page: Page) {
+  assertTransferTarget(page)
+  const run = uniqueRunId()
+  const category = await realApi<{ id: number }>(page, '/categories', 'POST', { name: 'M3 transfer ' + run, parent_id: null }, 201)
+  const product = await realApi<{ id: number; sku: string; name: string }>(page, '/products', 'POST', {
+    sku: 'M3-' + run, name: 'Chuyển kho ' + run, description: 'M3 isolated fixture', category_id: category.id, supplier_id: null, unit: 'cái', reorder_level: 0, is_active: false,
+  }, 201)
+  const warehouses = []
+  for (const suffix of ['A', 'B']) warehouses.push(await realApi<{ id: number; name: string }>(page, '/warehouses', 'POST', {
+    code: 'M3-' + suffix + '-' + run, name: 'Kho M3 ' + suffix + ' ' + run, address: 'M3 isolated fixture', latitude: null, longitude: null,
+  }, 201))
+  for (const [warehouse, quantity] of [[warehouses[0], 10], [warehouses[1], 2]] as const) await realApi(page, '/inbounds', 'POST', { warehouse_id: warehouse.id, product_id: product.id, quantity, reference: 'M3 fixture ' + run, note: 'Synthetic isolated test stock' }, 201)
+  return { product, source: warehouses[0], destination: warehouses[1] }
+}
