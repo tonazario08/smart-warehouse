@@ -45,11 +45,12 @@ it('applies conjunctive filters on the server and resets the page', async () => 
 })
 it('shows loading, error retry and an honest empty page', async () => {
   let finish!: (response: Response) => void
+  const pendingResponse = new Promise<Response>(resolve => { finish = resolve })
   let attempt = 0
   renderTransferRoute('/transfers', 'warehouse', url => {
     if (!url.includes('/transfers?')) return transferHandler(url)
     attempt++
-    return attempt === 1 ? new Promise(resolve => { finish = resolve }) : jsonResponse(transferPage([]))
+    return attempt === 1 ? pendingResponse : jsonResponse(transferPage([]))
   })
   expect(await screen.findByText('Đang tải phiếu chuyển kho...')).toBeInTheDocument()
   finish(jsonResponse({}, 503))
