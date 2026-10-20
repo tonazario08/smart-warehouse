@@ -14,6 +14,10 @@ export type Permission =
   | 'inventory:read'
   | 'inventory:write'
   | 'dashboard:read'
+  | 'purchase_request:read'
+  | 'purchase_request:create'
+  | 'purchase_request:review'
+  | 'purchase_request:fulfill'
 
 const permissionRoles: Readonly<Record<Permission, readonly Role[]>> = {
   'catalog:read': ['admin', 'warehouse', 'client'],
@@ -29,6 +33,10 @@ const permissionRoles: Readonly<Record<Permission, readonly Role[]>> = {
   'inventory:read': ['admin', 'warehouse', 'client'],
   'inventory:write': ['admin', 'warehouse'],
   'dashboard:read': ['admin'],
+  'purchase_request:read': ['admin', 'warehouse', 'client'],
+  'purchase_request:create': ['client'],
+  'purchase_request:review': ['admin'],
+  'purchase_request:fulfill': ['admin', 'warehouse'],
 }
 
 export function can(role: Role | null | undefined, permission: Permission) {

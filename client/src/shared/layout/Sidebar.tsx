@@ -28,6 +28,7 @@ const items: Item[] = [
   { to: '/inbound', label: 'Nhập kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: inboundIcon },
   { to: '/outbound', label: 'Xuất kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: outboundIcon },
   { to: '/transfers', label: 'Chuyển kho', permission: 'inventory:history:read', roles: ['admin', 'warehouse'], icon: transactionsIcon },
+  { to: '/purchase-requests', label: 'Yêu cầu mua hàng', permission: 'purchase_request:read', roles: ['admin', 'warehouse', 'client'], icon: transactionsIcon },
   { to: '/users', label: 'Người dùng', permission: 'user:manage', roles: ['admin'], icon: usersIcon },
   { to: '/categories', label: 'Danh mục', permission: 'catalog:read', roles: ['admin', 'warehouse', 'client'], icon: categoriesIcon },
   { to: '/suppliers', label: 'Nhà cung cấp', permission: 'supplier:read', roles: ['admin', 'warehouse'], icon: suppliersIcon },

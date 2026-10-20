@@ -12,6 +12,11 @@ export function onApiUnauthorized(listener: (token: string, generation: number) 
 }
 
 const errorMessages: Record<string, string> = {
+  PURCHASE_REQUEST_NOT_FOUND: 'Không tìm thấy yêu cầu mua hàng.',
+  PRODUCT_NOT_REQUESTABLE: 'Sản phẩm đã ngừng hoạt động, không thể tạo hoặc duyệt xuất yêu cầu mới.',
+  LEGACY_PURCHASE_REQUEST_READ_ONLY: 'Yêu cầu cũ chỉ có thể xem, không thể thay đổi.',
+  PURCHASE_REQUEST_STATE_CONFLICT: 'Trạng thái yêu cầu đã thay đổi hoặc không cho phép thao tác này. Vui lòng tải lại.',
+  PURCHASE_REQUEST_RETRY_REQUIRED: 'Chưa xác định kết quả yêu cầu mua hàng. Hãy tra cứu hoặc thử lại cùng yêu cầu.',
   TRANSFER_NOT_FOUND: 'Không tìm thấy phiếu chuyển kho.',
   IDEMPOTENCY_KEY_CONFLICT: 'Khóa yêu cầu đã được dùng cho nội dung khác. Vui lòng kiểm tra phiếu chuyển kho.',
   TRANSFER_RETRY_REQUIRED: 'Chưa thể xác định hoặc hoàn tất chuyển kho. Vui lòng thử lại cùng yêu cầu.',
@@ -38,6 +43,7 @@ const errorMessages: Record<string, string> = {
   WAREHOUSE_CONFLICT: 'Mã hoặc tên kho đã tồn tại. Vui lòng chọn thông tin khác.',
 }
 const fieldLabels: Record<string, string> = { source_warehouse_id: 'kho nguồn', destination_warehouse_id: 'kho đích', 'header.Idempotency-Key': 'khóa yêu cầu', sku: 'mã SKU', name: 'tên', category_id: 'danh mục', supplier_id: 'nhà cung cấp', unit: 'đơn vị', reorder_level: 'mức tồn tối thiểu', is_active: 'trạng thái', code: 'mã kho', address: 'địa chỉ', latitude: 'vĩ độ', longitude: 'kinh độ', quantity: 'số lượng', reference: 'mã phiếu', note: 'ghi chú', warehouse_id: 'kho hàng', product_id: 'sản phẩm' }
+fieldLabels.rejection_reason = 'lý do từ chối'
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 function safeMessage(status: number, code: string, fields: FieldErrors) {
   if (errorMessages[code]) return errorMessages[code]

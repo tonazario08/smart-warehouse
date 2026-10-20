@@ -21,6 +21,9 @@ import { RouteGuard } from './RouteGuard'
 import { TransfersPage } from '../features/transfers/TransfersPage'
 import { TransferFormPage } from '../features/transfers/TransferFormPage'
 import { TransferDetailPage } from '../features/transfers/TransferDetailPage'
+import { PurchaseRequestsPage } from '../features/purchaseRequests/PurchaseRequestsPage'
+import { PurchaseRequestFormPage } from '../features/purchaseRequests/PurchaseRequestFormPage'
+import { PurchaseRequestDetailPage } from '../features/purchaseRequests/PurchaseRequestDetailPage'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -43,6 +46,8 @@ export const router = createBrowserRouter([
     { path: '/outbound', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <MovementListPage type="outbound" /> }, { path: 'new', element: <MovementFormPage type="outbound" /> }] },
     { path: '/transfers', element: <RouteGuard permission="inventory:history:read" />, children: [{ index: true, element: <TransfersPage /> }, { path: ':id', element: <TransferDetailPage /> }] },
     { path: '/transfers/new', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <TransferFormPage /> }] },
+    { path: '/purchase-requests', element: <RouteGuard permission="purchase_request:read" />, children: [{ index: true, element: <PurchaseRequestsPage /> }, { path: ':id', element: <PurchaseRequestDetailPage /> }] },
+    { path: '/purchase-requests/new', element: <RouteGuard permission="purchase_request:create" />, children: [{ index: true, element: <PurchaseRequestFormPage /> }] },
   ] }] },
   { path: '*', element: <Navigate replace to="/" /> },
 ])
