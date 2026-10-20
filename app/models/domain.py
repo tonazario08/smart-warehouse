@@ -337,11 +337,13 @@ class MovementProvenance(Base):
     __table_args__ = (
         CheckConstraint(
             "purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound', "
-            "'transfer_in', 'transfer_out')", name="ck_provenance_purpose"
+            "'transfer_in', 'transfer_out', 'purchase_request_fulfillment')",
+            name="ck_provenance_purpose"
         ),
         CheckConstraint(
             "(purpose IN ('transfer_in', 'transfer_out') AND transfer_id IS NOT NULL) OR "
-            "(purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound') "
+            "(purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound', "
+            "'purchase_request_fulfillment') "
             "AND transfer_id IS NULL)", name="ck_provenance_transfer_link"
         ),
         Index("ix_provenance_transfer_id", "transfer_id"),
@@ -368,6 +370,9 @@ class PurchaseRequest(IdentifierMixin, TimestampMixin, Base):
     __tablename__ = "purchase_requests"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_purchase_requests_quantity_positive"),
+        Index("ix_purchase_requests_owner_created_id", "requested_by_id", "created_at", "id"),
+        Index("ix_purchase_requests_created_id", "created_at", "id"),
+        Index("ix_purchase_requests_status_created_id", "status", "created_at", "id"),
     )
 
     request_number: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
@@ -392,6 +397,84 @@ class PurchaseRequest(IdentifierMixin, TimestampMixin, Base):
     requested_by_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+
+
+class PurchaseRequestWorkflow(Base):
+    """Durable managed history; base requests without this row remain legacy."""
+
+    __tablename__ = "purchase_request_workflows"
+    __table_args__ = (
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_purchase_request_workflows_actor_key"
+        ),
+        UniqueConstraint("outbound_id", name="uq_purchase_request_workflows_outbound"),
+        UniqueConstraint(
+            "outbound_transaction_id", name="uq_purchase_request_workflows_transaction"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND "
+            "length(replace(replace(replace(replace(replace(replace(replace(replace("
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "request_fingerprint,'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),"
+            "'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f','')) = 0",
+            name="ck_pr_workflow_fingerprint",
+        ),
+        CheckConstraint("note IS NULL OR length(note) <= 2000", name="ck_pr_workflow_note"),
+        CheckConstraint(
+            "(decision_kind IS NULL AND decided_by_id IS NULL AND decided_at IS NULL "
+            "AND rejection_reason IS NULL) OR "
+            "(decision_kind IS NOT NULL AND decision_kind = 'approved' "
+            "AND decided_by_id IS NOT NULL AND decided_at IS NOT NULL "
+            "AND rejection_reason IS NULL) OR "
+            "(decision_kind IS NOT NULL AND decision_kind = 'rejected' "
+            "AND decided_by_id IS NOT NULL AND decided_at IS NOT NULL "
+            "AND rejection_reason IS NOT NULL AND rejection_reason = trim(rejection_reason, "
+            "'\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
+            "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000') "
+            "AND length(rejection_reason) BETWEEN 1 AND 1000 "
+            ")",
+            name="ck_pr_workflow_decision",
+        ),
+        CheckConstraint(
+            "(fulfilled_by_id IS NULL AND fulfilled_at IS NULL AND outbound_id IS NULL "
+            "AND outbound_transaction_id IS NULL "
+            "AND quantity_before IS NULL AND quantity_after IS NULL) OR "
+            "(fulfilled_by_id IS NOT NULL AND fulfilled_at IS NOT NULL AND outbound_id IS NOT NULL "
+            "AND outbound_transaction_id IS NOT NULL AND quantity_before IS NOT NULL "
+            "AND quantity_after IS NOT NULL AND decision_kind IS NOT NULL "
+            "AND decision_kind = 'approved')",
+            name="ck_pr_workflow_fulfillment",
+        ),
+        CheckConstraint(
+            "(quantity_before IS NULL AND quantity_after IS NULL) OR "
+            "(quantity_before IS NOT NULL AND quantity_after IS NOT NULL "
+            "AND quantity_after >= 0 AND quantity_after < quantity_before "
+            "AND quantity_before <= 2147483647)",
+            name="ck_pr_workflow_balances",
+        ),
+    )
+
+    purchase_request_id: Mapped[int] = mapped_column(
+        ForeignKey("purchase_requests.id", ondelete="RESTRICT"), primary_key=True
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    decision_kind: Mapped[str | None] = mapped_column(String(8))
+    decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    fulfilled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outbound_id: Mapped[int | None] = mapped_column(ForeignKey("outbounds.id", ondelete="RESTRICT"))
+    outbound_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT")
+    )
+    quantity_before: Mapped[int | None] = mapped_column(Integer)
+    quantity_after: Mapped[int | None] = mapped_column(Integer)
 
 
 class RouteLog(IdentifierMixin, Base):

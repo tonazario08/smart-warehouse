@@ -40,6 +40,10 @@ def test_central_permission_mapping_matches_phase_one_capabilities() -> None:
         Permission.DASHBOARD_READ: admin,
         Permission.USER_MANAGE: admin,
         Permission.AUDIT_READ: admin,
+        Permission.PURCHASE_REQUEST_READ: all_users,
+        Permission.PURCHASE_REQUEST_CREATE: frozenset({UserRole.CLIENT}),
+        Permission.PURCHASE_REQUEST_REVIEW: admin,
+        Permission.PURCHASE_REQUEST_FULFILL: warehouse,
     }
 
 

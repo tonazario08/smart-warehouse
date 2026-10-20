@@ -81,7 +81,7 @@ def test_migrations_build_expected_schema(
                 connection.execute(text("SELECT sku FROM products")).scalar_one(),
                 connection.execute(text("SELECT code FROM warehouses")).scalar_one(),
             )
-        assert revision == "20261017_0003"
+        assert revision == "20261019_0004"
         assert normalized_values == ("mixed@example.com", "BOLT-001", "HCM-01")
     finally:
         engine.dispose()
@@ -103,6 +103,7 @@ def test_migrations_build_expected_schema(
         "audit_logs",
         "stock_transfers",
         "movement_provenance",
+        "purchase_request_workflows",
     }
 
 

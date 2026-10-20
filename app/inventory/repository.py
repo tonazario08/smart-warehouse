@@ -1,5 +1,7 @@
 """Inventory read queries and persistence primitives."""
 
+from typing import Literal
+
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -203,7 +205,8 @@ class InventoryRepository:
         return transaction
 
     def add_stock_transaction_for_outbound(
-        self, outbound: Outbound, actor_id: int
+        self, outbound: Outbound, actor_id: int, *,
+        purpose: Literal["standard_outbound", "purchase_request_fulfillment"] = "standard_outbound",
     ) -> StockTransaction:
         transaction = StockTransaction(
             transaction_type=TransactionType.OUTBOUND,
@@ -215,7 +218,7 @@ class InventoryRepository:
         )
         self.session.add_all([
             transaction,
-            MovementProvenance(transaction=transaction, purpose="standard_outbound"),
+            MovementProvenance(transaction=transaction, purpose=purpose),
         ])
         return transaction
 

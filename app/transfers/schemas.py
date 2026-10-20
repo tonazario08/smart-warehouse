@@ -9,7 +9,8 @@ from app.inventory.schemas import MAX_STOCK_QUANTITY
 
 PositiveInteger = Annotated[int, Field(strict=True, ge=1, le=MAX_STOCK_QUANTITY)]
 MovementPurpose = Literal[
-    "legacy_unknown", "standard_inbound", "standard_outbound", "transfer_in", "transfer_out"
+    "legacy_unknown", "standard_inbound", "standard_outbound", "transfer_in", "transfer_out",
+    "purchase_request_fulfillment",
 ]
 
 
