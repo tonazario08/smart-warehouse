@@ -5,7 +5,7 @@ import os
 import pytest
 from alembic.config import Config
 from sqlalchemy import MetaData, create_engine, insert, inspect, text, update
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError, DataError, IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -26,26 +26,50 @@ HEAD = "20261019_0004"
 PARENT = "20261017_0003"
 
 
+def validate_migration_pair(value: str, test_value: str) -> tuple[URL, URL]:
+    try:
+        url, test_url = make_url(value), make_url(test_value)
+    except (ArgumentError, TypeError, ValueError):
+        raise ValueError("A separate guarded migration database is required.") from None
+    pair = (url.host, url.port, url.username, test_url.database, url.database)
+    if (
+        any(
+            set(candidate.query) - {"connect_timeout"}
+            or (candidate.query and candidate.query.get("connect_timeout") != "5")
+            for candidate in (url, test_url)
+        )
+        or url.drivername != "postgresql+psycopg"
+        or test_url.drivername != url.drivername
+        or (test_url.host, test_url.port, test_url.username) != (url.host, url.port, url.username)
+        or pair
+        not in {
+            (
+                "127.0.0.1",
+                18545,
+                "sw_m4_requests_test",
+                "sw_m4_requests_test",
+                "sw_m4_requests_migration_test",
+            ),
+            (
+                "127.0.0.1",
+                18546,
+                "sw_m5_demand_test",
+                "sw_m5_demand_test",
+                "sw_m5_demand_migration_test",
+            ),
+        }
+    ):
+        raise ValueError("A separate guarded migration database is required.")
+    return url, test_url
+
+
 @pytest.fixture
 def purchase_migration_target(postgres_url):
     value = os.environ.get("TEST_MIGRATION_DATABASE_URL", "")
     try:
-        url, test_url = make_url(value), make_url(postgres_url)
-    except (ArgumentError, TypeError, ValueError):
+        url, test_url = validate_migration_pair(value, postgres_url)
+    except ValueError:
         pytest.fail("A separate guarded M4 migration database is required.", pytrace=False)
-    assert url.drivername == "postgresql+psycopg"
-    assert (url.host, url.port, url.username, url.database) == (
-        "127.0.0.1",
-        18545,
-        "sw_m4_requests_test",
-        "sw_m4_requests_migration_test",
-    )
-    assert url.database != test_url.database
-    assert (test_url.host, test_url.port, test_url.database) == (
-        "127.0.0.1",
-        18545,
-        "sw_m4_requests_test",
-    )
     engine = create_engine(value, poolclass=NullPool)
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", value.replace("%", "%%"))
