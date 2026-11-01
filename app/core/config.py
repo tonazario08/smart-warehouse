@@ -1,6 +1,7 @@
 """Typed runtime configuration."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, SecretStr, model_validator
@@ -38,10 +39,14 @@ class Settings(BaseSettings):
     jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_expire_minutes: int = Field(default=30, ge=5, le=1440)
     cors_origins: list[str] = Field(default_factory=list)
+    forecast_catalog_root: Path | None = None
+    forecast_allow_fixture: bool = False
 
     @model_validator(mode="after")
     def reject_unsafe_production_values(self) -> Self:
         """Validate runtime database and production JWT-secret safety constraints."""
+        if self.forecast_allow_fixture and self.app_env not in ("test", "integration"):
+            raise ValueError("forecast fixture serving requires a test environment")
         try:
             database_url = make_url(self.database_url)
         except ArgumentError as error:

@@ -18,3 +18,4 @@ test-results/
 *-screenshot.png
 .worktrees/
 /artifacts/demand-data/
+/artifacts/forecasting/

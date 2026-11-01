@@ -33,6 +33,8 @@ class Permission(StrEnum):
     PURCHASE_REQUEST_CREATE = "purchase_request:create"
     PURCHASE_REQUEST_REVIEW = "purchase_request:review"
     PURCHASE_REQUEST_FULFILL = "purchase_request:fulfill"
+    FORECAST_READ = "forecast:read"
+    FORECAST_RESEARCH_READ = "forecast:research:read"
 
 
 PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
@@ -52,6 +54,8 @@ PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.PURCHASE_REQUEST_CREATE: frozenset({UserRole.CLIENT}),
     Permission.PURCHASE_REQUEST_REVIEW: frozenset({UserRole.ADMIN}),
     Permission.PURCHASE_REQUEST_FULFILL: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.FORECAST_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.FORECAST_RESEARCH_READ: frozenset({UserRole.ADMIN}),
 }
 
 

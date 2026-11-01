@@ -44,6 +44,8 @@ def test_central_permission_mapping_matches_phase_one_capabilities() -> None:
         Permission.PURCHASE_REQUEST_CREATE: frozenset({UserRole.CLIENT}),
         Permission.PURCHASE_REQUEST_REVIEW: admin,
         Permission.PURCHASE_REQUEST_FULFILL: warehouse,
+        Permission.FORECAST_READ: warehouse,
+        Permission.FORECAST_RESEARCH_READ: admin,
     }
 
 
