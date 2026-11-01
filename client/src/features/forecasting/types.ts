@@ -1,0 +1,7 @@
+export type ForecastMode = 'operational' | 'research'
+export type Algorithm = 'persistence' | 'seasonal_naive' | 'xgboost'
+export type Metric = { count: number; origin_count: number; mae: number | null; wape: number | null; origin_total_mae: number | null; reason: string | null; wape_reason: string | null }
+export type Manifest = { run_id: string; mode: ForecastMode; kind: 'evaluation' | 'forecast'; dataset_class: 'research' | 'fixture'; data_version: string; target: string; reporting_scope: string; unit: string; knowledge_time_mode: string; trained_through: string; training_information_cutoff: string | null; admission_cutoff: string | null; knowledge_bound: string | null; origin_start: string | null; origin_end: string | null; horizons: number[]; generated_at: string; limitations: string[] }
+export type ForecastRun = { manifest: Manifest; metrics: Record<string, Metric> | null; binding: Record<string, unknown> | null; entity: { product_name: string; sku: string; warehouse_name: string; warehouse_code: string } | null; applicability: 'retrospective' | 'operational'; stale: boolean | null; fixture_label: string | null }
+export type ForecastStatus = { state: 'ready' | 'unavailable' | 'failed'; reason_code: string | null; latest: ForecastRun | null; latest_failure_code?: string | null }
+export type Prediction = { series_key: string; origin: string; target_date: string; lead: number; horizon: number; algorithm: Algorithm; prediction: number; actual: number | null; unit: string }

@@ -209,8 +209,8 @@ test('Topbar presents unsupported search and notifications as explicitly unavail
 })
 
 for (const [role, expectedLinks] of [
-  ['admin', [['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
-  ['warehouse', [['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
+  ['admin', [['/forecasting', 'Dự báo'], ['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
+  ['warehouse', [['/forecasting', 'Dự báo'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
   ['client', [['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục']]],
 ]) test(`${role} sidebar destinations retain accessible names when responsive CSS hides visible labels`, () => {
   const user = { id: 1, email: `${role}@example.com`, role, is_active: true }
@@ -241,6 +241,7 @@ test('breadcrumbs keep the resource area on create, edit and detail routes with 
     ['/inbound/new', 'Nhập kho'], ['/outbound/new', 'Xuất kho'],
     ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'],
     ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị'],
+    ['/forecasting', 'Dự báo'], ['/forecasting/runs/frv1-test', 'Dự báo'],
     ['/transfers', 'Chuyển kho'], ['/transfers/new', 'Chuyển kho'], ['/transfers/8', 'Chuyển kho'],
     ['/purchase-requests', 'Yêu cầu mua hàng'], ['/purchase-requests/new', 'Yêu cầu mua hàng'], ['/purchase-requests/8', 'Yêu cầu mua hàng'],
     ['/dashboard', 'Bảng điều khiển'], ['/', 'Bảng điều khiển'], ['/unknown/thing', 'Chi tiết'],

@@ -1,6 +1,8 @@
 import type { Role } from '../../types'
 
 export type Permission =
+  | 'forecast:read'
+  | 'forecast:research:read'
   | 'catalog:read'
   | 'supplier:write'
   | 'inventory:history:read'
@@ -20,6 +22,8 @@ export type Permission =
   | 'purchase_request:fulfill'
 
 const permissionRoles: Readonly<Record<Permission, readonly Role[]>> = {
+  'forecast:read': ['admin', 'warehouse'],
+  'forecast:research:read': ['admin'],
   'catalog:read': ['admin', 'warehouse', 'client'],
   'supplier:write': ['admin'],
   'inventory:history:read': ['admin', 'warehouse'],

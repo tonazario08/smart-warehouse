@@ -1,0 +1,11 @@
+.forecast-page { display: grid; gap: 1rem; min-width: 0; }
+.forecast-tabs, .forecast-filters { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; }
+.forecast-tabs button[aria-pressed="true"] { font-weight: 700; }
+.forecast-panel { padding: 1.25rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); min-width: 0; }
+.forecast-panel h2 { margin-top: 0; }
+.forecast-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.forecast-facts dt { font-weight: 600; }
+.forecast-facts dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.forecast-page .ui-data-table-wrapper { max-width: 100%; overflow-x: auto; }
+.forecast-page .ui-data-table { min-width: 960px; }
+.forecast-page td a { white-space: nowrap; overflow-wrap: normal; }

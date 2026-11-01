@@ -18,9 +18,11 @@ import categoriesIcon from '../assets/icons/categories.svg'
 import suppliersIcon from '../assets/icons/suppliers.svg'
 import transactionsIcon from '../assets/icons/transactions.svg'
 import auditIcon from '../assets/icons/audit.svg'
+import forecastingIcon from '../assets/icons/forecasting.svg'
 
 type Item = { to: string; label: string; permission: Permission; roles: Role[]; icon: string; activeIcon?: string }
 const items: Item[] = [
+  { to: '/forecasting', label: 'Dự báo', permission: 'forecast:read', roles: ['admin', 'warehouse'], icon: forecastingIcon },
   { to: '/dashboard', label: 'Bảng điều khiển', permission: 'dashboard:read', roles: ['admin'], icon: dashboardInactiveIcon, activeIcon: dashboardIcon },
   { to: '/products', label: 'Sản phẩm', permission: 'product:read', roles: ['admin', 'client'], icon: productsIcon, activeIcon: productsActiveIcon },
   { to: '/inventory', label: 'Tồn kho', permission: 'inventory:read', roles: ['admin', 'warehouse', 'client'], icon: inventoryIcon, activeIcon: inventoryActiveIcon },
