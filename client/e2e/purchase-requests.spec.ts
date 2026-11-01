@@ -194,10 +194,16 @@ test('legal long content fits mobile detail and keeps list values readable insid
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/purchase-requests')
   await page.getByRole('combobox', { name: 'Lọc sản phẩm', exact: true }).selectOption(String(fixture.product.id))
+  const filtered = page.waitForResponse(response => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET' && url.pathname === '/api/v1/purchase-requests' && url.searchParams.get('product_id') === String(fixture.product.id) && url.searchParams.get('page') === '1'
+  })
   await page.getByRole('button', { name: 'Áp dụng bộ lọc', exact: true }).click()
+  expect((await filtered).status()).toBe(200)
   const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: created.row.request_number, exact: true }) })
   const status = row.getByText('Chờ duyệt', { exact: true })
   await expect(status).toBeVisible()
+  await expect(row.locator('.purchase-nowrap')).toHaveCount(5)
   const semanticValues = await row.locator('.purchase-nowrap').evaluateAll(elements => elements.map(element => ({ whiteSpace: getComputedStyle(element).whiteSpace, client: element.clientWidth, scroll: element.scrollWidth })))
   expect(semanticValues).toHaveLength(5)
   expect(semanticValues.every(value => value.whiteSpace === 'nowrap' && value.scroll <= value.client + 1)).toBe(true)
