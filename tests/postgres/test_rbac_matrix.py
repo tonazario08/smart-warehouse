@@ -46,6 +46,8 @@ def test_central_permission_mapping_matches_phase_one_capabilities() -> None:
         Permission.PURCHASE_REQUEST_FULFILL: warehouse,
         Permission.FORECAST_READ: warehouse,
         Permission.FORECAST_RESEARCH_READ: admin,
+        Permission.REPLENISHMENT_READ: warehouse,
+        Permission.REPLENISHMENT_RESEARCH_READ: admin,
     }
 
 

@@ -19,3 +19,4 @@ test-results/
 .worktrees/
 /artifacts/demand-data/
 /artifacts/forecasting/
+/artifacts/replenishment/
