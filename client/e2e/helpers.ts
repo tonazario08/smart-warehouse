@@ -48,13 +48,13 @@ export async function signOut(page: Page) {
   expect(await storedToken(page) === null).toBe(true)
 }
 export async function createManagedUser(page: Page, credentials: Credentials, role: 'client' | 'warehouse') {
-  // No approved management UI: this remains explicit real backend API coverage.
+  // API fixture/security coverage; management-ui.spec.ts separately exercises the active UI.
   const user = await realApi<{ id: number; role: string; is_active: boolean }>(page, '/users', 'POST', { ...credentials, role }, 201)
   expect(user.role === role && user.is_active).toBe(true)
   return user
 }
 export async function createMasterData(page: Page, names: MasterDataNames) {
-  // Directory mutations are API-only; product/warehouse creation uses the active Figma UI.
+  // Fixture setup through real APIs; separate management UI scenarios cover directory mutations.
   const category = await realApi<{ id: number }>(page, '/categories', 'POST', { name: names.category, parent_id: null }, 201)
   const supplier = await realApi<{ id: number }>(page, '/suppliers', 'POST', { name: names.supplier, email: names.supplierEmail, phone: '+84-28-5555-0101', address: '19 E2E Street' }, 201)
   await page.goto('/products/new')
@@ -88,4 +88,57 @@ export async function createMasterData(page: Page, names: MasterDataNames) {
   await expect(page).toHaveURL(new RegExp('/warehouses/' + warehouse.id + '$'))
   await expect(page.getByRole('heading', { name: names.warehouse, exact: true })).toBeVisible()
   return { categoryId: category.id, supplierId: supplier.id, productId: product.id, warehouseId: warehouse.id }
+}
+
+export function assertTransferTarget(page: Page) {
+  const target = new URL(page.url())
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || !['58080', '58081', '58082'].includes(target.port) || target.username || target.password) throw new Error('Transfer fixtures require the separately guarded M3/M4 loopback target.')
+}
+
+export function assertPurchaseRequestTarget(page: Page) {
+  const target = new URL(page.url())
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || !['58081', '58082'].includes(target.port) || target.username || target.password) throw new Error('M4 fixtures require the separately guarded M4 loopback target.')
+}
+
+export function purchaseRequestCredentials() {
+  for (const role of ['ADMIN', 'WAREHOUSE', 'CLIENT']) for (const field of ['EMAIL', 'PASSWORD']) {
+    if (!process.env['E2E_' + role + '_' + field]) throw new Error('Explicit isolated M4 credentials are required.')
+  }
+  return { admin: e2eCredentials.admin, warehouse: e2eCredentials.seededWarehouse, client: e2eCredentials.seededClient }
+}
+
+export async function createPurchaseRequestFixture(page: Page) {
+  assertPurchaseRequestTarget(page)
+  purchaseRequestCredentials()
+  const run = uniqueRunId()
+  const category = await realApi<{ id: number }>(page, '/categories', 'POST', { name: 'M4 requests ' + run, parent_id: null }, 201)
+  const product = await realApi<{ id: number; sku: string; name: string }>(page, '/products', 'POST', {
+    sku: 'M4-' + run, name: 'Yêu cầu M4 ' + run, description: 'M4 isolated fixture', category_id: category.id, supplier_id: null, unit: 'cái', reorder_level: 0, is_active: true,
+  }, 201)
+  const warehouse = await realApi<{ id: number; name: string }>(page, '/warehouses', 'POST', {
+    code: 'M4-' + run, name: 'Kho yêu cầu M4 ' + run, address: 'M4 isolated fixture', latitude: null, longitude: null,
+  }, 201)
+  await realApi(page, '/inbounds', 'POST', { warehouse_id: warehouse.id, product_id: product.id, quantity: 10, reference: 'M4 fixture ' + run, note: 'Synthetic isolated stock' }, 201)
+  const clients = []
+  for (const suffix of ['A', 'B']) {
+    const credentials = { email: ('m4-' + suffix + '-' + run + '@example.com').toLowerCase(), password: 'M4!' + crypto.randomUUID() }
+    const user = await createManagedUser(page, credentials, 'client')
+    clients.push({ ...credentials, id: user.id })
+  }
+  return { product, warehouse, clients }
+}
+
+export async function createTransferFixture(page: Page) {
+  assertTransferTarget(page)
+  const run = uniqueRunId()
+  const category = await realApi<{ id: number }>(page, '/categories', 'POST', { name: 'M3 transfer ' + run, parent_id: null }, 201)
+  const product = await realApi<{ id: number; sku: string; name: string }>(page, '/products', 'POST', {
+    sku: 'M3-' + run, name: 'Chuyển kho ' + run, description: 'M3 isolated fixture', category_id: category.id, supplier_id: null, unit: 'cái', reorder_level: 0, is_active: false,
+  }, 201)
+  const warehouses = []
+  for (const suffix of ['A', 'B']) warehouses.push(await realApi<{ id: number; name: string }>(page, '/warehouses', 'POST', {
+    code: 'M3-' + suffix + '-' + run, name: 'Kho M3 ' + suffix + ' ' + run, address: 'M3 isolated fixture', latitude: null, longitude: null,
+  }, 201))
+  for (const [warehouse, quantity] of [[warehouses[0], 10], [warehouses[1], 2]] as const) await realApi(page, '/inbounds', 'POST', { warehouse_id: warehouse.id, product_id: product.id, quantity, reference: 'M3 fixture ' + run, note: 'Synthetic isolated test stock' }, 201)
+  return { product, source: warehouses[0], destination: warehouses[1] }
 }

@@ -1,29 +1,31 @@
 import { useState } from 'react'
 import type { ManagedRole, ManagedUser } from './types'
+import { ApiError } from '../../shared/api/ApiError'
+import { Button } from '../../shared/ui/Button'
+import { Select } from '../../shared/ui/Select'
+import { ConfirmDialog } from '../../shared/ui/ConfirmDialog'
+import { FeedbackMessage } from '../../shared/ui/FeedbackMessage'
 
-export function UserActions({ user, pending, onRoleChange, onStatusChange }: {
-  user: ManagedUser
-  pending: boolean
-  onRoleChange: (role: ManagedRole) => Promise<void>
-  onStatusChange: () => Promise<void>
-}) {
+export function UserActions({ user, pending, onRoleChange, onStatusChange }: { user: ManagedUser; pending: boolean; onRoleChange: (role: ManagedRole) => Promise<void>; onStatusChange: () => Promise<void> }) {
   const [confirm, setConfirm] = useState<'role' | 'status' | null>(null)
-  const [role, setRole] = useState<ManagedRole>(user.role === 'client' ? 'warehouse' : 'client')
-  if (user.role === 'admin') return <span className="admin-protected">Administrator account <button type="button" className="quiet" aria-label={`Change role for ${user.email}`} disabled>Change role</button><button type="button" className="quiet" aria-label={`Change status for ${user.email}`} disabled>Change status</button></span>
-
-  return <div className="user-actions">
-    {confirm === 'role' ? <div className="confirm-actions">
-      <label htmlFor={`role-${user.id}`}>Confirm role change for {user.email}</label>
-      <select id={`role-${user.id}`} value={role} onChange={(event) => setRole(event.target.value as ManagedRole)}><option value="client">Client</option><option value="warehouse">Warehouse</option></select>
-      <button type="button" disabled={pending} onClick={() => void onRoleChange(role).then(() => setConfirm(null)).catch(() => undefined)}>Confirm role change</button>
-      <button type="button" className="quiet" onClick={() => setConfirm(null)}>Cancel</button>
-    </div> : confirm === 'status' ? <div className="confirm-actions">
-      <p>Confirm {user.is_active ? 'deactivation' : 'activation'} for {user.email}?</p>
-      <button type="button" disabled={pending} onClick={() => void onStatusChange().then(() => setConfirm(null)).catch(() => undefined)}>Confirm {user.is_active ? 'deactivation' : 'activation'}</button>
-      <button type="button" className="quiet" onClick={() => setConfirm(null)}>Cancel</button>
-    </div> : <>
-      <button type="button" className="quiet" disabled={pending} aria-label={`Change role for ${user.email}`} onClick={() => { setRole(user.role === 'client' ? 'warehouse' : 'client'); setConfirm('role') }}>Change role</button>
-      <button type="button" className="quiet" disabled={pending} aria-label={`${user.is_active ? 'Deactivate' : 'Activate'} ${user.email}`} onClick={() => setConfirm('status')}>{user.is_active ? 'Deactivate' : 'Activate'}</button>
-    </>}
+  const [role, setRole] = useState<ManagedRole>('client')
+  const [failure, setFailure] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const open = (kind: 'role' | 'status') => { setRole(user.role === 'client' ? 'warehouse' : 'client'); setFailure(''); setConfirm(kind) }
+  const title = confirm === 'role' ? 'Xác nhận đổi vai trò' : user.is_active ? 'Xác nhận vô hiệu hóa' : 'Xác nhận kích hoạt'
+  async function submit() {
+    setFailure('')
+    if (confirm === 'role' && role !== 'client' && role !== 'warehouse') { setFailure('Chọn vai trò được hỗ trợ.'); setAttempt(value => value + 1); return }
+    try { await (confirm === 'role' ? onRoleChange(role) : onStatusChange()); setConfirm(null) }
+    catch (error) { setFailure(error instanceof ApiError ? error.message : 'Không thể cập nhật tài khoản. Vui lòng thử lại.'); setAttempt(value => value + 1) }
+  }
+  if (user.role === 'admin') return <div className="management-actions"><span>Tài khoản quản trị được bảo vệ</span><Button size="small" variant="secondary" aria-label={'Đổi vai trò cho ' + user.email} disabled>Đổi vai trò</Button><Button size="small" variant="secondary" aria-label={'Đổi trạng thái cho ' + user.email} disabled>Đổi trạng thái</Button></div>
+  return <div className="management-actions">
+    <Button size="small" variant="secondary" disabled={pending} aria-label={'Đổi vai trò cho ' + user.email} onClick={() => open('role')}>Đổi vai trò</Button>
+    <Button size="small" variant="secondary" disabled={pending} aria-label={(user.is_active ? 'Vô hiệu hóa ' : 'Kích hoạt ') + user.email} onClick={() => open('status')}>{user.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'}</Button>
+    {confirm && <ConfirmDialog key={attempt} open busy={pending} title={title} description={'Áp dụng thay đổi cho ' + user.email + '?'} confirmLabel={title} onCancel={() => setConfirm(null)} onConfirm={() => void submit()}>
+      {confirm === 'role' && <Select label="Vai trò mới" value={role} disabled={pending} onChange={event => setRole(event.target.value as ManagedRole)} options={[{ value: 'client', label: 'Khách hàng' }, { value: 'warehouse', label: 'Nhân viên kho' }]} />}
+      {failure && <FeedbackMessage variant="error">{failure}</FeedbackMessage>}
+    </ConfirmDialog>}
   </div>
 }

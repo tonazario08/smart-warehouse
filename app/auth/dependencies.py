@@ -29,6 +29,14 @@ class Permission(StrEnum):
     DASHBOARD_READ = "dashboard:read"
     USER_MANAGE = "user:manage"
     AUDIT_READ = "audit:read"
+    PURCHASE_REQUEST_READ = "purchase_request:read"
+    PURCHASE_REQUEST_CREATE = "purchase_request:create"
+    PURCHASE_REQUEST_REVIEW = "purchase_request:review"
+    PURCHASE_REQUEST_FULFILL = "purchase_request:fulfill"
+    FORECAST_READ = "forecast:read"
+    FORECAST_RESEARCH_READ = "forecast:research:read"
+    REPLENISHMENT_READ = "replenishment:read"
+    REPLENISHMENT_RESEARCH_READ = "replenishment:research:read"
 
 
 PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
@@ -44,6 +52,14 @@ PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.DASHBOARD_READ: frozenset({UserRole.ADMIN}),
     Permission.USER_MANAGE: frozenset({UserRole.ADMIN}),
     Permission.AUDIT_READ: frozenset({UserRole.ADMIN}),
+    Permission.PURCHASE_REQUEST_READ: frozenset(UserRole),
+    Permission.PURCHASE_REQUEST_CREATE: frozenset({UserRole.CLIENT}),
+    Permission.PURCHASE_REQUEST_REVIEW: frozenset({UserRole.ADMIN}),
+    Permission.PURCHASE_REQUEST_FULFILL: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.FORECAST_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.FORECAST_RESEARCH_READ: frozenset({UserRole.ADMIN}),
+    Permission.REPLENISHMENT_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.REPLENISHMENT_RESEARCH_READ: frozenset({UserRole.ADMIN}),
 }
 
 

@@ -43,7 +43,9 @@ def postgres_session(postgres_engine: Engine) -> Iterator[Session]:
     with postgres_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE audit_logs, transactions, inbounds, outbounds, stocks, products, "
+                "TRUNCATE TABLE purchase_request_workflows, "
+                "movement_provenance, stock_transfers, audit_logs, "
+                "transactions, inbounds, outbounds, stocks, products, "
                 "categories, suppliers, warehouses, route_logs, purchase_requests, regions, users "
                 "RESTART IDENTITY CASCADE"
             )

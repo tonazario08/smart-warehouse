@@ -17,3 +17,6 @@ test-results/
 *.webm
 *-screenshot.png
 .worktrees/
+/artifacts/demand-data/
+/artifacts/forecasting/
+/artifacts/replenishment/

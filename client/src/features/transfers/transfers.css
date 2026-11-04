@@ -1,0 +1,26 @@
+.transfers-page { display: grid; gap: 24px; min-width: 0; }
+.transfers-page .transfer-panel { display: grid; gap: 16px; padding: 24px; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.transfers-page h2 { margin: 0; font-size: 18px; line-height: 26px; }
+.transfers-page p { margin: 0; line-height: 1.6; }
+.transfers-page .transfer-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+.transfers-page .transfer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.transfers-page .transfer-identity { display: grid; gap: 4px; }
+.transfers-page .transfer-identity span, .transfers-page dt { color: var(--color-text-muted); font-size: 12px; }
+.transfers-page .transfer-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 0; }
+.transfers-page dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+.transfers-page .transfer-inactive { display: inline-block; margin-left: 8px; padding: 2px 8px; color: var(--color-warning); background: var(--color-warning-soft); border-radius: var(--radius-sm); font-size: 12px; }
+.transfers-page .transfer-completed { color: var(--color-success); }
+.transfers-page .transfer-impact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.transfers-page .transfer-impact > div { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-app-background); }
+.transfers-page .transfer-impact dl { display: flex; gap: 24px; }
+.transfers-page .transfer-impact dd { font-size: 20px; font-weight: 600; }
+.transfers-page .transfer-impact p { font-size: 13px; color: var(--color-text-muted); }
+.transfers-page .transfer-recovery { border-color: var(--color-warning); background: var(--color-warning-soft); }
+.transfers-page .transfer-confirmation-copy,
+.transfers-page .transfer-confirmation-copy p { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 960px) { .transfers-page .transfer-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .transfers-page .transfer-panel { padding: 16px; }
+  .transfers-page .transfer-filters, .transfers-page .transfer-facts, .transfers-page .transfer-impact { grid-template-columns: 1fr; }
+  .transfers-page .transfer-actions .ui-button { flex: 1 1 auto; }
+}

@@ -1,127 +1,78 @@
-import { useState, type FormEvent } from 'react'
-import { Fragment } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useManagementSession } from '../../app/ManagementProvider'
 import { ApiError } from '../../shared/api/ApiError'
-import { AsyncState } from '../../shared/ui/AsyncState'
-import { FormFieldError } from '../../shared/ui/FormFieldError'
+import { Button } from '../../shared/ui/Button'
+import { Input } from '../../shared/ui/Input'
+import { PageHeader } from '../../shared/ui/PageHeader'
+import { FeedbackMessage } from '../../shared/ui/FeedbackMessage'
+import { EmptyState } from '../../shared/ui/EmptyState'
+import { DataTable } from '../../shared/ui/DataTable'
+import { ConfirmDialog } from '../../shared/ui/ConfirmDialog'
 import { Pagination } from '../../shared/ui/Pagination'
-import { useAuth } from '../auth/useAuth'
 import { createSuppliersApi, supplierKeys } from './api'
 import { supplierSchema, type SupplierForm } from './schemas'
 import type { Supplier, SupplierInput } from './types'
 
 const pageSize = 20
-type Selection = Supplier | 'new' | null
-
 function SupplierEditor({ supplier, pending, save, close }: { supplier: Supplier | null; pending: boolean; save: (id: number | null, input: SupplierInput) => Promise<void>; close: () => void }) {
   const form = useForm<SupplierForm, unknown, SupplierInput>({ resolver: zodResolver(supplierSchema), defaultValues: { name: supplier?.name ?? '', email: supplier?.email ?? '', phone: supplier?.phone ?? '', address: supplier?.address ?? '' } })
-  async function submit(values: SupplierInput) {
+  useEffect(() => { form.setFocus('name') }, [form])
+  const busy = pending || form.formState.isSubmitting
+  async function submit(input: SupplierInput) {
     form.clearErrors()
-    try { await save(supplier?.id ?? null, values) } catch (error) {
-      const fields = error instanceof ApiError ? error.fields : null
-      for (const field of ['name', 'email', 'phone', 'address'] as const) {
-        const value = fields?.[field]
-        if (value) form.setError(field, { type: 'server', message: Array.isArray(value) ? value.join(' ') : value })
-      }
-      form.setError('root', { type: 'server', message: error instanceof Error ? error.message : 'Supplier could not be saved.' })
+    try { await save(supplier?.id ?? null, input) } catch (error) {
+      if (error instanceof ApiError) for (const field of ['name', 'email', 'phone', 'address'] as const) if (error.fields?.[field]) form.setError(field, { message: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.' })
+      form.setError('root', { message: error instanceof ApiError ? error.message : 'Không thể lưu nhà cung cấp. Vui lòng thử lại.' })
     }
   }
-  return <form className="admin-inline-form resource-editor" aria-label={supplier ? 'Edit supplier' : 'Create supplier'} noValidate onSubmit={form.handleSubmit(submit)}>
-    <h3>{supplier ? `Edit ${supplier.name}` : 'Create supplier'}</h3>
-    <div className="admin-form-fields">
-      <label>
-        Name
-        <input {...form.register('name')} aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? 'supplier-name-error' : undefined} />
-        <FormFieldError id="supplier-name-error" message={form.formState.errors.name?.message} />
-      </label>
-      <label>
-        Email
-        <input type="email" {...form.register('email')} aria-invalid={Boolean(form.formState.errors.email)} aria-describedby={form.formState.errors.email ? 'supplier-email-error' : undefined} />
-        <FormFieldError id="supplier-email-error" message={form.formState.errors.email?.message} />
-      </label>
-      <label>
-        Phone
-        <input aria-invalid={Boolean(form.formState.errors.phone)} aria-describedby={form.formState.errors.phone ? 'supplier-phone-error' : undefined} {...form.register('phone')} />
-        <FormFieldError id="supplier-phone-error" message={form.formState.errors.phone?.message} />
-      </label>
-      <label>
-        Address
-        <input aria-invalid={Boolean(form.formState.errors.address)} aria-describedby={form.formState.errors.address ? 'supplier-address-error' : undefined} {...form.register('address')} />
-        <FormFieldError id="supplier-address-error" message={form.formState.errors.address?.message} />
-      </label>
+  return <form className="management-panel management-form" aria-label={supplier ? 'Sửa nhà cung cấp' : 'Tạo nhà cung cấp'} noValidate onSubmit={form.handleSubmit(submit)}>
+    <h2>{supplier ? 'Sửa nhà cung cấp ' + supplier.name : 'Tạo nhà cung cấp'}</h2>
+    <div className="management-fields">
+      <Input label="Tên nhà cung cấp" {...form.register('name')} error={form.formState.errors.name?.message} disabled={busy} />
+      <Input label="Email" type="email" {...form.register('email')} error={form.formState.errors.email?.message} disabled={busy} />
+      <Input label="Số điện thoại" type="tel" {...form.register('phone')} error={form.formState.errors.phone?.message} disabled={busy} />
+      <Input label="Địa chỉ" {...form.register('address')} error={form.formState.errors.address?.message} disabled={busy} />
     </div>
-    {form.formState.errors.root?.message && <p role="alert" className="form-error">{form.formState.errors.root.message}</p>}
-    <div className="resource-actions"><button type="submit" disabled={pending || form.formState.isSubmitting}>{pending ? 'Saving…' : 'Save supplier'}</button><button type="button" className="quiet" onClick={close}>Cancel</button></div>
+    {form.formState.errors.root?.message && <FeedbackMessage variant="error">{form.formState.errors.root.message}</FeedbackMessage>}
+    <div className="management-actions"><Button type="submit" isLoading={busy}>Lưu nhà cung cấp</Button><Button variant="secondary" disabled={busy} onClick={close}>Hủy</Button></div>
   </form>
 }
 
 export function SuppliersPage() {
-  const { client, user } = useAuth()
-  const admin = user?.role === 'admin'
-  const api = createSuppliersApi(client)
-  const cache = useQueryClient()
-  const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
-  const [filters, setFilters] = useState({ search: '' })
-  const [selection, setSelection] = useState<Selection>(null)
-  const [deleting, setDeleting] = useState<Supplier | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const listFilters = { page, pageSize, ...filters }
+  const { client, user } = useManagementSession(), api = createSuppliersApi(client), cache = useQueryClient(), admin = user?.role === 'admin'
+  const [page, setPage] = useState(1), [search, setSearch] = useState(''), [filter, setFilter] = useState('')
+  const [selection, setSelection] = useState<Supplier | 'new' | null>(null), [deleting, setDeleting] = useState<Supplier | null>(null)
+  const [message, setMessage] = useState(''), [failure, setFailure] = useState(''), [attempt, setAttempt] = useState(0)
+  const listFilters = { page, pageSize, search: filter }
   const query = useQuery({ queryKey: supplierKeys.list(listFilters), queryFn: () => api.list(listFilters) })
-  const invalidate = async () => Promise.all([cache.invalidateQueries({ queryKey: supplierKeys.all }), cache.invalidateQueries({ queryKey: ['products'] })])
-  const save = useMutation({ mutationFn: ({ id, input }: { id: number | null; input: SupplierInput }) => id ? api.update(id, input) : api.create(input), onSuccess: async (_, variables) => { await invalidate(); setSelection(null); setFailure(null); setMessage(variables.id ? 'Supplier updated.' : 'Supplier created.') } })
-  const remove = useMutation({ mutationFn: api.delete, onSuccess: async () => { await invalidate(); setDeleting(null); setFailure(null); setMessage('Supplier deleted.') }, onError: (error) => setFailure(error instanceof Error ? error.message : 'Supplier could not be deleted.') })
-  const submit = async (id: number | null, input: SupplierInput) => { setFailure(null); setMessage(null); await save.mutateAsync({ id, input }) }
-  function apply(event: FormEvent) { event.preventDefault(); setPage(1); setFilters({ search: search.trim() }) }
-
-  return <section className="admin-workspace" aria-labelledby="suppliers-heading">
-    <header className="admin-heading"><div><h2 id="suppliers-heading">Suppliers</h2><p>Approved sources for warehouse inventory</p></div><div className="resource-actions"><button type="button" className="quiet" onClick={() => void query.refetch()}>Refresh suppliers</button>{admin && <button type="button" onClick={() => { setSelection('new'); setDeleting(null); setMessage(null) }}>Create supplier</button>}</div></header>
-    <form className="resource-filters" aria-label="Filter suppliers" onSubmit={apply}><label htmlFor="supplier-search">Search suppliers<input id="supplier-search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><button type="submit">Apply filters</button></form>
-    {message && <p role="status" className="form-success">{message}</p>}{failure && <p role="alert" className="form-error">{failure}</p>}
-    {admin && selection === 'new' && <SupplierEditor key="new" supplier={null} pending={save.isPending} save={submit} close={() => setSelection(null)} />}
-    <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading suppliers…" emptyMessage="No suppliers match this search." error={<>{query.error instanceof Error ? query.error.message : 'Suppliers could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry</button></>}>
-      <div className="table-wrap">
-        <table className="admin-table resource-table">
-          <caption>Supplier ledger</caption>
-          <thead>
-            <tr>
-              <th scope="col">Supplier</th>
-              <th scope="col">Contact</th>
-              <th scope="col">Address</th>
-              {admin && <th scope="col">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {query.data?.items.map((row) => <Fragment key={row.id}>
-              <tr>
-                <td data-label="Supplier"><strong>{row.name}</strong></td>
-                <td data-label="Contact">{row.email ?? '—'}{row.phone && <small>{row.phone}</small>}</td>
-                <td data-label="Address">{row.address ?? '—'}</td>
-                {admin && <td data-label="Actions">
-                  <div className="resource-actions">
-                    <button type="button" className="quiet" aria-label={`Edit supplier ${row.name}`} onClick={() => { setSelection(row); setDeleting(null) }}>Edit</button>
-                    <button type="button" className="quiet" aria-label={`Delete supplier ${row.name}`} onClick={() => { setDeleting(row); setSelection(null) }}>Delete</button>
-                  </div>
-                </td>}
-              </tr>
-              {admin && selection !== 'new' && selection?.id === row.id && <tr>
-                <td colSpan={4}><SupplierEditor key={row.id} supplier={row} pending={save.isPending} save={submit} close={() => setSelection(null)} /></td>
-              </tr>}
-              {admin && deleting?.id === row.id && <tr>
-                <td colSpan={4}>
-                  <p role="alert">Delete supplier {row.name}? This cannot be undone.</p>
-                  <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(row.id)}>{remove.isPending ? 'Deleting…' : 'Confirm delete supplier'}</button>
-                  <button type="button" className="quiet" onClick={() => setDeleting(null)}>Cancel</button>
-                </td>
-              </tr>}
-            </Fragment>)}
-          </tbody>
-        </table>
-      </div>
-    </AsyncState>
-    {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
+  useEffect(() => { if (query.isSuccess && !query.data.items.length && page > 1) setPage(Math.max(1, Math.ceil(query.data.total / pageSize))) }, [query.isSuccess, query.data, page])
+  const refresh = async () => { await Promise.all([cache.invalidateQueries({ queryKey: supplierKeys.all }), cache.invalidateQueries({ queryKey: ['products'] })]) }
+  const save = useMutation({ mutationFn: ({ id, input }: { id: number | null; input: SupplierInput }) => id ? api.update(id, input) : api.create(input), onSuccess: async (_, variables) => { await refresh(); setSelection(null); setMessage(variables.id ? 'Đã cập nhật nhà cung cấp.' : 'Đã tạo nhà cung cấp.') } })
+  const remove = useMutation({ mutationFn: api.delete, onSuccess: async () => { await refresh(); setDeleting(null); setMessage('Đã xóa nhà cung cấp.') } })
+  function apply(event: FormEvent) { event.preventDefault(); if (save.isPending) return; setPage(1); setFilter(search.trim()); setSelection(null) }
+  async function confirmDelete() {
+    if (!deleting) return
+    setFailure('')
+    try { await remove.mutateAsync(deleting.id) } catch (error) { setFailure(error instanceof ApiError ? error.message : 'Không thể xóa nhà cung cấp. Vui lòng thử lại.'); setAttempt(value => value + 1) }
+  }
+  return <section className="management-workspace">
+    <PageHeader title="Nhà cung cấp" description="Thông tin đối tác cung ứng hàng hóa." actions={<><Button variant="secondary" onClick={() => void query.refetch()}>Tải lại nhà cung cấp</Button>{admin && <Button disabled={save.isPending} onClick={() => { setSelection('new'); setMessage('') }}>Tạo nhà cung cấp</Button>}</>} />
+    <form className="management-panel management-filters" aria-label="Lọc nhà cung cấp" onSubmit={apply}><Input label="Tìm nhà cung cấp" disabled={save.isPending} value={search} onChange={event => setSearch(event.target.value)} /><Button type="submit" disabled={save.isPending}>Áp dụng bộ lọc</Button></form>
+    {message && <FeedbackMessage variant="success">{message}</FeedbackMessage>}
+    {admin && selection && <SupplierEditor key={selection === 'new' ? 'new' : selection.id} supplier={selection === 'new' ? null : selection} pending={save.isPending} save={async (id, input) => { setMessage(''); await save.mutateAsync({ id, input }) }} close={() => setSelection(null)} />}
+    <div className="management-panel">
+      {query.isPending ? <FeedbackMessage>Đang tải nhà cung cấp…</FeedbackMessage> : query.isError ? <FeedbackMessage variant="error">{query.error instanceof ApiError ? query.error.message : 'Không thể tải nhà cung cấp.'} <Button variant="secondary" onClick={() => void query.refetch()}>Thử lại</Button></FeedbackMessage> : !query.data?.items.length ? <EmptyState title="Không có nhà cung cấp phù hợp." /> :
+        <DataTable caption="Danh sách nhà cung cấp" rows={query.data.items} getRowKey={row => row.id} columns={[
+          { id: 'name', header: 'Nhà cung cấp', render: row => <strong>{row.name}</strong> },
+          { id: 'contact', header: 'Liên hệ', render: row => <>{row.email ?? '—'}{row.phone && <small>{row.phone}</small>}</> },
+          { id: 'address', header: 'Địa chỉ', render: row => row.address ?? '—' },
+          ...(admin ? [{ id: 'actions', header: 'Thao tác', render: (row: Supplier) => <div className="management-actions"><Button size="small" variant="secondary" disabled={save.isPending} aria-label={'Sửa nhà cung cấp ' + row.name} onClick={() => { setSelection(row); setMessage('') }}>Sửa</Button><Button size="small" variant="secondary" disabled={save.isPending} aria-label={'Xóa nhà cung cấp ' + row.name} onClick={() => { setDeleting(row); setFailure(''); setMessage('') }}>Xóa</Button></div> }] : []),
+        ]} />}
+      {query.data && <Pagination locale="vi" page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
+    </div>
+    {deleting && <ConfirmDialog key={attempt} open busy={remove.isPending} title="Xóa nhà cung cấp" description={'Xóa nhà cung cấp ' + deleting.name + '? Thao tác này không thể hoàn tác.'} confirmVariant="danger" confirmLabel="Xác nhận xóa nhà cung cấp" onCancel={() => setDeleting(null)} onConfirm={() => void confirmDelete()}>{failure && <FeedbackMessage variant="error">{failure}</FeedbackMessage>}</ConfirmDialog>}
   </section>
 }

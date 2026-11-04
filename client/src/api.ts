@@ -12,6 +12,23 @@ export function onApiUnauthorized(listener: (token: string, generation: number) 
 }
 
 const errorMessages: Record<string, string> = {
+  PURCHASE_REQUEST_NOT_FOUND: 'Không tìm thấy yêu cầu mua hàng.',
+  PRODUCT_NOT_REQUESTABLE: 'Sản phẩm đã ngừng hoạt động, không thể tạo hoặc duyệt xuất yêu cầu mới.',
+  LEGACY_PURCHASE_REQUEST_READ_ONLY: 'Yêu cầu cũ chỉ có thể xem, không thể thay đổi.',
+  PURCHASE_REQUEST_STATE_CONFLICT: 'Trạng thái yêu cầu đã thay đổi hoặc không cho phép thao tác này. Vui lòng tải lại.',
+  PURCHASE_REQUEST_RETRY_REQUIRED: 'Chưa xác định kết quả yêu cầu mua hàng. Hãy tra cứu hoặc thử lại cùng yêu cầu.',
+  TRANSFER_NOT_FOUND: 'Không tìm thấy phiếu chuyển kho.',
+  IDEMPOTENCY_KEY_CONFLICT: 'Khóa yêu cầu đã được dùng cho nội dung khác. Vui lòng kiểm tra phiếu chuyển kho.',
+  TRANSFER_RETRY_REQUIRED: 'Chưa thể xác định hoặc hoàn tất chuyển kho. Vui lòng thử lại cùng yêu cầu.',
+  USER_EMAIL_CONFLICT: 'Email đã được sử dụng. Vui lòng chọn email khác.',
+  USER_ROLE_UNCHANGED: 'Vai trò hiện tại không thay đổi.',
+  USER_STATUS_UNCHANGED: 'Trạng thái hiện tại không thay đổi.',
+  USER_ROLE_INVALID: 'Vai trò này không được phép thay đổi.',
+  CATEGORY_NAME_CONFLICT: 'Tên danh mục đã tồn tại.',
+  CATEGORY_PARENT_CYCLE: 'Danh mục cha tạo vòng lặp. Vui lòng chọn lại.',
+  CATEGORY_IN_USE: 'Không thể xóa danh mục đang được sử dụng.',
+  SUPPLIER_CONFLICT: 'Thông tin nhà cung cấp bị trùng. Vui lòng kiểm tra lại.',
+  SUPPLIER_IN_USE: 'Không thể xóa nhà cung cấp đang được sử dụng.',
   INVALID_CREDENTIALS: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra và thử lại.',
   PRODUCT_IN_USE: 'Không thể xóa sản phẩm vì đang được tham chiếu trong dữ liệu tồn kho.',
   PRODUCT_NOT_FOUND: 'Không tìm thấy sản phẩm.',
@@ -25,7 +42,8 @@ const errorMessages: Record<string, string> = {
   PRODUCT_SKU_CONFLICT: 'Mã SKU đã tồn tại. Vui lòng chọn mã khác.',
   WAREHOUSE_CONFLICT: 'Mã hoặc tên kho đã tồn tại. Vui lòng chọn thông tin khác.',
 }
-const fieldLabels: Record<string, string> = { sku: 'mã SKU', name: 'tên', category_id: 'danh mục', supplier_id: 'nhà cung cấp', unit: 'đơn vị', reorder_level: 'mức tồn tối thiểu', is_active: 'trạng thái', code: 'mã kho', address: 'địa chỉ', latitude: 'vĩ độ', longitude: 'kinh độ', quantity: 'số lượng', reference: 'mã phiếu', note: 'ghi chú', warehouse_id: 'kho hàng', product_id: 'sản phẩm' }
+const fieldLabels: Record<string, string> = { source_warehouse_id: 'kho nguồn', destination_warehouse_id: 'kho đích', 'header.Idempotency-Key': 'khóa yêu cầu', sku: 'mã SKU', name: 'tên', category_id: 'danh mục', supplier_id: 'nhà cung cấp', unit: 'đơn vị', reorder_level: 'mức tồn tối thiểu', is_active: 'trạng thái', code: 'mã kho', address: 'địa chỉ', latitude: 'vĩ độ', longitude: 'kinh độ', quantity: 'số lượng', reference: 'mã phiếu', note: 'ghi chú', warehouse_id: 'kho hàng', product_id: 'sản phẩm' }
+fieldLabels.rejection_reason = 'lý do từ chối'
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 function safeMessage(status: number, code: string, fields: FieldErrors) {
   if (errorMessages[code]) return errorMessages[code]
@@ -47,7 +65,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const generation = sessionGeneration
   const response = await fetch(apiBaseUrl + path, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...options.headers } })
   if (!response.ok) {

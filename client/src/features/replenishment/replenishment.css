@@ -1,0 +1,12 @@
+.replenishment-page { display: grid; gap: 1rem; min-width: 0; }
+.replenishment-tabs, .replenishment-filters { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; }
+.replenishment-tabs button[aria-pressed="true"] { font-weight: 700; }
+.replenishment-panel { padding: 1.25rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); min-width: 0; }
+.replenishment-panel h2 { margin-top: 0; }
+.replenishment-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.replenishment-facts dt { font-weight: 600; }
+.replenishment-facts dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.replenishment-scroll { max-width: 100%; overflow-x: auto; }
+.replenishment-scroll .ui-data-table-wrapper { max-width: none; overflow: visible; }
+.replenishment-page .ui-data-table { min-width: 960px; }
+.replenishment-page td a { white-space: nowrap; overflow-wrap: normal; }

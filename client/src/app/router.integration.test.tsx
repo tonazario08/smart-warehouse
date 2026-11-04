@@ -70,7 +70,7 @@ describe('active Figma routes and data', () => {
       if (url.pathname.endsWith('/products/7') && init?.method === 'PUT') { written = JSON.parse(String(init.body)); return reply(product) }
     })
     await screen.findByRole('button', { name: 'Lưu thay đổi' })
-    await waitFor(() => expect(within(screen.getByLabelText('Danh mục')).getByRole('option', { name: 'Mục cuối' })).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('combobox', { name: 'Danh mục' })).getByRole('option', { name: 'Mục cuối' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     await waitFor(() => expect(written).toEqual({ sku: 'SP-7', name: 'Sản phẩm thử', description: 'Mô tả cần giữ', category_id: 101, supplier_id: 101, unit: 'cái', reorder_level: 3, is_active: false }))
   })
@@ -139,4 +139,19 @@ describe('active Figma routes and data', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(writes).toBe(0)
   })
+})
+
+it.each(['admin', 'warehouse'] as const)('authorizes %s to the replenishment route', async role => {
+  const { fetchMock } = mount('/replenishment', role, url => url.pathname.endsWith('/replenishment/status')
+    ? reply({ state: 'unavailable', reason_code: 'NO_REVIEWED_POLICY_INPUTS', latest: null }) : undefined)
+  expect(await screen.findByRole('heading', { name: 'Bổ sung hàng' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Bổ sung hàng' })).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/replenishment/status'))).toBe(true)
+})
+
+it('denies client route and does not request replenishment data', async () => {
+  const { active, fetchMock } = mount('/replenishment', 'client')
+  await waitFor(() => expect(active.state.location.pathname).toBe('/products'))
+  expect(screen.queryByRole('link', { name: 'Bổ sung hàng' })).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/replenishment/'))).toBe(false)
 })

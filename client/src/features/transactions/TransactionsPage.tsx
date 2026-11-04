@@ -1,8 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AsyncState } from '../../shared/ui/AsyncState'
+import { useManagementSession } from '../../app/ManagementProvider'
+import { ApiError } from '../../shared/api/ApiError'
+import { Button } from '../../shared/ui/Button'
+import { PageHeader } from '../../shared/ui/PageHeader'
+import { FeedbackMessage } from '../../shared/ui/FeedbackMessage'
+import { EmptyState } from '../../shared/ui/EmptyState'
+import { DataTable } from '../../shared/ui/DataTable'
 import { Pagination } from '../../shared/ui/Pagination'
-import { useAuth } from '../auth/useAuth'
+import { formatDateTime, formatNumber } from '../../shared/lib/formatters'
 import { InventoryFiltersForm } from '../inventory/InventoryFilters'
 import { InventoryLabelStatus, ProductIdentity, useInventoryLabels, WarehouseIdentity } from '../inventory/InventoryLabels'
 import type { TransactionFilters } from '../inventory/types'
@@ -10,57 +16,38 @@ import { createTransactionsApi, transactionKeys } from './api'
 
 const pageSize = 20
 const freshFilters = (): TransactionFilters => ({ page: 1, pageSize, warehouseId: '', productId: '', createdFrom: '', createdTo: '', type: '' })
-const localTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-
 export function TransactionsPage() {
-  const { client } = useAuth()
-  const api = createTransactionsApi(client)
-  const [page, setPage] = useState(1)
-  const [draft, setDraft] = useState<TransactionFilters>(freshFilters)
-  const [filters, setFilters] = useState<TransactionFilters>(freshFilters)
-  const [rangeError, setRangeError] = useState<string | null>(null)
+  const { client } = useManagementSession(), api = createTransactionsApi(client)
+  const [page, setPage] = useState(1), [draft, setDraft] = useState<TransactionFilters>(freshFilters), [filters, setFilters] = useState<TransactionFilters>(freshFilters)
+  const [error, setError] = useState('')
   const listFilters = { ...filters, page, pageSize }
   const query = useQuery({ queryKey: transactionKeys.list(listFilters), queryFn: () => api.list(listFilters) })
-  const labels = useInventoryLabels(client, query.data?.items.map((row) => row.product_id) ?? [], query.data?.items.map((row) => row.warehouse_id) ?? [])
-
+  const labels = useInventoryLabels(client, query.data?.items.map(row => row.product_id) ?? [], query.data?.items.map(row => row.warehouse_id) ?? [])
   function apply(event: FormEvent) {
     event.preventDefault()
-    if (draft.createdFrom && draft.createdTo && new Date(draft.createdFrom).getTime() > new Date(draft.createdTo).getTime()) {
-      setRangeError('Start date must be before the end date.')
-      return
-    }
-    setRangeError(null)
-    setPage(1)
-    setFilters({ ...draft, page: 1, pageSize })
+    if ([draft.productId, draft.warehouseId].some(id => id !== '' && (!/^[1-9]\d*$/.test(id) || Number(id) > 2147483647))) { setError('Chọn mã sản phẩm và kho hàng hợp lệ.'); return }
+    if ([draft.createdFrom, draft.createdTo].some(value => value && !Number.isFinite(new Date(value).getTime()))) { setError('Chọn thời điểm hợp lệ.'); return }
+    if (draft.createdFrom && draft.createdTo && new Date(draft.createdFrom).getTime() > new Date(draft.createdTo).getTime()) { setError('Thời điểm bắt đầu phải trước thời điểm kết thúc.'); return }
+    if (!['', 'inbound', 'outbound'].includes(draft.type)) { setError('Chọn loại giao dịch được hỗ trợ.'); return }
+    setError(''); setPage(1); setFilters({ ...draft, page: 1, pageSize })
   }
-
-  return <section className="admin-workspace inventory-workspace" aria-labelledby="transactions-heading">
-    <header className="admin-heading"><div><h2 id="transactions-heading">Transactions</h2><p>Immutable chronological record of stock movement</p></div></header>
-    <InventoryFiltersForm client={client} filters={draft} onChange={(next) => { setDraft(next as TransactionFilters); setRangeError(null) }} onTypeChange={(type) => { setDraft((current) => ({ ...current, type })); setRangeError(null) }} showType onApply={apply} />
-    {rangeError && <p className="form-error" role="alert">{rangeError}</p>}
-    <InventoryLabelStatus lookup={labels} subject="transaction history" />
-    <AsyncState status={query.isPending ? 'loading' : query.isError ? 'error' : query.data?.items.length ? 'success' : 'empty'} loadingMessage="Loading transactions…" emptyMessage="No transactions match these filters." error={<>{query.error instanceof Error ? query.error.message : 'Transactions could not be loaded.'} <button type="button" className="quiet" onClick={() => void query.refetch()}>Retry transactions</button></>}>
-      <div className="table-wrap">
-        <table className="admin-table resource-table inventory-table transaction-ledger">
-          <caption>Transaction history</caption>
-          <thead><tr><th scope="col">Movement</th><th scope="col">Product</th><th scope="col">Warehouse</th><th scope="col">Quantity</th><th scope="col">Actor</th><th scope="col">Linked record</th><th scope="col">Recorded</th></tr></thead>
-          <tbody>{query.data?.items.map((row) => {
-            const inbound = row.inbound_id != null
-            const linked = inbound ? `Inbound #${row.inbound_id}` : row.outbound_id != null ? `Outbound #${row.outbound_id}` : 'No linked movement'
-            const direction = row.transaction_type === 'inbound' ? 'Inbound' : row.transaction_type === 'outbound' ? 'Outbound' : row.transaction_type
-            return <tr key={row.id}>
-              <td data-label="Movement"><span className={`movement-direction movement-direction-${row.transaction_type}`}>{direction}</span></td>
-              <td data-label="Product"><ProductIdentity id={row.product_id} lookup={labels} /></td>
-              <td data-label="Warehouse"><WarehouseIdentity id={row.warehouse_id} lookup={labels} /></td>
-              <td data-label="Quantity"><strong className="inventory-quantity">{row.quantity}</strong></td>
-              <td data-label="Actor">Actor {row.created_by_id}</td>
-              <td data-label="Linked record">{linked}</td>
-              <td data-label="Recorded"><time dateTime={row.created_at}>{localTime.format(new Date(row.created_at))}</time></td>
-            </tr>
-          })}</tbody>
-        </table>
-      </div>
-    </AsyncState>
-    {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
+  return <section className="management-workspace">
+    <PageHeader title="Giao dịch" description="Lịch sử nhập và xuất kho chỉ đọc, không thể sửa hoặc xóa." />
+    <div className="management-panel"><InventoryFiltersForm locale="vi" client={client} filters={draft} onChange={next => { setDraft(next as TransactionFilters); setError('') }} onTypeChange={type => setDraft(current => ({ ...current, type }))} showType onApply={apply} /></div>
+    {error && <FeedbackMessage variant="error">{error}</FeedbackMessage>}
+    <InventoryLabelStatus locale="vi" lookup={labels} subject="transaction history" />
+    <div className="management-panel">
+      {query.isPending ? <FeedbackMessage>Đang tải giao dịch…</FeedbackMessage> : query.isError ? <FeedbackMessage variant="error">{query.error instanceof ApiError ? query.error.message : 'Không thể tải giao dịch.'} <Button variant="secondary" onClick={() => void query.refetch()}>Thử lại giao dịch</Button></FeedbackMessage> : !query.data?.items.length ? <EmptyState title="Không có giao dịch phù hợp." /> :
+        <DataTable caption="Lịch sử giao dịch" rows={query.data.items} getRowKey={row => row.id} columns={[
+          { id: 'type', header: 'Loại giao dịch', render: row => <span className={'movement-direction movement-direction-' + row.transaction_type}>{row.transaction_type === 'inbound' ? 'Nhập kho' : row.transaction_type === 'outbound' ? 'Xuất kho' : 'Không xác định'}</span> },
+          { id: 'product', header: 'Sản phẩm', render: row => <ProductIdentity locale="vi" id={row.product_id} lookup={labels} /> },
+          { id: 'warehouse', header: 'Kho hàng', render: row => <WarehouseIdentity locale="vi" id={row.warehouse_id} lookup={labels} /> },
+          { id: 'quantity', header: 'Số lượng', render: row => <strong>{formatNumber(row.quantity)}</strong> },
+          { id: 'actor', header: 'Người thực hiện', render: row => 'Tài khoản #' + row.created_by_id },
+          { id: 'linked', header: 'Phiếu liên quan', render: row => row.inbound_id != null ? 'Phiếu nhập #' + row.inbound_id : row.outbound_id != null ? 'Phiếu xuất #' + row.outbound_id : 'Không có phiếu liên kết' },
+          { id: 'time', header: 'Thời điểm', render: row => <time dateTime={row.created_at}>{formatDateTime(row.created_at)}</time> },
+        ]} />}
+      {query.data && <Pagination locale="vi" page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
+    </div>
   </section>
 }
