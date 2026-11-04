@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { can, type Permission } from './permissions'
 
 it.each([
+  ['replenishment:read', [true, true, false]], ['replenishment:research:read', [true, false, false]],
   ['forecast:read', [true, true, false]], ['forecast:research:read', [true, false, false]],
   ['catalog:read', [true, true, true]], ['supplier:write', [true, false, false]],
   ['inventory:history:read', [true, true, false]], ['user:manage', [true, false, false]], ['audit:read', [true, false, false]],

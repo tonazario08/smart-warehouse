@@ -20,7 +20,7 @@ test('API registration stays client-only; Figma login refreshes the authenticate
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Thêm sản phẩm', exact: true })).toHaveCount(0)
   for (const name of ['Sản phẩm', 'Tồn kho', 'Kho hàng']) await expect(page.getByRole('link', { name, exact: true })).toBeVisible()
-  for (const name of ['Bảng điều khiển', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Dự báo']) await expect(page.getByRole('link', { name, exact: true })).toHaveCount(0)
+  for (const name of ['Bảng điều khiển', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Dự báo', 'Bổ sung hàng']) await expect(page.getByRole('link', { name, exact: true })).toHaveCount(0)
   const stock = apiResponse(page, '/stock')
   await page.getByRole('link', { name: 'Tồn kho', exact: true }).click()
   expect((await stock).status()).toBe(200)
@@ -33,7 +33,7 @@ for (const role of ['admin', 'warehouse', 'client'] as const) {
   test('Figma navigation and direct-route guards for ' + role, async ({ page }) => {
     const credentials = role === 'admin' ? e2eCredentials.admin : role === 'warehouse' ? e2eCredentials.seededWarehouse : e2eCredentials.seededClient
     await signIn(page, credentials)
-    const allowed = role === 'admin' ? ['Dự báo', 'Bảng điều khiển', 'Sản phẩm', 'Tồn kho', 'Kho hàng', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Người dùng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch', 'Nhật ký quản trị'] : role === 'warehouse' ? ['Dự báo', 'Tồn kho', 'Kho hàng', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch'] : ['Sản phẩm', 'Tồn kho', 'Kho hàng', 'Yêu cầu mua hàng', 'Danh mục']
+    const allowed = role === 'admin' ? ['Dự báo', 'Bổ sung hàng', 'Bảng điều khiển', 'Sản phẩm', 'Tồn kho', 'Kho hàng', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Người dùng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch', 'Nhật ký quản trị'] : role === 'warehouse' ? ['Dự báo', 'Bổ sung hàng', 'Tồn kho', 'Kho hàng', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch'] : ['Sản phẩm', 'Tồn kho', 'Kho hàng', 'Yêu cầu mua hàng', 'Danh mục']
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' })
     await expect(nav.getByRole('link')).toHaveCount(allowed.length)
     for (const name of allowed) await expect(nav.getByRole('link', { name, exact: true })).toBeVisible()
