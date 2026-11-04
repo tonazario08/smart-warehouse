@@ -4,6 +4,70 @@ from tests import prepare_replenishment_e2e as fixture
 from tests import run_quality_ci as ci
 
 
+def test_ci_catalog_permissions_touch_only_public_tree(monkeypatch, tmp_path):
+    output = tmp_path / "owned"
+    public = output / "catalogs"
+    (public / "valid" / "operational").mkdir(parents=True)
+    manifest = public / "valid" / "operational" / "public-manifest.json"
+    manifest.write_text("{}")
+    private = output / "runs" / "private.json"
+    private.parent.mkdir()
+    private.write_text("private")
+    monkeypatch.setattr(fixture, "OUTPUT", output)
+    monkeypatch.setattr(fixture, "validate_profile", lambda *args: None)
+    changed = []
+    monkeypatch.setattr(fixture.os, "chmod", lambda path, mode: changed.append((path, mode)))
+    fixture.make_ci_catalogs_readable(public)
+    assert (manifest, 0o644) in changed
+    assert (public, 0o755) in changed
+    assert all(path.is_relative_to(public) for path, _ in changed)
+    with pytest.raises(ValueError):
+        fixture.make_ci_catalogs_readable(private.parent)
+
+
+def test_api_uid_preflight_uses_owned_identity_and_hides_manifest(monkeypatch):
+    calls = []
+
+    def command(args, env, sensitive, **kwargs):
+        calls.append(args)
+        return '{"status":"readable"}'
+
+    monkeypatch.setattr(ci, "browser_command", command)
+    ci.browser_verify_api_read(
+        {"api": "owned-api"}, {"E2E_REPLENISHMENT_RUN_ID": "rrv1-" + "a" * 64}, []
+    )
+    assert calls[0][:3] == ["docker", "exec", "owned-api"]
+    assert "public-manifest.json" in calls[0][-2]
+    with pytest.raises(ci.CIError):
+        ci.browser_verify_api_read(
+            {"api": "owned-api"}, {"E2E_REPLENISHMENT_RUN_ID": "../unsafe"}, []
+        )
+
+
+def test_ci_catalog_permissions_fail_before_chmod_on_reparse(monkeypatch, tmp_path):
+    from app.replenishment import artifacts
+
+    public = tmp_path / "owned" / "catalogs"
+    public.mkdir(parents=True)
+    unsafe = public / "link"
+    unsafe.write_text("test")
+    monkeypatch.setattr(fixture, "OUTPUT", tmp_path / "owned")
+    monkeypatch.setattr(fixture, "validate_profile", lambda *args: None)
+    original = artifacts._checked
+
+    def checked(path, **kwargs):
+        if path == unsafe:
+            raise ValueError("unsafe path")
+        return original(path, **kwargs)
+
+    changed = []
+    monkeypatch.setattr(artifacts, "_checked", checked)
+    monkeypatch.setattr(fixture.os, "chmod", lambda *args: changed.append(args))
+    with pytest.raises(ValueError, match="unsafe path"):
+        fixture.make_ci_catalogs_readable(public)
+    assert changed == []
+
+
 def test_synthetic_fixture_profile_requires_explicit_ci_and_no_research(monkeypatch):
     calls = []
     monkeypatch.setattr(ci, "check_context", lambda: calls.append(True))

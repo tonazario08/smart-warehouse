@@ -147,6 +147,33 @@ def require_inventory(root, expected, *, exclude=()):
         raise ValueError("FIXTURE_CHANGED")
 
 
+def make_ci_catalogs_readable(catalogs):
+    from app.replenishment.artifacts import _checked
+
+    validate_profile("synthetic-only", None)
+    if catalogs != OUTPUT / "catalogs":
+        raise ValueError("OUTPUT_INVALID")
+    root = _checked(catalogs)
+    if not root.is_dir():
+        raise ValueError("OUTPUT_INVALID")
+    paths = [root, *root.rglob("*")]
+    if len(paths) > 5000:
+        raise ValueError("OUTPUT_INVALID")
+    permissions = []
+    for path in paths:
+        checked = _checked(path)
+        if not checked.is_relative_to(root):
+            raise ValueError("OUTPUT_INVALID")
+        if checked.is_dir():
+            permissions.append((checked, 0o755))
+        elif checked.is_file():
+            permissions.append((checked, 0o644))
+        else:
+            raise ValueError("OUTPUT_INVALID")
+    for path, mode in permissions:
+        os.chmod(path, mode)
+
+
 def prepare(research_run, *, profile="local"):
     from app.analytics.export import canonical_json
     from app.replenishment.artifacts import _checked, publish_failure, verify_public_projection
@@ -265,6 +292,8 @@ def prepare(research_run, *, profile="local"):
             negative["schema_version"] = "replenishment-public-run/999"
         path.write_bytes(canonical_json(negative))
     forecast_scenarios = prepare_forecast(LEGACY_FORECAST, add_ratio=True, add_failed_valid=True)
+    if profile == "synthetic-only":
+        make_ci_catalogs_readable(catalogs)
     receipt = {
         "schema_version": "m7-e2e-fixture/1",
         "status": "verified",

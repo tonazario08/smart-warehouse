@@ -521,6 +521,29 @@ def browser_ready():
     raise CIError("BROWSER_NOT_READY")
 
 
+def browser_verify_api_read(identities, env, sensitive):
+    run_id = env.get("E2E_REPLENISHMENT_RUN_ID", "")
+    if re.fullmatch(r"rrv1-[0-9a-f]{64}", run_id) is None:
+        raise CIError("FIXTURE_INVALID")
+    script = "\n".join(
+        (
+            "import json,os,pathlib,sys",
+            "if (os.geteuid(), os.getegid()) != (10001, 10001): raise SystemExit(2)",
+            "p=pathlib.Path('/replenishment-catalog/operational')/sys.argv[1]/'public-manifest.json'",
+            "with p.open('rb') as f:",
+            "    if not f.read(1): raise SystemExit(2)",
+            "print(json.dumps({'status':'readable'}))",
+        )
+    )
+    output = browser_command(
+        ["docker", "exec", identities["api"], "python", "-c", script, run_id],
+        env,
+        sensitive,
+    )
+    if json.loads(output) != {"status": "readable"}:
+        raise CIError("FIXTURE_INVALID")
+
+
 def run_browser():
     from tests import prepare_replenishment_e2e as fixture_module
 
@@ -554,6 +577,7 @@ def run_browser():
         browser_command([*base, "up", "-d", "--no-build", "--wait"], env, sensitive)
         identities = browser_guard(env, sensitive)
         browser_ready()
+        browser_verify_api_read(identities, env, sensitive)
         source = (guarded.ROOT / "tests/prepare_replenishment_e2e.py").read_text(encoding="utf8")
         seed_output = browser_command(
             [
