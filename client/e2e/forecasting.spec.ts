@@ -11,7 +11,7 @@ const scenario = process.env.E2E_FORECAST_SCENARIO
 // The runner must select exactly the pre-reviewed owned scenario mount for each stack run.
 test.beforeEach(async ({ page }) => {
   const url = new URL(process.env.E2E_BASE_URL ?? '')
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.port !== '58081' || url.username || url.password) throw new Error('An isolated forecast loopback target is required.')
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !['58081', '58082'].includes(url.port) || url.username || url.password) throw new Error('An isolated forecast loopback target is required.')
   if (!['valid', 'unavailable', 'failed-valid', 'corrupt', 'unsupported', 'ratio'].includes(scenario ?? '')) throw new Error('An explicit forecast fixture scenario is required.')
   for (const role of ['ADMIN', 'WAREHOUSE', 'CLIENT']) for (const field of ['EMAIL', 'PASSWORD']) if (!process.env['E2E_' + role + '_' + field]) throw new Error('Explicit isolated credentials are required.')
   await page.goto('/login')

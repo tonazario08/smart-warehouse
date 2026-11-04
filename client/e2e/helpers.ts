@@ -92,12 +92,12 @@ export async function createMasterData(page: Page, names: MasterDataNames) {
 
 export function assertTransferTarget(page: Page) {
   const target = new URL(page.url())
-  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || !['58080', '58081'].includes(target.port) || target.username || target.password) throw new Error('Transfer fixtures require the separately guarded M3/M4 loopback target.')
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || !['58080', '58081', '58082'].includes(target.port) || target.username || target.password) throw new Error('Transfer fixtures require the separately guarded M3/M4 loopback target.')
 }
 
 export function assertPurchaseRequestTarget(page: Page) {
   const target = new URL(page.url())
-  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || target.port !== '58081' || target.username || target.password) throw new Error('M4 fixtures require the separately guarded M4 loopback target.')
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || !['58081', '58082'].includes(target.port) || target.username || target.password) throw new Error('M4 fixtures require the separately guarded M4 loopback target.')
 }
 
 export function purchaseRequestCredentials() {

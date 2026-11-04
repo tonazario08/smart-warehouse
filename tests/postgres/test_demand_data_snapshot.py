@@ -34,7 +34,24 @@ from tests.postgres.test_purchase_requests_api import body_for, effects, seed_pu
 pytestmark = pytest.mark.postgres
 
 
+def snapshot_source_identity(url):
+    identity = (url.host, url.port, url.database, url.username)
+    approved = {
+        ("127.0.0.1", 18546, "sw_m5_demand_test", "sw_m5_demand_test"),
+        ("127.0.0.1", 18547, "sw_m7_replenishment_test", "sw_m7_replenishment_test"),
+    }
+    if (
+        url.drivername != "postgresql+psycopg"
+        or identity not in approved
+        or set(url.query) - {"connect_timeout"}
+        or (url.query and url.query.get("connect_timeout") != "5")
+    ):
+        raise ValueError("A guarded snapshot database is required.")
+    return {"host": url.host, "port": url.port, "database": url.database, "username": url.username}
+
+
 def setup_source(session):
+    identity = snapshot_source_identity(session.get_bind().url)
     ids = seed_purchase(session)
     service = service_for(session)
     created, _ = service.create(
@@ -59,12 +76,7 @@ def setup_source(session):
         channel="managed_b2b_fulfillment",
         outside_target_kinds=("standard_outbound", "legacy_unknown"),
         availability_policy_ref="immutable-recording-policy",
-        database_identity={
-            "host": "127.0.0.1",
-            "port": 18546,
-            "database": "sw_m5_demand_test",
-            "username": "sw_m5_demand_test",
-        },
+        database_identity=identity,
     )
     for row in (*values["mappings"], *values["coverage"]):
         row.update(source_product=str(ids["product"]), source_warehouse=str(ids["source"]))
@@ -348,3 +360,33 @@ def test_real_operational_cli_build_reuses_without_source_effects(
     assert second.returncode == 0 and second.stderr == ""
     assert json.loads(second.stdout) == {**value, "reused": True}
     assert effects(postgres_session) == before
+
+
+@pytest.mark.parametrize(
+    ("port", "name"),
+    [(18546, "sw_m5_demand_test"), (18547, "sw_m7_replenishment_test")],
+)
+def test_snapshot_source_identity_accepts_only_owned_targets(port, name):
+    from sqlalchemy.engine import make_url
+
+    url = make_url(f"postgresql+psycopg://{name}:synthetic@127.0.0.1:{port}/{name}")
+    assert snapshot_source_identity(url) == {
+        "host": "127.0.0.1",
+        "port": port,
+        "username": name,
+        "database": name,
+    }
+
+
+def test_snapshot_source_identity_rejects_crossed_port_or_database():
+    from sqlalchemy.engine import make_url
+
+    for url in (
+        "postgresql+psycopg://sw_m7_replenishment_test:x@127.0.0.1:18546/sw_m7_replenishment_test",
+        "postgresql+psycopg://sw_m7_replenishment_test:x@127.0.0.1:18547/sw_m5_demand_test",
+        "postgresql+psycopg://sw_m7_replenishment_test:x@localhost:18547/sw_m7_replenishment_test",
+        "postgresql+psycopg://other:x@127.0.0.1:18547/sw_m7_replenishment_test",
+        "postgresql+psycopg://sw_m7_replenishment_test:x@127.0.0.1:18547/sw_m7_replenishment_test?options=unsafe",
+    ):
+        with pytest.raises(ValueError):
+            snapshot_source_identity(make_url(url))

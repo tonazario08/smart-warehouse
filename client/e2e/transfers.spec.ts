@@ -4,7 +4,7 @@ import type { Transfer } from '../src/features/transfers/types'
 import type { Page, Stock, Transaction } from '../src/types'
 
 test.beforeEach(async ({ page, baseURL }) => {
-  expect(['http://127.0.0.1:58080', 'http://127.0.0.1:58081']).toContain(baseURL)
+  expect(['http://127.0.0.1:58080', 'http://127.0.0.1:58081', 'http://127.0.0.1:58082']).toContain(baseURL)
   await page.goto('/login')
   assertTransferTarget(page)
 })

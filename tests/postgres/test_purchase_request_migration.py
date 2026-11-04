@@ -57,6 +57,13 @@ def validate_migration_pair(value: str, test_value: str) -> tuple[URL, URL]:
                 "sw_m5_demand_test",
                 "sw_m5_demand_migration_test",
             ),
+            (
+                "127.0.0.1",
+                18547,
+                "sw_m7_replenishment_test",
+                "sw_m7_replenishment_test",
+                "sw_m7_replenishment_migration_test",
+            ),
         }
     ):
         raise ValueError("A separate guarded migration database is required.")
@@ -405,3 +412,30 @@ def test_deployed_new_purpose_requires_null_transfer_link(purchase_migration_tar
                     text("UPDATE movement_provenance SET transfer_id=999 WHERE transaction_id=1")
                 )
         assert exc.value.orig.diag.constraint_name == "ck_provenance_transfer_link"
+
+
+@pytest.mark.parametrize(
+    ("port", "user", "main_db", "migration_db"),
+    [
+        (18545, "sw_m4_requests_test", "sw_m4_requests_test", "sw_m4_requests_migration_test"),
+        (18546, "sw_m5_demand_test", "sw_m5_demand_test", "sw_m5_demand_migration_test"),
+        (
+            18547,
+            "sw_m7_replenishment_test",
+            "sw_m7_replenishment_test",
+            "sw_m7_replenishment_migration_test",
+        ),
+    ],
+)
+def test_migration_pair_keeps_exact_owned_test_targets(port, user, main_db, migration_db):
+    prefix = f"postgresql+psycopg://{user}:synthetic@127.0.0.1:{port}/"
+    migration, main = validate_migration_pair(prefix + migration_db, prefix + main_db)
+    assert migration.database == migration_db and main.database == main_db
+    with pytest.raises(ValueError):
+        validate_migration_pair(prefix + main_db, prefix + migration_db)
+    with pytest.raises(ValueError):
+        validate_migration_pair(prefix + migration_db + "?options=unsafe", prefix + main_db)
+    with pytest.raises(ValueError):
+        validate_migration_pair(
+            prefix.replace("127.0.0.1", "localhost") + migration_db, prefix + main_db
+        )

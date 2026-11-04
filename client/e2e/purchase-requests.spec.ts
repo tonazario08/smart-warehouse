@@ -14,7 +14,7 @@ type Fixture = Awaited<ReturnType<typeof createPurchaseRequestFixture>>
 interface Page<T> { items: T[]; total: number }
 
 test.beforeEach(async ({ page, baseURL }) => {
-  expect(baseURL).toBe('http://127.0.0.1:58081')
+  expect(['http://127.0.0.1:58081', 'http://127.0.0.1:58082']).toContain(baseURL)
   purchaseRequestCredentials()
   await page.goto('/login')
   assertPurchaseRequestTarget(page)
