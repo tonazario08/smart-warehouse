@@ -5,6 +5,7 @@ declare const process: { env: Record<string, string | undefined> }
 const scenario = process.env.E2E_REPLENISHMENT_SCENARIO
 const fixtureId = process.env.E2E_REPLENISHMENT_RUN_ID ?? ''
 const researchId = process.env.E2E_REPLENISHMENT_RESEARCH_RUN_ID ?? ''
+const profile = process.env.E2E_REPLENISHMENT_PROFILE ?? 'local'
 const missing = 'rrv1-' + 'f'.repeat(64)
 const validId = (id: string) => /^rrv1-[0-9a-f]{64}$/.test(id)
 const statusUrl = (url: URL) => url.pathname === '/api/v1/replenishment/status'
@@ -14,7 +15,9 @@ test.beforeEach(async ({ page }) => {
   const target = new URL(process.env.E2E_BASE_URL ?? '')
   if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || target.port !== '58082' || target.username || target.password) throw new Error('Explicit isolated M7 target required.')
   if (!['valid', 'unavailable', 'failed', 'stale', 'corrupt', 'unsupported'].includes(scenario ?? '')) throw new Error('Explicit M7 catalog scenario required.')
-  if (scenario === 'valid' && (!validId(fixtureId) || !validId(researchId))) throw new Error('Verified run identities are required.')
+  if (!['local', 'synthetic-only'].includes(profile)) throw new Error('Explicit fixture profile required.')
+  if (profile === 'synthetic-only' && (process.env.CI !== 'true' || researchId)) throw new Error('Synthetic CI profile required.')
+  if (scenario === 'valid' && (!validId(fixtureId) || (profile === 'local' && !validId(researchId)))) throw new Error('Verified run identities are required.')
   for (const role of ['ADMIN', 'WAREHOUSE', 'CLIENT']) for (const field of ['EMAIL', 'PASSWORD']) if (!process.env['E2E_' + role + '_' + field]) throw new Error('Explicit isolated credentials required.')
   await page.goto('/login')
 })
@@ -68,6 +71,7 @@ test.describe('actual generated fixture', () => {
   })
 
   test('admin can read the separate retrospective result', async ({ page }) => {
+    test.skip(profile !== 'local', 'Real retrospective artifact requires the approved local profile')
     await signIn(page, e2eCredentials.admin)
     await page.goto('/replenishment')
     await page.getByRole('button', { name: 'Nghiên cứu', exact: true }).click()
@@ -77,11 +81,26 @@ test.describe('actual generated fixture', () => {
     await signOut(page)
   })
 
+  test('admin sees unavailable research in synthetic CI', async ({ page }) => {
+    test.skip(profile !== 'synthetic-only', 'Synthetic-only CI profile')
+    await signIn(page, e2eCredentials.admin)
+    const token = await storedToken(page)
+    const status = await apiAs<{ state: string; reason_code: string; latest: null }>(page, token, '/replenishment/status?mode=research')
+    expect(status.state).toBe('unavailable')
+    expect(status.reason_code).toBe('NO_RUNS')
+    expect(status.latest).toBeNull()
+    await apiAs(page, token, '/replenishment/runs/' + missing, 'GET', undefined, 404)
+    await page.goto('/replenishment')
+    await page.getByRole('button', { name: 'Nghiên cứu', exact: true }).click()
+    await expect(page.getByText('Chưa có kết quả khả dụng', { exact: true })).toBeVisible()
+    await signOut(page)
+  })
+
   test('warehouse cannot access research and client has no grant', async ({ page }) => {
     await signIn(page, e2eCredentials.seededWarehouse)
     let token = await storedToken(page)
     await apiAs(page, token, '/replenishment/status?mode=research', 'GET', undefined, 403)
-    await apiAs(page, token, '/replenishment/runs/' + researchId, 'GET', undefined, 404)
+    await apiAs(page, token, '/replenishment/runs/' + (researchId || missing), 'GET', undefined, 404)
     await apiAs(page, token, '/replenishment/runs/' + missing, 'GET', undefined, 404)
     await page.goto('/replenishment')
     await expect(page.getByRole('button', { name: 'Nghiên cứu' })).toHaveCount(0)

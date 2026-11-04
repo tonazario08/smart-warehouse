@@ -21,11 +21,23 @@ RESEARCH_CATALOG = ROOT / "artifacts/replenishment/research/catalog/research"
 OWNER = b"M7_REPLENISHMENT_E2E_FIXTURE_V1\n"
 
 
-def checked_workspace():
+def validate_profile(profile, research_run):
+    if profile == "local":
+        return
+    if profile != "synthetic-only" or os.environ.get("QUALITY_CI_PROFILE") != profile:
+        raise ValueError("PROFILE_INVALID")
+    if research_run is not None:
+        raise ValueError("PROFILE_INVALID")
+    from tests.run_quality_ci import check_context
+
+    check_context()
+
+
+def checked_workspace(profile="local"):
     import app
     from app.replenishment.artifacts import _checked
 
-    if ROOT != EXPECTED_ROOT.resolve() or Path.cwd().resolve() != ROOT:
+    if profile == "local" and (ROOT != EXPECTED_ROOT.resolve() or Path.cwd().resolve() != ROOT):
         raise ValueError("WORKTREE_INVALID")
     if not Path(app.__file__).resolve().is_relative_to(ROOT / "app"):
         raise ValueError("WORKTREE_INVALID")
@@ -135,30 +147,33 @@ def require_inventory(root, expected, *, exclude=()):
         raise ValueError("FIXTURE_CHANGED")
 
 
-def prepare(research_run):
+def prepare(research_run, *, profile="local"):
     from app.analytics.export import canonical_json
     from app.replenishment.artifacts import _checked, publish_failure, verify_public_projection
     from tests.prepare_forecasting_e2e import prepare as prepare_forecast
     from tests.replenishment_helpers import operational_context
 
-    checked_workspace()
-    research = _checked(Path(research_run))
-    research_root = _checked(RESEARCH_CATALOG)
-    if research.parent != research_root or research == research_root:
-        raise ValueError("RESEARCH_INPUT_INVALID")
-    manifest = verify_public_projection(research)
-    if (
-        manifest["mode"],
-        manifest["dataset_class"],
-        manifest["target"],
-        manifest["reporting_scope"],
-    ) != ("research", "research", "reported_daily_unit_sales", "company_aggregate"):
-        raise ValueError("RESEARCH_INPUT_INVALID")
-    if (
-        manifest["forecast_run_id"]
-        != "frv1-398a6c1c260e5277a15b647d3f383ef2bc5458978386dd05ccf88eee527c7b82"
-    ):
-        raise ValueError("RESEARCH_INPUT_INVALID")
+    validate_profile(profile, research_run)
+    checked_workspace(profile)
+    research = None
+    if profile == "local":
+        research = _checked(Path(research_run))
+        research_root = _checked(RESEARCH_CATALOG)
+        if research.parent != research_root or research == research_root:
+            raise ValueError("RESEARCH_INPUT_INVALID")
+        manifest = verify_public_projection(research)
+        if (
+            manifest["mode"],
+            manifest["dataset_class"],
+            manifest["target"],
+            manifest["reporting_scope"],
+        ) != ("research", "research", "reported_daily_unit_sales", "company_aggregate"):
+            raise ValueError("RESEARCH_INPUT_INVALID")
+        if (
+            manifest["forecast_run_id"]
+            != "frv1-398a6c1c260e5277a15b647d3f383ef2bc5458978386dd05ccf88eee527c7b82"
+        ):
+            raise ValueError("RESEARCH_INPUT_INVALID")
 
     for path in (OUTPUT, FORECAST, BUNDLES):
         path.mkdir(parents=True, exist_ok=False)
@@ -225,11 +240,12 @@ def prepare(research_run):
         or fixture["binding"]["unit"] != "unit"
     ):
         raise ValueError("FIXTURE_INVALID")
-    destination = valid / "research" / research.name
-    destination.parent.mkdir(parents=True, exist_ok=False)
-    shutil.copytree(research, destination, symlinks=False)
-    if verify_public_projection(destination) != manifest:
-        raise ValueError("RESEARCH_INPUT_INVALID")
+    if research is not None:
+        destination = valid / "research" / research.name
+        destination.parent.mkdir(parents=True, exist_ok=False)
+        shutil.copytree(research, destination, symlinks=False)
+        if verify_public_projection(destination) != manifest:
+            raise ValueError("RESEARCH_INPUT_INVALID")
     (catalogs / "unavailable").mkdir(parents=True, exist_ok=False)
     missing = config.model_copy(
         update={"costs": config.costs.model_copy(update={"ordering_cost": None})}
@@ -253,7 +269,7 @@ def prepare(research_run):
         "schema_version": "m7-e2e-fixture/1",
         "status": "verified",
         "fixture_run_id": run_id,
-        "research_run_id": research.name,
+        "research_run_id": research.name if research is not None else None,
         "fixture_manifest_sha256": hashlib.sha256(
             (valid / "operational" / run_id / "public-manifest.json").read_bytes()
         ).hexdigest(),
@@ -266,20 +282,23 @@ def prepare(research_run):
             "legacy_forecast": fixture_inventory(LEGACY_FORECAST),
         },
     }
+    if profile == "synthetic-only":
+        receipt["profile"] = profile
     with (OUTPUT / "fixture-receipt.json").open("xb") as stream:
         stream.write(canonical_json(receipt))
         stream.flush()
         os.fsync(stream.fileno())
-    return verify_existing()
+    return verify_existing(profile=profile)
 
 
-def verify_existing():
+def verify_existing(*, profile="local"):
     from app.analytics.export import canonical_json
     from app.replenishment.artifacts import _checked, verify_public_projection, verify_run
     from app.replenishment.repository import ReplenishmentRepository, UnsupportedSchema
     from app.replenishment.schemas import InputAuthorization, StudyConfig
     from tests.prepare_forecasting_e2e import prepare as prepare_forecast
 
+    validate_profile(profile, None)
     receipt_path = OUTPUT / "fixture-receipt.json"
     if not receipt_path.is_file() or receipt_path.is_symlink():
         raise ValueError("FIXTURE_INCOMPLETE")
@@ -300,8 +319,10 @@ def verify_existing():
             "binding",
             "inventories",
         }
+        | ({"profile"} if profile == "synthetic-only" else set())
         or receipt["schema_version"] != "m7-e2e-fixture/1"
         or receipt["status"] != "verified"
+        or (profile == "synthetic-only" and receipt["profile"] != profile)
     ):
         raise ValueError("FIXTURE_CHANGED")
     inventories = receipt["inventories"]
@@ -320,9 +341,17 @@ def verify_existing():
         if _checked(root / "owner.txt").read_bytes() != OWNER:
             raise ValueError("FIXTURE_CHANGED")
     run_id, research_id = receipt["fixture_run_id"], receipt["research_run_id"]
-    if not all(
-        isinstance(item, str) and re.fullmatch(r"rrv1-[0-9a-f]{64}", item)
-        for item in (run_id, research_id)
+    if (
+        not isinstance(run_id, str)
+        or re.fullmatch(r"rrv1-[0-9a-f]{64}", run_id) is None
+        or (
+            profile == "local"
+            and (
+                not isinstance(research_id, str)
+                or re.fullmatch(r"rrv1-[0-9a-f]{64}", research_id) is None
+            )
+        )
+        or (profile == "synthetic-only" and research_id is not None)
     ):
         raise ValueError("FIXTURE_CHANGED")
     if receipt["binding"] != {"product_id": 2, "warehouse_id": 2, "unit": "unit"}:
@@ -354,19 +383,22 @@ def verify_existing():
         != receipt["fixture_manifest_sha256"]
     ):
         raise ValueError("FIXTURE_CHANGED")
-    research = _checked(RESEARCH_CATALOG / research_id)
-    copied = catalog / "valid" / "research" / research_id
-    if verify_public_projection(research) != verify_public_projection(copied):
-        raise ValueError("FIXTURE_CHANGED")
-    for name in (
-        "public-manifest.json",
-        "calibration.json",
-        "summaries.json",
-        "days.jsonl",
-        "orders.jsonl",
-    ):
-        if _checked(research / name).read_bytes() != _checked(copied / name).read_bytes():
+    if profile == "local":
+        research = _checked(RESEARCH_CATALOG / research_id)
+        copied = catalog / "valid" / "research" / research_id
+        if verify_public_projection(research) != verify_public_projection(copied):
             raise ValueError("FIXTURE_CHANGED")
+        for name in (
+            "public-manifest.json",
+            "calibration.json",
+            "summaries.json",
+            "days.jsonl",
+            "orders.jsonl",
+        ):
+            if _checked(research / name).read_bytes() != _checked(copied / name).read_bytes():
+                raise ValueError("FIXTURE_CHANGED")
+    elif (catalog / "valid" / "research").exists():
+        raise ValueError("FIXTURE_CHANGED")
     common = (
         "--forecast-dir",
         auth.forecast_dir,

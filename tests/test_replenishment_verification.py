@@ -52,7 +52,8 @@ def test_backend_refuses_inherited_analytics_url_before_resource_calls(monkeypat
         runner.check_environment()
 
 
-def test_plan_is_read_only_and_contains_only_public_resource_details(capsys):
+def test_plan_is_read_only_and_contains_only_public_resource_details(capsys, monkeypatch):
+    monkeypatch.setattr(runner, "EXPECTED_ROOT", runner.ROOT)
     assert runner.main(["plan"]) == 0
     output = capsys.readouterr().out
     assert "sw-m7-replenishment-test" in output
@@ -250,6 +251,7 @@ def test_docker_context_rejects_remote_daemon(monkeypatch):
 
 
 def test_check_on_absent_stack_is_read_only_and_reports_absent(monkeypatch, capsys):
+    monkeypatch.setattr(runner, "EXPECTED_ROOT", runner.ROOT)
     monkeypatch.setattr(runner, "check_docker_context", lambda: None)
     monkeypatch.setattr(runner, "check_disk", lambda: None)
     monkeypatch.setattr(runner, "check_resource_state", lambda: "ABSENT")
@@ -408,9 +410,10 @@ def test_backend_rechecks_database_before_each_child_and_after(monkeypatch):
     assert events == ["guard", "backend-migrate", "guard", "backend-pytest", "guard"]
 
 
-def test_plan_reports_current_source_hashes(capsys):
+def test_plan_reports_current_source_hashes(capsys, monkeypatch):
     import json
 
+    monkeypatch.setattr(runner, "EXPECTED_ROOT", runner.ROOT)
     assert runner.main(["plan"]) == 0
     value = json.loads(capsys.readouterr().out)
     assert len(value["source_sha256"]["app/replenishment/simulation.py"]) == 64
@@ -961,6 +964,7 @@ def test_playwright_summary_reports_explicit_pass_and_skip_counts():
 
 
 def test_e2e_check_dispatch_is_read_only(monkeypatch, capsys):
+    monkeypatch.setattr(runner, "EXPECTED_ROOT", runner.ROOT)
     monkeypatch.setattr(runner, "e2e_check", lambda: {"state": "ABSENT"})
     assert runner.main(["check", "--target", "e2e"]) == 0
     assert "ABSENT" in capsys.readouterr().out
