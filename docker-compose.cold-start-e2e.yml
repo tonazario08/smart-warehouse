@@ -1,0 +1,98 @@
+name: sw-m8-cold-start-e2e
+services:
+  db:
+    image: sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    pull_policy: never
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+    environment:
+      POSTGRES_DB: ${M8_DB_NAME:?required}
+      POSTGRES_USER: ${M8_DB_USER:?required}
+      POSTGRES_PASSWORD: ${M8_DB_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    image: sw-m8-cold-start-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+    environment:
+      DATABASE_URL: ${M8_DATABASE_URL:?required}
+    command: [alembic, upgrade, head]
+    networks: [internal]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+  bootstrap:
+    image: sw-m8-cold-start-api
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+    environment:
+      DATABASE_URL: ${M8_DATABASE_URL:?required}
+      SEED_ADMIN_EMAIL: ${M8_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${M8_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${M8_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${M8_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${M8_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${M8_CLIENT_PASSWORD:?required}
+    command: [python, -m, app.seed]
+    networks: [internal]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+  api:
+    image: sw-m8-cold-start-api
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+    environment:
+      APP_ENV: integration
+      DATABASE_URL: ${M8_DATABASE_URL:?required}
+      JWT_SECRET_KEY: ${M8_JWT_SECRET:?required}
+      COLD_START_CATALOG_ROOT: /cold-start-catalog
+      COLD_START_ALLOW_FIXTURE: 'true'
+    volumes:
+      - type: bind
+        source: ${M8_CATALOG_ROOT:?required}
+        target: /cold-start-catalog
+        read_only: true
+    networks: [internal]
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  web:
+    image: sw-m8-cold-start-web
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+    networks:
+      internal: {}
+      ingress:
+        gw_priority: 1
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - '127.0.0.1:58081:8080'
+volumes:
+  database:
+    name: sw-m8-cold-start-e2e-data
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+networks:
+  internal:
+    name: sw-m8-cold-start-e2e-net
+    internal: true
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
+  ingress:
+    name: sw-m8-cold-start-e2e-ingress
+    driver: bridge
+    labels: { task: implement-product-cold-start, role: isolated-e2e }
