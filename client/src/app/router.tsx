@@ -25,6 +25,7 @@ import { PurchaseRequestsPage } from '../features/purchaseRequests/PurchaseReque
 import { PurchaseRequestFormPage } from '../features/purchaseRequests/PurchaseRequestFormPage'
 import { PurchaseRequestDetailPage } from '../features/purchaseRequests/PurchaseRequestDetailPage'
 import { ForecastingPage } from '../features/forecasting/ForecastingPage'
+import { ColdStartPage } from '../features/forecasting/ColdStartPage'
 import { ForecastRunPage } from '../features/forecasting/ForecastRunPage'
 import { ReplenishmentPage } from '../features/replenishment/ReplenishmentPage'
 import { ReplenishmentRunPage } from '../features/replenishment/ReplenishmentRunPage'
@@ -42,7 +43,7 @@ export const router = createBrowserRouter([
       { path: '/audit', element: <RouteGuard permission="audit:read" />, children: [{ index: true, element: <AuditPage /> }] },
     ] },
     { index: true, element: <Navigate replace to="/dashboard" /> },
-    { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
+    { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
     { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },
     { path: '/dashboard', element: <RouteGuard permission="dashboard:read" />, children: [{ index: true, element: <DashboardPage /> }] },
     { path: '/products', element: <ProductsPage /> }, { path: '/products/new', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="create" /> }] }, { path: '/products/:id/edit', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="edit" /> }] },

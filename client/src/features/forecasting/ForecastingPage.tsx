@@ -37,6 +37,7 @@ export function ForecastingPage() {
   const choose = (next: ForecastMode) => { setMode(next); setPage(1) }
   return <section className="forecast-page management-workspace">
     <PageHeader title="Dự báo" description="Xem các kết quả dự báo đã được kiểm tra và phạm vi áp dụng." />
+    <p><Link to="/forecasting/cold-start">Xem dự báo cho sản phẩm mới</Link></p>
     <div className="forecast-tabs" aria-label="Phạm vi dự báo">
       <Button variant={allowedMode === 'operational' ? 'primary' : 'secondary'} aria-pressed={allowedMode === 'operational'} onClick={() => choose('operational')}>Vận hành</Button>
       {can(user?.role, 'forecast:research:read') && <Button variant={allowedMode === 'research' ? 'primary' : 'secondary'} aria-pressed={allowedMode === 'research'} onClick={() => choose('research')}>Nghiên cứu</Button>}
