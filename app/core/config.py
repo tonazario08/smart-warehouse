@@ -41,12 +41,16 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=list)
     forecast_catalog_root: Path | None = None
     forecast_allow_fixture: bool = False
+    cold_start_catalog_root: Path | None = None
+    cold_start_allow_fixture: bool = False
     replenishment_catalog_root: Path | None = None
     replenishment_allow_fixture: bool = False
 
     @model_validator(mode="after")
     def reject_unsafe_production_values(self) -> Self:
         """Validate runtime database and production JWT-secret safety constraints."""
+        if self.cold_start_allow_fixture and self.app_env not in ("test", "integration"):
+            raise ValueError("cold-start fixture serving requires a test environment")
         if self.forecast_allow_fixture and self.app_env not in ("test", "integration"):
             raise ValueError("forecast fixture serving requires a test environment")
         if self.replenishment_allow_fixture and self.app_env not in ("test", "integration"):
