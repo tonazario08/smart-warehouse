@@ -182,6 +182,12 @@ Người dùng duyệt commit local riêng cho benchmark, API, giao diện, E2E 
 
 Hồ sơ chuyển nguyên đường dẫn tương đối vào worktree M8 để commit riêng trên cùng nhánh, tránh bản nháp trùng ở checkout chính. Không thay đổi status, AC hoặc giới hạn nghiệm thu.
 
+### 2026-11-05 — Công bố M8 và hợp nhất vào nhánh tích hợp
+
+Người dùng duyệt push riêng M8, sau đó duyệt merge và push feat/figma-ui-v2 trước khi chuẩn bị M9. Commit 6bad4b9ab999fe9145ebd5c9312775bff1939d74 đã có trên origin/codex/m8-product-cold-start. Quality 41897327496 kết thúc success trên đúng SHA với bốn job xanh. Log xác nhận 1492 backend pass, 3 deselect có 3 guard Windows pass, 401 Vitest, 90 host, typecheck/build đạt và 55 lượt browser hồi quy qua 11 profile. Suite browser riêng M8 giữ bằng chứng local 13 pass, không tính là đã chạy trong Quality.
+
+Merge local 0e40a1fc897c4e50bf3ff8f3f7de4a922d0b295a có hai parent 9d026b4e024997e6757b3bd951c724f0a5d407eb và 6bad4b9ab999fe9145ebd5c9312775bff1939d74. Tree 47f48ec1526d24fd29e59d6565321262f94bcc1d trùng hoàn toàn commit M8 đã đạt CI. Index trước/sau đúng phạm vi và hash 22 file local không đổi. Main chạy typecheck/build trên checkout tích hợp, cả hai đạt, bundle warning giữ nguyên. Checkpoint tài liệu này ghi nhận kết quả trước push nhánh đích; trạng thái remote kiểm chứng riêng qua ls-remote và Quality theo SHA đã push.
+
 ## Verification Evidence
 
 - Backend: 1476 pytest trên PostgreSQL disposable với SQL guard và migration tới 20261019_0004, 0 fail. Tách 3 test guard Windows, cả 3 đạt. 16 ca Compose skip trong Linux không có Docker CLI, nhóm Windows tests/test_seed.py đạt 47/47 gồm các ca Compose. Ruff đạt.
@@ -205,4 +211,4 @@ Hồ sơ chuyển nguyên đường dẫn tương đối vào worktree M8 để 
 
 ## Completion Evidence
 
-M8 DONE / APPROVED ngày 2026-11-05, đủ AC-1–AC-6 trong phạm vi đồ án đã duyệt. Base 9d026b4e024997e6757b3bd951c724f0a5d407eb trên worktree codex/m8-product-cold-start. Bốn commit mã và test được liệt kê trong Progress Log, kèm checkpoint riêng cho hồ sơ này. Phạm vi duyệt chỉ gồm commit local. Chưa push, merge hoặc mở M9.
+M8 DONE / APPROVED ngày 2026-11-05, đủ AC-1–AC-6 trong phạm vi đồ án đã duyệt. Base 9d026b4e024997e6757b3bd951c724f0a5d407eb trên worktree codex/m8-product-cold-start. Bốn commit mã và test được liệt kê trong Progress Log, kèm checkpoint riêng cho hồ sơ này. M8 đã push và merge local theo phê duyệt bổ sung trong Progress Log. Bằng chứng nghiên cứu thật vẫn NOT VERIFIED và phạm vi nghiệm thu đồ án giữ nguyên.
