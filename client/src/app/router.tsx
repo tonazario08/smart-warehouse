@@ -29,6 +29,8 @@ import { ColdStartPage } from '../features/forecasting/ColdStartPage'
 import { ForecastRunPage } from '../features/forecasting/ForecastRunPage'
 import { ReplenishmentPage } from '../features/replenishment/ReplenishmentPage'
 import { ReplenishmentRunPage } from '../features/replenishment/ReplenishmentRunPage'
+import { AnomaliesPage } from '../features/anomalies/AnomaliesPage'
+import { AnomalyDetailPage } from '../features/anomalies/AnomalyDetailPage'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -43,6 +45,7 @@ export const router = createBrowserRouter([
       { path: '/audit', element: <RouteGuard permission="audit:read" />, children: [{ index: true, element: <AuditPage /> }] },
     ] },
     { index: true, element: <Navigate replace to="/dashboard" /> },
+    { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }] },
     { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
     { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },
     { path: '/dashboard', element: <RouteGuard permission="dashboard:read" />, children: [{ index: true, element: <DashboardPage /> }] },

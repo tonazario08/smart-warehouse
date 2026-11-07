@@ -1,0 +1,13 @@
+export type Status = 'new' | 'confirmed' | 'dismissed'
+export type Alert = { alert_id: string; run_id: string; source_record_key: string; occurred_at: string; score: number; threshold: number; review_status: Status; version: number }
+export type StatusResponse = { state: 'available' | 'unavailable'; dataset_class: 'fixture' | null; real_precision_recall: 'NOT VERIFIED' }
+export type AlertPage = { items: Alert[]; total: number; page: number; page_size: number }
+export type Explanation = { state: 'available' | 'unavailable'; reason: string | null; base_value: number | null; contributions: number[] | null; residual: number | null }
+export type Detail = Alert & { features: number[]; feature_order: string[]; explanation: Explanation; run: { input_version: string; feature_version: string; model_version: string; created_at: string; partitions: { name: string; start: string; end: string; information_cutoff: string }[]; score_definition: string; dataset_class: 'fixture'; real_precision_recall: 'NOT VERIFIED' } }
+export type Review = { review_id: string; actor_user_id: number; decision: 'confirmed' | 'dismissed'; note: string; created_at: string; version: number }
+export type ReviewRequest = { expected_version: number; decision: 'confirmed' | 'dismissed'; note: string }
+export type ReviewResult = { alert_id: string; status: 'confirmed' | 'dismissed'; version: number; review_id: string; replayed: boolean }
+export const statusLabels: Record<Status, string> = { new: 'Chưa đánh giá', confirmed: 'Đã xác nhận', dismissed: 'Đã bác bỏ' }
+export const featureLabels: Record<string, string> = { log_quantity: 'Số lượng xuất (log)', hour_fraction: 'Giờ trong ngày', weekday_fraction: 'Thứ trong tuần', log_prior_quantity_mean_7d: 'Lượng xuất trung bình 7 ngày trước (log)', log_prior_event_count_7d: 'Số giao dịch 7 ngày trước (log)', log_quantity_to_prior_mean: 'Tỷ lệ lượng xuất so với lịch sử (log)' }
+export const partitionLabels: Record<string, string> = { train: 'Huấn luyện', validation: 'Kiểm định', final_holdout: 'Đánh giá cuối' }
+export const reasons: Record<string, string> = { EXPLAINER_MISSING: 'Thiếu công cụ giải thích', EXPLAINER_ERROR: 'Không thể tính giải thích', ADDITIVITY_MISMATCH: 'Giải thích không khớp điểm', MODEL_UNAVAILABLE: 'Mô hình không khả dụng' }
