@@ -1,0 +1,10 @@
+.anomalies-page { display: grid; gap: 1rem; min-width: 0; }
+.anomalies-panel h2 { margin-top: 0; }
+.anomalies-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.anomalies-facts dt { font-weight: 600; }
+.anomalies-facts dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.anomalies-scroll { overflow-x: auto; max-width: 100%; }
+.anomalies-scroll .ui-data-table { min-width: 650px; }
+.anomalies-scroll td a { overflow-wrap: anywhere; }
+.anomalies-note { display: grid; gap: .35rem; margin: 1rem 0; font-weight: 600; }
+.anomalies-note textarea { width: 100%; max-width: 40rem; padding: .65rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); font: inherit; }

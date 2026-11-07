@@ -20,9 +20,11 @@ import transactionsIcon from '../assets/icons/transactions.svg'
 import auditIcon from '../assets/icons/audit.svg'
 import forecastingIcon from '../assets/icons/forecasting.svg'
 import replenishmentIcon from '../assets/icons/replenishment.svg'
+import anomaliesIcon from '../assets/icons/anomalies.svg'
 
 type Item = { to: string; label: string; permission: Permission; roles: Role[]; icon: string; activeIcon?: string }
 const items: Item[] = [
+  { to: '/anomalies', label: 'Bất thường', permission: 'anomaly:read', roles: ['admin', 'warehouse'], icon: anomaliesIcon },
   { to: '/forecasting', label: 'Dự báo', permission: 'forecast:read', roles: ['admin', 'warehouse'], icon: forecastingIcon },
   { to: '/replenishment', label: 'Bổ sung hàng', permission: 'replenishment:read', roles: ['admin', 'warehouse'], icon: replenishmentIcon },
   { to: '/dashboard', label: 'Bảng điều khiển', permission: 'dashboard:read', roles: ['admin'], icon: dashboardInactiveIcon, activeIcon: dashboardIcon },
