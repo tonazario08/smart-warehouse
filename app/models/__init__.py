@@ -1,3 +1,4 @@
+from app.anomalies.models import AnomalyAlert, AnomalyReview, AnomalyRun
 from app.models.domain import (
     Category,
     Inbound,
@@ -20,6 +21,9 @@ from app.models.domain import (
 
 __all__ = [
     "AuditLog",
+    "AnomalyAlert",
+    "AnomalyReview",
+    "AnomalyRun",
     "Category",
     "Inbound",
     "MovementProvenance",

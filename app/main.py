@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.anomalies.router import router as anomaly_router
 from app.audit.router import router as audit_router
 from app.auth.router import router as auth_router
 from app.cold_start.router import router as cold_start_router
@@ -36,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
+    application.include_router(anomaly_router, prefix=settings.api_v1_prefix)
     application.include_router(master_data_router, prefix=settings.api_v1_prefix)
     application.include_router(warehouse_router, prefix=settings.api_v1_prefix)
     application.include_router(inventory_router, prefix=settings.api_v1_prefix)

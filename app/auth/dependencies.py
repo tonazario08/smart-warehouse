@@ -37,6 +37,8 @@ class Permission(StrEnum):
     FORECAST_RESEARCH_READ = "forecast:research:read"
     REPLENISHMENT_READ = "replenishment:read"
     REPLENISHMENT_RESEARCH_READ = "replenishment:research:read"
+    ANOMALY_READ = "anomaly:read"
+    ANOMALY_REVIEW = "anomaly:review"
 
 
 PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
@@ -60,6 +62,8 @@ PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.FORECAST_RESEARCH_READ: frozenset({UserRole.ADMIN}),
     Permission.REPLENISHMENT_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
     Permission.REPLENISHMENT_RESEARCH_READ: frozenset({UserRole.ADMIN}),
+    Permission.ANOMALY_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.ANOMALY_REVIEW: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
 }
 
 
@@ -89,8 +93,8 @@ def get_current_user(
     return user
 
 
-def require_permission(permission: Permission):
-    def dependency(user: Annotated[User, Depends(get_current_user)]) -> User:
+def require_permission(permission: Permission, current_user_dependency=get_current_user):
+    def dependency(user: Annotated[User, Depends(current_user_dependency)]) -> User:
         if user.role not in PERMISSION_ROLES[permission]:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
         return user
