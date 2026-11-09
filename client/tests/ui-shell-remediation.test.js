@@ -209,8 +209,8 @@ test('Topbar presents unsupported search and notifications as explicitly unavail
 })
 
 for (const [role, expectedLinks] of [
-  ['admin', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
-  ['warehouse', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
+  ['admin', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/gis', 'Bản đồ kho'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
+  ['warehouse', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/gis', 'Bản đồ kho'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
   ['client', [['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục']]],
 ]) test(`${role} sidebar destinations retain accessible names when responsive CSS hides visible labels`, () => {
   const user = { id: 1, email: `${role}@example.com`, role, is_active: true }
@@ -238,6 +238,7 @@ test('breadcrumbs keep the resource area on create, edit and detail routes with 
     ['/products/new', 'Sản phẩm'], ['/products/17/edit', 'Sản phẩm'],
     ['/inventory/1/2', 'Tồn kho'], ['/warehouses/new', 'Kho hàng'],
     ['/warehouses/3', 'Kho hàng'], ['/warehouses/3/edit', 'Kho hàng'],
+    ['/gis', 'Bản đồ kho'],
     ['/inbound/new', 'Nhập kho'], ['/outbound/new', 'Xuất kho'],
     ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'],
     ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị'],

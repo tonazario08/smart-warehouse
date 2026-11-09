@@ -1,6 +1,8 @@
 import type { Role } from '../../types'
 
 export type Permission =
+  | 'gis:read'
+  | 'gis:route'
   | 'anomaly:read'
   | 'anomaly:review'
   | 'replenishment:read'
@@ -26,6 +28,8 @@ export type Permission =
   | 'purchase_request:fulfill'
 
 const permissionRoles: Readonly<Record<Permission, readonly Role[]>> = {
+  'gis:read': ['admin', 'warehouse'],
+  'gis:route': ['admin', 'warehouse'],
   'anomaly:read': ['admin', 'warehouse'],
   'anomaly:review': ['admin', 'warehouse'],
   'replenishment:read': ['admin', 'warehouse'],

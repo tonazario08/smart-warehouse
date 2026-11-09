@@ -18,6 +18,7 @@ import { WarehouseFormPage } from '../pages/WarehouseFormPage'
 import { MovementFormPage, MovementListPage } from '../pages/MovementPages'
 import { AppShell } from '../shared/layout/AppShell'
 import { RouteGuard } from './RouteGuard'
+import { GISPage } from '../features/gis/GISPage'
 import { TransfersPage } from '../features/transfers/TransfersPage'
 import { TransferFormPage } from '../features/transfers/TransferFormPage'
 import { TransferDetailPage } from '../features/transfers/TransferDetailPage'
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
     { path: '/products', element: <ProductsPage /> }, { path: '/products/new', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="create" /> }] }, { path: '/products/:id/edit', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="edit" /> }] },
     { path: '/inventory', element: <InventoryPage /> }, { path: '/inventory/:warehouseId/:productId', element: <StockDetailPage /> },
     { path: '/warehouses', element: <WarehousesPage /> }, { path: '/warehouses/new', element: <RouteGuard permission="warehouse:write" />, children: [{ index: true, element: <WarehouseFormPage mode="create" /> }] }, { path: '/warehouses/:id', element: <WarehouseDetailPage /> }, { path: '/warehouses/:id/edit', element: <RouteGuard permission="warehouse:write" />, children: [{ index: true, element: <WarehouseFormPage mode="edit" /> }] },
+    { path: '/gis', element: <RouteGuard permission="gis:read" />, children: [{ index: true, element: <GISPage /> }] },
     { path: '/inbound', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <MovementListPage type="inbound" /> }, { path: 'new', element: <MovementFormPage type="inbound" /> }] },
     { path: '/outbound', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <MovementListPage type="outbound" /> }, { path: 'new', element: <MovementFormPage type="outbound" /> }] },
     { path: '/transfers', element: <RouteGuard permission="inventory:history:read" />, children: [{ index: true, element: <TransfersPage /> }, { path: ':id', element: <TransferDetailPage /> }] },

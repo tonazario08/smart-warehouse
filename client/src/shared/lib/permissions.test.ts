@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { can, type Permission } from './permissions'
 
 it.each([
+  ['gis:read', [true, true, false]], ['gis:route', [true, true, false]],
   ['anomaly:read', [true, true, false]], ['anomaly:review', [true, true, false]],
   ['replenishment:read', [true, true, false]], ['replenishment:research:read', [true, false, false]],
   ['forecast:read', [true, true, false]], ['forecast:research:read', [true, false, false]],

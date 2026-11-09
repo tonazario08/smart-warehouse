@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     replenishment_catalog_root: Path | None = None
     replenishment_allow_fixture: bool = False
     anomalies_allow_fixture: bool = False
+    gis_catalog_root: Path | None = None
+    gis_snapshot_id: str | None = None
+    gis_allow_fixture: bool = False
 
     @model_validator(mode="after")
     def reject_unsafe_production_values(self) -> Self:
@@ -58,6 +61,8 @@ class Settings(BaseSettings):
             raise ValueError("replenishment fixture serving requires a test environment")
         if self.anomalies_allow_fixture and self.app_env not in ("test", "integration"):
             raise ValueError("anomaly fixture serving requires a test environment")
+        if self.gis_allow_fixture and self.app_env not in ("test", "integration"):
+            raise ValueError("GIS fixture serving requires a test environment")
         try:
             database_url = make_url(self.database_url)
         except ArgumentError as error:

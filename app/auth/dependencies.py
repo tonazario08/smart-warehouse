@@ -39,6 +39,8 @@ class Permission(StrEnum):
     REPLENISHMENT_RESEARCH_READ = "replenishment:research:read"
     ANOMALY_READ = "anomaly:read"
     ANOMALY_REVIEW = "anomaly:review"
+    GIS_READ = "gis:read"
+    GIS_ROUTE = "gis:route"
 
 
 PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
@@ -64,6 +66,8 @@ PERMISSION_ROLES: dict[Permission, frozenset[UserRole]] = {
     Permission.REPLENISHMENT_RESEARCH_READ: frozenset({UserRole.ADMIN}),
     Permission.ANOMALY_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
     Permission.ANOMALY_REVIEW: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.GIS_READ: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
+    Permission.GIS_ROUTE: frozenset({UserRole.ADMIN, UserRole.WAREHOUSE}),
 }
 
 

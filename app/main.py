@@ -15,6 +15,8 @@ from app.core.errors import DomainError, register_exception_handlers
 from app.dashboard.router import router as dashboard_router
 from app.db.session import get_session
 from app.forecasting.router import router as forecast_router
+from app.gis.router import router as gis_router
+from app.gis.service import SnapshotCatalog
 from app.inventory.router import router as inventory_router
 from app.master_data.router import router as master_data_router
 from app.purchase_requests.router import router as purchase_request_router
@@ -29,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     application = FastAPI(title=settings.app_name, version="0.1.0")
     application.dependency_overrides[get_settings] = lambda: settings
+    application.state.gis_catalog = SnapshotCatalog(settings)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -41,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(master_data_router, prefix=settings.api_v1_prefix)
     application.include_router(warehouse_router, prefix=settings.api_v1_prefix)
     application.include_router(inventory_router, prefix=settings.api_v1_prefix)
+    application.include_router(gis_router, prefix=settings.api_v1_prefix)
     application.include_router(dashboard_router, prefix=settings.api_v1_prefix)
     application.include_router(cold_start_router, prefix=settings.api_v1_prefix)
     application.include_router(forecast_router, prefix=settings.api_v1_prefix)

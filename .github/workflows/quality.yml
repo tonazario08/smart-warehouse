@@ -36,7 +36,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install backend dependencies
-        run: python -m pip install -e ".[dev,forecasting,anomalies]"
+        run: python -m pip install -e ".[dev,forecasting,anomalies,gis]"
       - name: Ruff
         run: python -m ruff check app tests alembic
       - name: Guarded migration and backend tests

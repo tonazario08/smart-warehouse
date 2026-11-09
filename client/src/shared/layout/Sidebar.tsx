@@ -21,6 +21,7 @@ import auditIcon from '../assets/icons/audit.svg'
 import forecastingIcon from '../assets/icons/forecasting.svg'
 import replenishmentIcon from '../assets/icons/replenishment.svg'
 import anomaliesIcon from '../assets/icons/anomalies.svg'
+import gisIcon from '../assets/icons/gis.svg'
 
 type Item = { to: string; label: string; permission: Permission; roles: Role[]; icon: string; activeIcon?: string }
 const items: Item[] = [
@@ -31,6 +32,7 @@ const items: Item[] = [
   { to: '/products', label: 'Sản phẩm', permission: 'product:read', roles: ['admin', 'client'], icon: productsIcon, activeIcon: productsActiveIcon },
   { to: '/inventory', label: 'Tồn kho', permission: 'inventory:read', roles: ['admin', 'warehouse', 'client'], icon: inventoryIcon, activeIcon: inventoryActiveIcon },
   { to: '/warehouses', label: 'Kho hàng', permission: 'warehouse:read', roles: ['admin', 'warehouse', 'client'], icon: warehousesIcon },
+  { to: '/gis', label: 'Bản đồ kho', permission: 'gis:read', roles: ['admin', 'warehouse'], icon: gisIcon },
   { to: '/inbound', label: 'Nhập kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: inboundIcon },
   { to: '/outbound', label: 'Xuất kho', permission: 'inventory:write', roles: ['admin', 'warehouse'], icon: outboundIcon },
   { to: '/transfers', label: 'Chuyển kho', permission: 'inventory:history:read', roles: ['admin', 'warehouse'], icon: transactionsIcon },
