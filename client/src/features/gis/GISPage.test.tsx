@@ -119,6 +119,16 @@ it('loads options from explicit coordinates and shows the selected route by keyb
   expect(within(routeDetails).getByText('1,547 km')).toBeInTheDocument()
   expect(within(routeDetails).getByText('Tuyến ô tô tham khảo')).toBeInTheDocument()
   expect(within(routeDetails).getByText('Nét liền là đường đi')).toBeInTheDocument()
+  const mapsLink = within(routeDetails).getByRole<HTMLAnchorElement>('link', { name: 'Mở chỉ đường trong Google Maps' })
+  screen.getByRole('link', { name: snapshot.attribution }).focus()
+  await userEvent.tab()
+  expect(mapsLink).toHaveFocus()
+  const url = new URL(mapsLink.href)
+  expect(url.origin + url.pathname).toBe('https://www.google.com/maps/dir/')
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    api: '1', origin: '10.75,106.65', destination: '10.76,106.66', travelmode: 'driving', dir_action: 'navigate',
+  })
+  expect(mapsLink).toHaveAttribute('referrerpolicy', 'no-referrer')
 })
 
 it('sends selected warehouses and authorized purchase IDs as distinct destinations', async () => {
@@ -202,6 +212,19 @@ it('shows transfer context and a no-route reason without drawing a line', async 
   expect(vi.mocked(api.getGisRoute).mock.calls[0][1]).toEqual({ kind: 'transfer', transfer_id: 9 })
   expect(await screen.findByText(/Chuyển kho tức thời/)).toBeInTheDocument()
   expect(screen.getByText('Không tìm thấy đường đi trong mạng đường đã chọn.')).toBeInTheDocument()
+})
+
+it.each(['origin', 'destination'] as const)('omits the Google Maps link when the %s coordinate is missing', async endpoint => {
+  vi.mocked(api.getGisRoute).mockResolvedValue({
+    ...route, [endpoint]: { ...route[endpoint], coordinate: null },
+    geometry: null, distance_mm: null, reason: 'no_route', transfer: { transfer_id: 9, mode: 'immediate' },
+  })
+  render(page())
+  await userEvent.click(screen.getByRole('button', { name: 'Tra phiếu chuyển kho' }))
+  await userEvent.type(screen.getByLabelText('ID phiếu chuyển kho'), '9')
+  await userEvent.click(screen.getByRole('button', { name: 'Xem tuyến chuyển kho' }))
+  expect(await screen.findByText(/Chuyển kho tức thời/)).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Mở chỉ đường trong Google Maps' })).not.toBeInTheDocument()
 })
 
 it('keeps heatmap totals, units, missing coordinates and exclusions available in a keyboard table', async () => {

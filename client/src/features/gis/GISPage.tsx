@@ -138,6 +138,16 @@ function SnapshotInfo({ snapshot }: { snapshot: SnapshotMetadata }) {
 }
 
 function RouteEvidence({ route }: { route: RouteRead }) {
+  const origin = route.origin.coordinate
+  const destination = route.destination.coordinate
+  const mapsParams = origin && destination ? new URLSearchParams({
+    api: '1',
+    origin: `${origin.latitude},${origin.longitude}`,
+    destination: `${destination.latitude},${destination.longitude}`,
+    travelmode: 'driving',
+    dir_action: 'navigate',
+  }) : null
+
   return <>
     {route.transfer && <FeedbackMessage>
       Chuyển kho tức thời. Sơ đồ là tuyến tham khảo cho phiếu {route.transfer.transfer_id}.
@@ -165,6 +175,12 @@ function RouteEvidence({ route }: { route: RouteRead }) {
       {route.destination_snap && <div><dt>Đoạn nối tại điểm đến</dt><dd>{distance(route.destination_snap.distance_mm)}</dd></div>}
       {route.snapshot && <div><dt>Phiên bản tuyến</dt><dd><code>{route.snapshot.snapshot_id}</code></dd></div>}
     </dl>
+    {mapsParams && <p className="gis-muted">
+      <a href={`https://www.google.com/maps/dir/?${mapsParams}`} referrerPolicy="no-referrer">
+        Mở chỉ đường trong Google Maps
+      </a>
+      {' · Google Maps tính đường từ hai tọa độ.'}
+    </p>}
   </>
 }
 
