@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: smart-warehouse-demo-api
+    runtime: docker
+    plan: free
+    region: singapore
+    autoDeployTrigger: "off"
+    dockerCommand: python /app/render-start.py
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart-warehouse-demo-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GIS_CATALOG_ROOT
+        value: /tmp/smart-warehouse-gis
+      - key: GIS_SNAPSHOT_ID
+        sync: false
+      - key: GIS_RELEASE_ASSET_BASE
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_WAREHOUSE_EMAIL
+        sync: false
+      - key: SEED_WAREHOUSE_PASSWORD
+        sync: false
+      - key: SEED_CLIENT_EMAIL
+        sync: false
+      - key: SEED_CLIENT_PASSWORD
+        sync: false
+
+  - type: web
+    name: smart-warehouse-demo
+    runtime: static
+    rootDir: client
+    autoDeployTrigger: "off"
+    buildCommand: npm ci --include=dev && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22.20.0"
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: smart-warehouse-demo-db
+    databaseName: smart_warehouse_render_demo
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+    ipAllowList: []
