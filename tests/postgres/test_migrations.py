@@ -81,7 +81,9 @@ def test_migrations_build_expected_schema(
                 connection.execute(text("SELECT sku FROM products")).scalar_one(),
                 connection.execute(text("SELECT code FROM warehouses")).scalar_one(),
             )
-        assert revision == "20261105_0005"
+            auth_version = connection.execute(text("SELECT auth_version FROM users")).scalar_one()
+        assert revision == "20261110_0006"
+        assert auth_version == 0
         assert normalized_values == ("mixed@example.com", "BOLT-001", "HCM-01")
     finally:
         engine.dispose()
@@ -94,6 +96,8 @@ def test_migrations_build_expected_schema(
         "categories",
         "inbounds",
         "outbounds",
+        "password_recovery_budget",
+        "password_reset_tokens",
         "products",
         "purchase_requests",
         "regions",

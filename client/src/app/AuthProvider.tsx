@@ -5,7 +5,7 @@ import type { User } from '../types'
 import { getAuthErrorMessage } from '../shared/lib/auth-errors'
 
 const tokenKey = 'smart-warehouse-token'
-type AuthContextValue = { user: User | null; token: string | null; loading: boolean; error: string; login: (email: string, password: string) => Promise<boolean>; logout: () => void; clearError: () => void }
+type AuthContextValue = { user: User | null; token: string | null; loading: boolean; error: string; login: (email: string, password: string) => Promise<boolean>; logout: () => void; passwordChanged: boolean; capturePasswordChange: () => () => boolean; clearError: () => void }
 const AuthContext = createContext<AuthContextValue | null>(null)
 const errorMessage = (error: unknown) => getAuthErrorMessage(error instanceof ApiError ? error : undefined)
 
@@ -14,21 +14,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(Boolean(token))
   const [error, setError] = useState('')
+  const [passwordChanged, setPasswordChanged] = useState(false)
   const generation = useRef(0)
+  const unauthorizedSession = useRef<{ generation: number; token: string } | null>(null)
   const hydratedToken = useRef<string | null>(null)
   const hydration = useRef<{ token: string; promise: Promise<User> } | null>(null)
 
   const logout = useCallback(() => {
     generation.current++
+    unauthorizedSession.current = null
     advanceApiSession()
     hydration.current = null
     hydratedToken.current = null
     localStorage.removeItem(tokenKey)
+    setPasswordChanged(false)
     setToken(null); setUser(null); setError(''); setLoading(false)
   }, [])
 
+  const capturePasswordChange = useCallback(() => {
+    const current = generation.current
+    const stored = localStorage.getItem(tokenKey)
+    return () => {
+      const activeToken = localStorage.getItem(tokenKey)
+      const alreadyRevoked = generation.current === current + 1 && activeToken === null
+        && unauthorizedSession.current?.generation === current
+        && unauthorizedSession.current.token === stored
+      if (!alreadyRevoked) {
+        if (generation.current !== current || activeToken !== stored) return false
+        logout()
+      }
+      setPasswordChanged(true)
+      return true
+    }
+  }, [logout])
+
   useEffect(() => onApiUnauthorized(requestToken => {
-    if (requestToken === token && requestToken === localStorage.getItem(tokenKey)) logout()
+    if (requestToken === token && requestToken === localStorage.getItem(tokenKey)) {
+      const revoked = { generation: generation.current, token: requestToken }
+      logout()
+      unauthorizedSession.current = revoked
+    }
   }), [logout, token])
 
   useEffect(() => {
@@ -52,10 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const current = ++generation.current
+    unauthorizedSession.current = null
     advanceApiSession()
     hydration.current = null
     hydratedToken.current = null
     localStorage.removeItem(tokenKey)
+    setPasswordChanged(false)
     setToken(null); setUser(null); setLoading(true); setError('')
     try {
       const result = await api.login(email, password)
@@ -75,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false
     } finally { if (generation.current === current) setLoading(false) }
   }, [])
-  const value = useMemo(() => ({ user, token, loading, error, login, logout, clearError: () => setError('') }), [error, loading, login, logout, token, user])
+  const value = useMemo(() => ({ user, token, loading, error, login, logout, passwordChanged, capturePasswordChange, clearError: () => setError('') }), [capturePasswordChange, error, loading, login, logout, passwordChanged, token, user])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

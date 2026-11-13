@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { User } from '../../types'
 import { Button } from '../ui/Button'
 
@@ -13,6 +14,7 @@ export function UserMenu({ user, onLogout }: { user: User; onLogout: () => void 
       <span><strong>{roleLabel[user.role]}</strong><small>{user.email}</small></span>
     </summary>
     <div className="user-menu__panel" role="menu">
+      <Link to="/change-password">Đổi mật khẩu</Link>
       <Button size="small" variant="ghost" onClick={onLogout}>Đăng xuất</Button>
     </div>
   </details>

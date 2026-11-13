@@ -81,6 +81,10 @@ class User(IdentifierMixin, TimestampMixin, Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auth_version: Mapped[int] = mapped_column(
+        Integer, CheckConstraint("auth_version >= 0", name="ck_users_auth_version"),
+        server_default="0", nullable=False,
+    )
 
 
 class Category(IdentifierMixin, TimestampMixin, Base):

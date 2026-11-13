@@ -175,15 +175,6 @@ test('confirmation is locked synchronously until a pending request finishes', ()
   assert.equal(confirmed, 2)
 })
 
-for (const page of ['ForgotPasswordPage', 'ResetPasswordPage']) test(`${page} explains unavailable recovery upfront without soliciting credentials`, () => {
-  const host = componentHost('pages/AuthPages.js', page)
-  const tree = host.render()
-  assert.equal(nodes(tree, node => node.type === 'form' || node.type === 'input' || node.type?.name === 'Input').length, 0)
-  assert.match(text(tree), /chưa hỗ trợ/)
-  assert.match(text(tree), /quản trị viên/)
-  assert.ok(nodes(tree, node => node.type === 'a' && node.props.to === '/login').length)
-})
-
 test('real login keeps its credentials and return route without a decorative remember checkbox', async () => {
   const host = componentHost('pages/AuthPages.js', 'LoginPage')
   let tree = host.render()

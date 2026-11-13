@@ -34,7 +34,7 @@ def test_real_auth_permissions_status_stale_and_failure(unit_settings, tmp_path)
         update={"cold_start_catalog_root": root, "cold_start_allow_fixture": True}
     )
     app = create_app(settings)
-    actor = SimpleNamespace(role=UserRole.WAREHOUSE, is_active=True)
+    actor = SimpleNamespace(role=UserRole.WAREHOUSE, is_active=True, auth_version=0)
 
     class Session:
         def scalar(self, statement):
@@ -105,7 +105,7 @@ def test_corrupt_status_and_io_fail_closed(unit_settings, tmp_path, monkeypatch)
 
     class Session:
         def scalar(self, statement):
-            return SimpleNamespace(role=UserRole.ADMIN, is_active=True)
+            return SimpleNamespace(role=UserRole.ADMIN, is_active=True, auth_version=0)
 
     app.dependency_overrides[get_session] = lambda: Session()
     token = create_access_token(1, settings)
@@ -139,7 +139,7 @@ def test_hidden_fixture_future_and_published_failed_state(unit_settings, tmp_pat
     settings = unit_settings.model_copy(
         update={"cold_start_catalog_root": root, "cold_start_allow_fixture": True}
     )
-    actor = SimpleNamespace(role=UserRole.ADMIN, is_active=True)
+    actor = SimpleNamespace(role=UserRole.ADMIN, is_active=True, auth_version=0)
 
     class Session:
         def scalar(self, statement):
@@ -191,7 +191,7 @@ def test_all_null_predictions_give_unavailable_status(unit_settings, tmp_path):
 
     class Session:
         def scalar(self, statement):
-            return SimpleNamespace(role=UserRole.ADMIN, is_active=True)
+            return SimpleNamespace(role=UserRole.ADMIN, is_active=True, auth_version=0)
 
     app.dependency_overrides[get_session] = lambda: Session()
     headers = {"Authorization": f"Bearer {create_access_token(1, settings)}"}

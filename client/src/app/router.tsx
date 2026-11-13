@@ -6,7 +6,7 @@ import { SuppliersPage } from '../features/suppliers/SuppliersPage'
 import { TransactionsPage } from '../features/transactions/TransactionsPage'
 import { AuditPage } from '../features/audit/AuditPage'
 import { LoginPage } from '../pages/LoginPage'
-import { ForgotPasswordPage, ResetPasswordPage } from '../pages/AuthPages'
+import { ChangePasswordPage, ForgotPasswordPage, ResetPasswordPage } from '../pages/AuthPages'
 import { DashboardPage } from '../pages/DashboardPage'
 import { ProductFormPage } from '../pages/ProductFormPage'
 import { ProductsPage } from '../pages/ProductsPage'
@@ -46,6 +46,7 @@ export const router = createBrowserRouter([
       { path: '/audit', element: <RouteGuard permission="audit:read" />, children: [{ index: true, element: <AuditPage /> }] },
     ] },
     { index: true, element: <Navigate replace to="/dashboard" /> },
+    { path: '/change-password', element: <ChangePasswordPage /> },
     { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }] },
     { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
     { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },

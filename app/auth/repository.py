@@ -18,5 +18,14 @@ class UserRepository:
     def get_by_email(self, email: str) -> User | None:
         return self.session.scalar(select(User).where(User.email == email))
 
+    def lock_by_id(self, user_id: int) -> User | None:
+        return self.session.scalar(
+            select(User).where(User.id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+    def lock_by_email(self, email: str) -> User | None:
+        return self.session.scalar(select(User).where(User.email == email).with_for_update())
+
     def add(self, user: User) -> None:
         self.session.add(user)

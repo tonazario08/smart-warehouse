@@ -22,7 +22,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(
-    user_id: int, settings: Settings, expires_delta: timedelta | None = None
+    user_id: int, settings: Settings, expires_delta: timedelta | None = None,
+    *, auth_version: int | None = None,
 ) -> str:
     if not isinstance(settings, Settings):
         raise TypeError("settings must be a Settings instance")
@@ -33,6 +34,8 @@ def create_access_token(
         else timedelta(minutes=settings.jwt_expire_minutes)
     )
     payload = {"sub": str(user_id), "iat": issued_at, "exp": issued_at + lifetime}
+    if auth_version is not None:
+        payload["ver"] = auth_version
     return jwt.encode(
         payload,
         settings.jwt_secret_key.get_secret_value(),

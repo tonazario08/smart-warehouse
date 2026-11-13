@@ -109,7 +109,8 @@ def test_login_returns_token_without_authoritative_role(unit_settings) -> None:
             unit_settings.jwt_secret_key.get_secret_value(),
             algorithms=["HS256"],
         )
-        assert set(claims) == {"sub", "iat", "exp"}
+        assert set(claims) == {"sub", "iat", "exp", "ver"}
+        assert claims["ver"] == 0
         assert "password_hash" not in response.json()["user"]
     finally:
         test_client.close()
@@ -178,5 +179,60 @@ def test_current_user_uses_database_state_and_rejects_expired_tokens(unit_settin
         assert disabled.status_code == 401
     finally:
         test_client.close()
+        session.close()
+        engine.dispose()
+
+
+def test_forgot_password_without_mail_configuration_is_unavailable(test_client) -> None:
+    response = test_client.post("/api/v1/auth/forgot-password", json={"email": "a@example.com"})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "PASSWORD_RECOVERY_UNAVAILABLE"
+
+
+def test_change_password_requires_current_password_and_revokes_legacy_session(unit_settings):
+    incomplete = type(unit_settings).model_validate({
+        **unit_settings.model_dump(), "password_recovery_enabled": True,
+    })
+    client, session, engine = make_client(incomplete)
+    try:
+        email = "change@example.com"
+        current = "old-test-password"
+        replacement = "new-test-password"
+        created = client.post("/api/v1/auth/register", json={"email": email, "password": current})
+        assert created.status_code == 201
+        existing = client.post("/api/v1/auth/forgot-password", json={"email": email})
+        missing = client.post("/api/v1/auth/forgot-password", json={"email": "missing@example.com"})
+        assert existing.status_code == missing.status_code == 503
+        assert existing.json() == missing.json()
+        user_id = created.json()["id"]
+        legacy = create_access_token(user_id, unit_settings)
+        other = client.post("/api/v1/auth/login", json={"email": email, "password": current})
+        headers = {"Authorization": f"Bearer {legacy}"}
+        url = "/api/v1/auth/change-password"
+        body = {"current_password": "wrong-password", "new_password": replacement,
+                "confirm_password": replacement}
+        rejected = client.post(url, headers=headers, json=body)
+        assert rejected.status_code == 400
+        assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
+        body["current_password"] = current
+        reused = client.post(url, headers=headers, json={
+            "current_password": current, "new_password": current, "confirm_password": current,
+        })
+        assert reused.status_code == 422
+        changed = client.post(url, headers=headers, json=body)
+        assert changed.status_code == 204
+        for token in (legacy, other.json()["access_token"]):
+            stale = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+            assert stale.status_code == 401
+        old_login = client.post("/api/v1/auth/login", json={"email": email, "password": current})
+        assert old_login.status_code == 401
+        new_login = client.post(
+            "/api/v1/auth/login", json={"email": email, "password": replacement}
+        )
+        assert new_login.status_code == 200
+        assert new_login.json()["user"]["role"] == "client"
+        assert decode_access_token(new_login.json()["access_token"], unit_settings)["ver"] == 1
+    finally:
+        client.close()
         session.close()
         engine.dispose()

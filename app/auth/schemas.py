@@ -1,13 +1,12 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
 from app.models import UserRole
 
 
-class _AuthRequest(BaseModel):
+class _EmailRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
-    password: str
 
     @field_validator("email", mode="before")
     @classmethod
@@ -20,12 +19,35 @@ class _AuthRequest(BaseModel):
         return str(value).lower()
 
 
-class RegisterRequest(_AuthRequest):
+class RegisterRequest(_EmailRequest):
     password: str = Field(min_length=12, max_length=128)
 
 
-class LoginRequest(_AuthRequest):
+class LoginRequest(_EmailRequest):
+    password: str
+
+
+class ForgotPasswordRequest(_EmailRequest):
     pass
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+
+
+class _PasswordReplacement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: SecretStr = Field(min_length=12, max_length=128)
+    confirm_password: SecretStr = Field(min_length=12, max_length=128)
+
+
+class ResetPasswordRequest(_PasswordReplacement):
+    token: SecretStr = Field(min_length=1, max_length=128)
+
+
+class ChangePasswordRequest(_PasswordReplacement):
+    current_password: SecretStr = Field(min_length=1, max_length=128)
 
 
 class UserResponse(BaseModel):

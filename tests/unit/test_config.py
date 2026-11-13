@@ -16,6 +16,45 @@ def test_production_rejects_unsafe_jwt_secret() -> None:
         )
 
 
+def recovery_settings(**overrides):
+    values = {
+        "app_env": "production",
+        "database_url": "postgresql+psycopg://db/warehouse",
+        "jwt_secret_key": "test-only-long-signing-key-for-configuration",
+        "password_recovery_enabled": True,
+        "password_recovery_origin": "https://warehouse.example.com",
+        "password_recovery_from_email": "no-reply@example.com",
+        "resend_api_key": "test-only-mail-key",
+        "cors_origins": ["https://warehouse.example.com"],
+        "_env_file": None,
+    }
+    return Settings(**(values | overrides))
+
+
+@pytest.mark.parametrize("field", [
+    "password_recovery_origin", "password_recovery_from_email", "resend_api_key",
+])
+def test_incomplete_password_email_configuration_starts_with_recovery_unavailable(field):
+    from app.auth.password_mail import get_password_mailer
+
+    assert get_password_mailer(recovery_settings(**{field: ""})) is None
+
+
+def test_disabling_recovery_ignores_a_malformed_sender():
+    from app.auth.password_mail import get_password_mailer
+
+    settings = recovery_settings(
+        password_recovery_enabled=False, password_recovery_from_email="invalid sender",
+    )
+    assert get_password_mailer(settings) is None
+
+
+def test_recovery_rejects_an_invalid_origin_port_even_when_present_in_cors():
+    origin = "https://warehouse.example.com:invalid"
+    with pytest.raises(ValidationError):
+        recovery_settings(password_recovery_origin=origin, cors_origins=[origin])
+
+
 def test_production_rejects_whitespace_jwt_secret() -> None:
     """Whitespace cannot satisfy the minimum production signing-key length."""
     with pytest.raises(ValidationError):

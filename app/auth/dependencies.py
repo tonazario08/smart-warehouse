@@ -85,6 +85,9 @@ def get_current_user(
     try:
         payload = decode_access_token(credentials.credentials, settings)
         user_id = int(payload["sub"])
+        version = payload.get("ver", 0)
+        if type(version) is not int or version < 0:
+            raise ValueError("Invalid session version")
     except (ValueError, KeyError, TypeError, jwt.PyJWTError) as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,7 +95,7 @@ def get_current_user(
         ) from error
 
     user = UserRepository(session).get_by_id(user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.auth_version != version:
         raise DomainError(401, "INVALID_CREDENTIALS", "Invalid authentication credentials.")
     return user
 

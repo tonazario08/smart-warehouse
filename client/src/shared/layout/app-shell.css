@@ -25,3 +25,5 @@
 .sidebar-nav{min-height:0;overflow-y:auto;flex-shrink:1;padding-bottom:12px}
 .sidebar-footer,.brand,.sidebar-label{flex-shrink:0}
 @media(pointer:coarse){.sidebar-link{min-height:44px}}
+
+.user-menu__panel a{display:block;white-space:nowrap;border-radius:6px;padding:8px 12px;color:var(--color-text-primary);font-size:13px;text-decoration:none}.user-menu__panel a:hover,.user-menu__panel a:focus-visible{background:var(--color-app-background)}

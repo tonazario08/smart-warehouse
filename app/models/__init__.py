@@ -1,4 +1,5 @@
 from app.anomalies.models import AnomalyAlert, AnomalyReview, AnomalyRun
+from app.auth.recovery_models import PasswordRecoveryBudget, PasswordResetToken
 from app.models.domain import (
     Category,
     Inbound,
@@ -28,6 +29,8 @@ __all__ = [
     "Inbound",
     "MovementProvenance",
     "Outbound",
+    "PasswordRecoveryBudget",
+    "PasswordResetToken",
     "Product",
     "PurchaseRequest",
     "PurchaseRequestWorkflow",
