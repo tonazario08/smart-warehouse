@@ -11,8 +11,10 @@ import { Select } from '../../shared/ui/Select'
 import { Badge } from '../../shared/ui/Badge'
 import { Button } from '../../shared/ui/Button'
 import type { Page } from '../../types'
-import { getReplenishmentDays, getReplenishmentRun, replenishmentError } from './api'
+import { getReplenishmentAlertSources, getReplenishmentDays, getReplenishmentRun, replenishmentError } from './api'
 import type { Algorithm, Policy, ReplenishmentRun, SimulationDay } from './types'
+import { evaluateReplenishmentAlert, getFixtureWarehouseBinding } from './alert'
+import type { ReplenishmentAlertSources } from './alert'
 import '../../shared/styles/management.css'
 import './replenishment.css'
 
@@ -27,6 +29,8 @@ const percent = (value: string | null, reason?: string | null) => {
   return 'Không xác định'
 }
 const moment = (value: string | null) => value ? formatDateTime(value) : 'Không xác định'
+type LoadedRun = { key: string; run: ReplenishmentRun }
+type CaseResult<T> = { owner: LoadedRun; key: string; value: T }
 
 export function ReplenishmentRunPage() {
   const { runId = '' } = useParams()
@@ -37,10 +41,12 @@ export function ReplenishmentRunPage() {
   const [policy, setPolicy] = useState<Policy>('proposed')
   const [page, setPage] = useState(1)
   const [retry, setRetry] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: string; run: ReplenishmentRun } | null>(null)
-  const [trace, setTrace] = useState<{ key: string; days: Page<SimulationDay> } | null>(null)
+  const [loaded, setLoaded] = useState<LoadedRun | null>(null)
+  const [trace, setTrace] = useState<CaseResult<Page<SimulationDay>> | null>(null)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
-  const [traceFailure, setTraceFailure] = useState<{ key: string; text: string } | null>(null)
+  const [traceFailure, setTraceFailure] = useState<CaseResult<string> | null>(null)
+  const [alertSources, setAlertSources] = useState<CaseResult<ReplenishmentAlertSources> | null>(null)
+  const [alertFailure, setAlertFailure] = useState<CaseResult<string> | null>(null)
   const key = `${token}:${user?.id}:${user?.role}:${runId}:${retry}`
   const traceKey = `${key}:${algorithm}:${horizon}:${service}:${policy}:${page}`
   useEffect(() => {
@@ -50,7 +56,13 @@ export function ReplenishmentRunPage() {
     if (!/^rrv1-[0-9a-f]{64}$/.test(runId)) { setFailure({ key, text: 'Mã kết quả bổ sung hàng không hợp lệ.' }); return () => { active = false } }
     void getReplenishmentRun(token, runId)
       .then(run => { if (active) setLoaded({ key, run }) })
-      .catch((cause: unknown) => { if (active && !(cause instanceof ApiError && cause.staleSession)) setFailure({ key, text: replenishmentError(cause) }) })
+      .catch((cause: unknown) => {
+        if (!active || (cause instanceof ApiError && cause.staleSession)) return
+        const text = cause instanceof ApiError && cause.code === 'REPLENISHMENT_BINDING_UNAVAILABLE'
+          ? 'Thiếu dữ liệu để đối chiếu. ' + replenishmentError(cause)
+          : replenishmentError(cause)
+        setFailure({ key, text })
+      })
     return () => { active = false }
   }, [token, user?.id, user?.role, runId, key])
   const current = loaded?.key === key ? loaded : null, error = failure?.key === key ? failure.text : ''
@@ -59,12 +71,31 @@ export function ReplenishmentRunPage() {
     let active = true
     setTrace(null); setTraceFailure(null)
     void getReplenishmentDays(token, runId, algorithm, horizon, service, policy, page)
-      .then(days => { if (active) setTrace({ key: traceKey, days }) })
-      .catch((cause: unknown) => { if (active && !(cause instanceof ApiError && cause.staleSession)) setTraceFailure({ key: traceKey, text: replenishmentError(cause) }) })
+      .then(days => { if (active) setTrace({ owner: current, key: traceKey, value: days }) })
+      .catch((cause: unknown) => { if (active && !(cause instanceof ApiError && cause.staleSession)) setTraceFailure({ owner: current, key: traceKey, value: replenishmentError(cause) }) })
     return () => { active = false }
   }, [token, user?.id, user?.role, current, runId, algorithm, horizon, service, policy, page, traceKey])
-  const currentTrace = trace?.key === traceKey ? trace.days : null
-  const traceError = traceFailure?.key === traceKey ? traceFailure.text : ''
+  const alertBinding = current ? getFixtureWarehouseBinding(current.run) : null
+  // Stock and ROP must both belong to the current detail load and selected case.
+  useEffect(() => {
+    if (!token || !user || !current || !alertBinding) return
+    let active = true
+    setAlertSources(null); setAlertFailure(null)
+    void getReplenishmentAlertSources(token, alertBinding.product_id, alertBinding.warehouse_id)
+      .then(data => { if (active) setAlertSources({ owner: current, key: traceKey, value: data }) })
+      .catch((cause: unknown) => {
+        if (active && !(cause instanceof ApiError && cause.staleSession)) {
+          setAlertFailure({ owner: current, key: traceKey, value: 'Không đọc được tồn kho hoặc danh mục hiện tại (có thể thiếu quyền truy cập).' })
+        }
+      })
+    return () => { active = false }
+  }, [token, user?.id, user?.role, current, alertBinding, traceKey])
+  const currentTrace = trace?.owner === current && trace.key === traceKey ? trace.value : null
+  const traceError = traceFailure?.owner === current && traceFailure.key === traceKey ? traceFailure.value : ''
+  const sources = alertSources?.owner === current && alertSources.key === traceKey ? alertSources.value : null
+  const sourceError = alertFailure?.owner === current && alertFailure.key === traceKey ? alertFailure.value : ''
+  const alert = current ? evaluateReplenishmentAlert(current.run, currentTrace?.items ?? null, sources) : null
+  const waitingForAlertData = Boolean(alertBinding && !sourceError && !traceError && (!sources || !currentTrace))
   const calibration = current?.run.calibration, manifest = current?.run.manifest
   const metric = calibration?.interval_metrics.find(item => item.algorithm === algorithm && item.horizon === horizon && item.subset === 'all')
   const entry = calibration?.calibration.entries.find(item => item.algorithm === algorithm && item.horizon === horizon)
@@ -105,6 +136,26 @@ export function ReplenishmentRunPage() {
         <Select label="Mức dịch vụ danh nghĩa" value={service} onChange={e => { if (e.target.value) { setService(e.target.value); setPage(1) } }} options={['0.80','0.90','0.95'].map(value => ({ value, label: number(Number(value)*100) + '%' }))} />
         <Select label="Chính sách" value={policy} onChange={e => { if (e.target.value) { setPolicy(e.target.value as Policy); setPage(1) } }} options={[{ value: 'baseline', label: 'Đối chứng' }, { value: 'proposed', label: 'Có tồn an toàn' }]} />
       </div>
+      <section className="replenishment-panel replenishment-alert" aria-label="Cảnh báo bổ sung hàng demo">
+        <h2>Đối chiếu ngưỡng bổ sung hàng (demo)</h2>
+        {waitingForAlertData ? <FeedbackMessage>Đang kiểm tra tồn kho, danh mục và ROP của ngày mô phỏng...</FeedbackMessage>
+          : alert?.status === 'research' ? <FeedbackMessage>Kịch bản nghiên cứu — không đối chiếu với tồn kho.</FeedbackMessage>
+          : alert?.status === 'missing' || sourceError || traceError ? <FeedbackMessage variant="warning">Thiếu dữ liệu để đối chiếu. {sourceError || traceError || (alert?.status === 'missing' ? alert.reason : '')}</FeedbackMessage>
+          : alert?.status === 'reorder' || alert?.status === 'above' ? <>
+            <FeedbackMessage variant={alert.status === 'reorder' ? 'warning' : undefined}>
+              {alert.status === 'reorder' ? 'Đề xuất xem xét bổ sung' : 'Tồn kho trên ngưỡng ROP tham chiếu'}.
+            </FeedbackMessage>
+            <p>Ngày ROP tham chiếu: <strong>{alert.day}</strong>. SKU: <strong>{alert.sku}</strong>;
+              kho: <strong>{alert.warehouseCode}</strong>; tồn: <strong>{number(alert.onHand)}</strong> {alert.unit};
+              ROP: <strong>{number(alert.rop)}</strong> {alert.unit}.</p>
+            {alert.status === 'reorder' && (alert.eoq !== null
+              ? <p>Lượng đặt tham khảo theo EOQ: <strong>{number(alert.eoq)}</strong> {alert.unit}.</p>
+              : <p>Chưa đủ cơ sở hiển thị lượng đặt EOQ.</p>)}
+          </> : <FeedbackMessage>Đang kiểm tra dữ liệu cảnh báo...</FeedbackMessage>}
+        <p className="replenishment-alert-disclosure">Dữ liệu demo/fixture, chỉ dùng trình diễn; lead time {horizon} ngày là giả định của kịch bản.
+          ROP thuộc ngày mô phỏng, không phải ngưỡng đã phê duyệt cho vận hành thực tế.
+          Số tồn là dữ liệu API tại thời điểm đọc; đơn vị tính lấy từ danh mục sản phẩm đã đối chiếu.</p>
+      </section>
       <section className="replenishment-panel"><h2>Độ bất định</h2><p>Khoảng danh nghĩa 90%; kết quả quan sát có thể khác và không bảo đảm mức phục vụ. Các cửa sổ có thể chồng lấp, không được xem là độc lập.</p><dl className="replenishment-facts"><div><dt>Cửa sổ hiệu chỉnh</dt><dd>{entry?.windows.length ?? 0}</dd></div>
         <div><dt>Cửa sổ bị loại</dt><dd>{entry ? Math.max(0, possible - entry.windows.length) : 'Không xác định'}</dd></div>
         <div><dt>Độ bao phủ quan sát</dt><dd>{metric ? percent(metric.coverage, metric.reason_code) : 'Không xác định'}</dd></div>

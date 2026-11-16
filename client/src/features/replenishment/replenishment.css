@@ -10,3 +10,6 @@
 .replenishment-scroll .ui-data-table-wrapper { max-width: none; overflow: visible; }
 .replenishment-page .ui-data-table { min-width: 960px; }
 .replenishment-page td a { white-space: nowrap; overflow-wrap: normal; }
+
+.replenishment-alert { border-left: 4px solid var(--color-border); }
+.replenishment-alert-disclosure { font-size: .875rem; opacity: .85; margin-bottom: 0; }

@@ -1,11 +1,30 @@
 import { ApiError, request } from '../../api'
 import type { Page } from '../../types'
+import type { StockPageData } from '../inventory/types'
+import type { Product } from '../products/types'
+import type { Warehouse } from '../warehouses/types'
+import type { ReplenishmentAlertSources } from './alert'
 import type { Algorithm, Policy, ReplenishmentMode, ReplenishmentRun, ReplenishmentStatus, SimulationDay } from './types'
 
 export const getReplenishmentStatus = (token: string, mode: ReplenishmentMode) => request<ReplenishmentStatus>('/replenishment/status?' + new URLSearchParams({ mode }), {}, token)
 export const listReplenishmentRuns = (token: string, mode: ReplenishmentMode, page: number) => request<Page<ReplenishmentRun>>('/replenishment/runs?' + new URLSearchParams({ mode, page: String(page), page_size: '20' }), {}, token)
 export const getReplenishmentRun = (token: string, id: string) => request<ReplenishmentRun>('/replenishment/runs/' + encodeURIComponent(id), {}, token)
 export const getReplenishmentDays = (token: string, id: string, algorithm: Algorithm, leadTime: number, service: string, policy: Policy, page: number) => request<Page<SimulationDay>>('/replenishment/runs/' + encodeURIComponent(id) + '/days?' + new URLSearchParams({ algorithm, lead_time: String(leadTime), service, policy, page: String(page), page_size: '20' }), {}, token)
+// Reuse existing authenticated request/session handling and read-only catalogue endpoints.
+export async function getReplenishmentAlertSources(
+  token: string,
+  productId: number,
+  warehouseId: number,
+): Promise<ReplenishmentAlertSources> {
+  const params = new URLSearchParams({ product_id: String(productId), warehouse_id: String(warehouseId), page: '1', page_size: '2' })
+  const [stock, product, warehouse] = await Promise.all([
+    request<StockPageData>(`/stock?${params}`, {}, token),
+    request<Product>(`/products/${productId}`, {}, token),
+    request<Warehouse>(`/warehouses/${warehouseId}`, {}, token),
+  ])
+  return { stock, product, warehouse }
+}
+
 export function replenishmentReason(code: string | null): string {
   const messages: Record<string, string> = {
     NO_REVIEWED_POLICY_INPUTS: 'Chưa có dữ liệu được duyệt để tính chính sách bổ sung hàng.',
