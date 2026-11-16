@@ -2,6 +2,7 @@ import pytest
 
 from tests import prepare_replenishment_e2e as fixture
 from tests import run_quality_ci as ci
+from tests import run_replenishment_verification as guarded
 
 
 def test_ci_catalog_permissions_touch_only_public_tree(monkeypatch, tmp_path):
@@ -112,6 +113,29 @@ def test_browser_matrix_covers_each_catalog_once_and_seed_is_strict():
         ci.validate_seed(seed)
 
 
+@pytest.mark.parametrize(
+    "summary",
+    ["11 skipped\n35 passed", "17 skipped\n35 passed", "16 skipped\n34 passed"],
+)
+def test_synthetic_browser_coverage_rejects_wrong_totals(summary):
+    output = f"  ✓ 1 admin sees unavailable research in synthetic CI\n{summary}\n"
+    with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
+        ci.browser_coverage(output, "valid", "valid", "all")
+
+
+def test_synthetic_browser_coverage_requires_passing_tests_and_the_expected_case():
+    with pytest.raises(guarded.GuardError, match="TEST_OUTPUT_INVALID"):
+        ci.browser_coverage("16 skipped\n35 passed\n1 failed\n", "valid", "valid", "all")
+    with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
+        ci.browser_coverage("16 skipped\n35 passed\n", "valid", "valid", "all")
+
+
+def test_synthetic_browser_environment_does_not_enable_assistant_suite(monkeypatch):
+    monkeypatch.setenv("E2E_ASSISTANT", "1")
+    env, _ = ci.browser_environment({"fixture_run_id": ""})
+    assert env["E2E_ASSISTANT"] == "0"
+
+
 def test_browser_coverage_rejects_missing_conditional_node_or_wrong_counts():
     output = "  ✓ 1 real API shows stale state\n  12 skipped\n  2 passed (1s)\n"
     assert ci.browser_coverage(output, "stale", "valid", "replenishment")["passed"] == 2
@@ -125,7 +149,7 @@ def test_browser_coverage_rejects_missing_conditional_node_or_wrong_counts():
         if suite == "all":
             title, summary = (
                 "admin sees unavailable research in synthetic CI",
-                "11 skipped\n35 passed",
+                "16 skipped\n35 passed",
             )
         elif suite == "replenishment":
             title, summary = "real API shows " + policy + " state", "12 skipped\n2 passed"

@@ -230,6 +230,7 @@ def browser_environment(fixture):
             "CI_DB_PASSWORD": secrets.token_urlsafe(32),
             "CI_JWT_SECRET": secrets.token_urlsafe(48),
             "E2E_BASE_URL": "http://127.0.0.1:58082",
+            "E2E_ASSISTANT": "0",
             "E2E_REPLENISHMENT_PROFILE": "synthetic-only",
             "E2E_REPLENISHMENT_RUN_ID": fixture["fixture_run_id"],
             "E2E_REPLENISHMENT_RESEARCH_RUN_ID": "",
@@ -286,7 +287,8 @@ def browser_compose(envfile):
 def browser_coverage(output, policy, forecast, suite):
     counts = guarded.e2e_test_counts(output)
     if suite == "all":
-        expected, title = (35, 11), "admin sees unavailable research in synthetic CI"
+        # Five assistant cases require the separate assistant stack.
+        expected, title = (35, 16), "admin sees unavailable research in synthetic CI"
     elif suite == "replenishment":
         expected, title = (2, 12), "real API shows " + policy + " state"
     else:
