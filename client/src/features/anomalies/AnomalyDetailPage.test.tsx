@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -20,8 +20,50 @@ it('shows a recoverable error if the alert cannot be loaded', async () => {
 })
 it('shows signed attribution and explicit fixture limitation', async () => {
   render(view())
-  expect(await screen.findByText(/Số lượng xuất \(log\): \+0,1/)).toBeInTheDocument()
+  const chart = await screen.findByRole('list', { name: 'Mức đóng góp SHAP' })
+  expect(within(chart).getAllByRole('listitem')[0]).toHaveTextContent(/Số lượng xuất \(log\).*\+0,1/)
+  expect(within(chart).getAllByRole('listitem')[0]).toHaveTextContent('Giá trị đặc trưng 1')
+  expect(screen.getByText('Giá trị nền: 0,6. Sai số đối chiếu: 0. Điểm được giải thích: 0,7.')).toBeInTheDocument()
   expect(screen.getByText(/không chứng minh quan hệ nhân quả/)).toBeInTheDocument()
+})
+it('uses equal scale for signed bars and keeps zero and small contributions readable', async () => {
+  vi.mocked(api.getAlert).mockResolvedValue({
+    ...detail,
+    explanation: { ...detail.explanation, contributions: [0.1, -0.1, 0, 0.05, -1e-10, 0] },
+  })
+  render(view())
+  const chart = await screen.findByRole('list', { name: 'Mức đóng góp SHAP' })
+  const [positive, negative, zero, half, small] = within(chart).getAllByRole('listitem')
+  expect(positive.querySelector('[data-direction="increase"]')).toHaveStyle({ width: '50%' })
+  expect(negative.querySelector('[data-direction="decrease"]')).toHaveStyle({ width: '50%' })
+  expect(half.querySelector('[data-direction="increase"]')).toHaveStyle({ width: '25%' })
+  expect(zero.querySelector('[data-direction]')).toBeNull()
+  expect(within(zero).getByText('0', { exact: true })).toBeInTheDocument()
+  expect(within(negative).getByText('-0,1', { exact: true })).toBeInTheDocument()
+  expect(within(small).getByText('-1E-10', { exact: true })).toBeInTheDocument()
+})
+it.each([
+  { name: 'missing entries', contributions: [0.1] },
+  { name: 'nonfinite entries', contributions: [0.1, Infinity, 0, 0, 0, 0] },
+])('omits a chart with $name', async ({ contributions }) => {
+  vi.mocked(api.getAlert).mockResolvedValue({ ...detail, explanation: { ...detail.explanation, contributions } })
+  render(view())
+  expect(await screen.findByText('Dữ liệu SHAP không đầy đủ hoặc không hợp lệ.')).toBeInTheDocument()
+  expect(screen.queryByRole('list', { name: 'Mức đóng góp SHAP' })).not.toBeInTheDocument()
+})
+it.each(['__proto__', 'hour_fraction', ''])('rejects an invalid feature key %j without losing the alert', async (name) => {
+  vi.mocked(api.getAlert).mockResolvedValue({ ...detail, feature_order: [name, ...detail.feature_order.slice(1)] })
+  render(view())
+  expect(await screen.findByText('Dữ liệu SHAP không đầy đủ hoặc không hợp lệ.')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Thông tin cảnh báo' })).toBeVisible()
+})
+it('uses a readable fallback for an unknown explanation reason', async () => {
+  vi.mocked(api.getAlert).mockResolvedValue({
+    ...detail,
+    explanation: { state: 'unavailable', reason: '__proto__', base_value: null, residual: null, contributions: null },
+  })
+  render(view())
+  expect(await screen.findByText('Chưa có giải thích. Không thể tính giải thích.')).toBeInTheDocument()
 })
 it('retries the same payload with the same key and changes key for edited payload', async () => {
   vi.mocked(api.submitReview).mockRejectedValue(new Error('network'))
@@ -76,5 +118,6 @@ it('shows unavailable explanation without fabricated contributions', async () =>
   vi.mocked(api.getAlert).mockResolvedValue({ ...detail, explanation: { state: 'unavailable', reason: 'EXPLAINER_ERROR', base_value: null, contributions: null, residual: null } })
   render(view())
   expect(await screen.findByText(/Không thể tính giải thích/)).toBeInTheDocument()
+  expect(screen.queryByRole('list', { name: 'Mức đóng góp SHAP' })).not.toBeInTheDocument()
   expect(screen.queryByText(/Số lượng xuất \(log\):/)).not.toBeInTheDocument()
 })

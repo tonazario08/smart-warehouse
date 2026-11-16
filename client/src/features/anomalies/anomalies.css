@@ -8,3 +8,41 @@
 .anomalies-scroll td a { overflow-wrap: anywhere; }
 .anomalies-note { display: grid; gap: .35rem; margin: 1rem 0; font-weight: 600; }
 .anomalies-note textarea { width: 100%; max-width: 40rem; padding: .65rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); font: inherit; }
+
+.anomaly-shap { display: grid; gap: var(--space-2); }
+.anomaly-shap__axis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: .8125rem;
+}
+.anomaly-shap__axis :last-child { text-align: right; }
+.anomaly-shap__rows { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.anomaly-shap__row { display: grid; gap: var(--space-1); padding: var(--space-2) 0; }
+.anomaly-shap__label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.anomaly-shap__label strong { font-variant-numeric: tabular-nums; }
+.anomaly-shap__value { color: var(--color-text-muted); font-size: .8125rem; }
+.anomaly-shap__track {
+  position: relative;
+  height: .75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-app-background);
+}
+.anomaly-shap__track::after {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 1px;
+  background: var(--color-text-muted);
+  content: '';
+}
+.anomaly-shap__track span { position: absolute; inset-block: 0; border-radius: var(--radius-sm); }
+.anomaly-shap__track [data-direction="decrease"] { right: 50%; background: var(--color-primary); }
+.anomaly-shap__track [data-direction="increase"] { left: 50%; background: var(--color-danger); }

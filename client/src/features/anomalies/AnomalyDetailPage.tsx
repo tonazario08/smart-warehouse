@@ -15,6 +15,55 @@ import '../../shared/styles/management.css'
 import './anomalies.css'
 
 const number = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 }).format(value)
+const signedDecimal = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8, signDisplay: 'exceptZero' })
+const signedScientific = new Intl.NumberFormat('vi-VN', { notation: 'scientific', maximumSignificantDigits: 3, signDisplay: 'exceptZero' })
+
+function ShapExplanation({ detail }: { detail: Detail }) {
+  const explanation = detail.explanation
+  if (explanation?.state !== 'available') {
+    const reason = explanation?.reason
+    const reasonText = reason ? (typeof reason === 'string' && Object.hasOwn(reasons, reason) ? reasons[reason] : 'Không thể tính giải thích.') : ''
+    return <FeedbackMessage>Chưa có giải thích. {reasonText}</FeedbackMessage>
+  }
+
+  const { base_value: baseValue, contributions, residual } = explanation
+  const { feature_order: featureOrder, features, score } = detail
+  if (!Array.isArray(contributions) || !Array.isArray(featureOrder) || !Array.isArray(features) ||
+      !contributions.length || contributions.length !== featureOrder.length || contributions.length !== features.length ||
+      featureOrder.length !== Object.keys(featureLabels).length || new Set(featureOrder).size !== featureOrder.length ||
+      !featureOrder.every(name => typeof name === 'string' && Object.hasOwn(featureLabels, name)) ||
+      !contributions.every(Number.isFinite) || !features.every(Number.isFinite) ||
+      baseValue === null || !Number.isFinite(baseValue) || residual === null || !Number.isFinite(residual) || !Number.isFinite(score)) {
+    return <FeedbackMessage>Dữ liệu SHAP không đầy đủ hoặc không hợp lệ.</FeedbackMessage>
+  }
+
+  const maxMagnitude = contributions.reduce((max, value) => Math.max(max, Math.abs(value)), 0)
+  const residualText = residual !== 0 && Math.abs(residual) < 0.000001 ? residual.toExponential(2) : number(residual)
+  return <>
+    <p>Giá trị nền: {number(baseValue)}. Sai số đối chiếu: {residualText}. Điểm được giải thích: {number(score)}.</p>
+    <div className="anomaly-shap">
+      <div className="anomaly-shap__axis" aria-hidden="true"><span>Giảm điểm</span><span>0</span><span>Tăng điểm</span></div>
+      <ul className="anomaly-shap__rows" role="list" aria-label="Mức đóng góp SHAP">
+        {featureOrder.map((name, index) => {
+          const value = contributions[index]
+          const magnitude = Math.abs(value)
+          const formatter = magnitude > 0 && magnitude < 0.00000001 ? signedScientific : signedDecimal
+          return <li className="anomaly-shap__row" key={name}>
+            <div className="anomaly-shap__label">
+              <span>{featureLabels[name]}</span>
+              <strong>{formatter.format(value)}</strong>
+            </div>
+            <span className="anomaly-shap__value">Giá trị đặc trưng {number(features[index])}</span>
+            <div className="anomaly-shap__track" aria-hidden="true">
+              {value !== 0 && <span data-direction={value > 0 ? 'increase' : 'decrease'} style={{ width: `${magnitude / maxMagnitude * 50}%` }} />}
+            </div>
+          </li>
+        })}
+      </ul>
+    </div>
+  </>
+}
+
 type Attempt = { scope: string; payload: ReviewRequest; key: string }
 export function AnomalyDetailPage() {
   const { alertId = '' } = useParams(), { token, user } = useAuth()
@@ -58,7 +107,7 @@ export function AnomalyDetailPage() {
       else if (mounted.current && scopeRef.current === captured.scope) { lock.current = false; setPending(false) }
     }
   }
-  const detail = current?.detail, explanation = detail?.explanation
+  const detail = current?.detail
   return <section className="anomalies-page management-workspace">
     <PageHeader title="Chi tiết bất thường" description="Điểm cao hơn biểu thị bản ghi khác thường hơn, không phải xác suất." actions={<Link to="/anomalies">Về danh sách</Link>} />
     <FeedbackMessage variant="warning">Dữ liệu kiểm thử tổng hợp. Hiệu quả trên dữ liệu thực chưa được xác minh. Đóng góp của mô hình không chứng minh quan hệ nhân quả.</FeedbackMessage>
@@ -66,7 +115,11 @@ export function AnomalyDetailPage() {
       <section className="management-panel anomalies-panel"><h2>Thông tin cảnh báo</h2><dl className="anomalies-facts">
         <div><dt>Mã cảnh báo</dt><dd>{detail.alert_id}</dd></div><div><dt>Mã bản ghi nguồn</dt><dd>{detail.source_record_key}</dd></div><div><dt>Thời điểm xuất</dt><dd>{formatDateTime(detail.occurred_at)}</dd></div><div><dt>Điểm bất thường</dt><dd>{number(detail.score)}</dd></div><div><dt>Ngưỡng cảnh báo</dt><dd>{number(detail.threshold)}</dd></div><div><dt>Trạng thái</dt><dd>{statusLabels[detail.review_status]}</dd></div><div><dt>Phiên bản đánh giá</dt><dd>{detail.version}</dd></div>
       </dl></section>
-      <section className="management-panel anomalies-panel"><h2>Giải thích của mô hình</h2><p>Phép giải thích giả định các đặc trưng độc lập khi che dữ liệu.</p>{explanation?.state === 'available' && explanation.contributions && explanation.base_value !== null && explanation.residual !== null ? <><p>Giá trị nền: {number(explanation.base_value)}. Sai số đối chiếu: {(explanation.residual !== 0 && explanation.residual < 0.000001 ? explanation.residual.toExponential(2) : number(explanation.residual))}. Điểm được giải thích: {number(detail.score)}.</p><ul>{detail.feature_order.map((name, index) => <li key={name}>{featureLabels[name] ?? 'Đặc trưng không xác định'}: {explanation.contributions![index] >= 0 ? '+' : ''}{number(explanation.contributions![index])} (giá trị {number(detail.features[index])})</li>)}</ul></> : <FeedbackMessage>Chưa có giải thích. {explanation?.reason ? reasons[explanation.reason] ?? 'Không thể tính giải thích.' : ''}</FeedbackMessage>}</section>
+      <section className="management-panel anomalies-panel">
+        <h2>Giải thích của mô hình</h2>
+        <p>Phép giải thích giả định các đặc trưng độc lập khi che dữ liệu.</p>
+        <ShapExplanation detail={detail} />
+      </section>
       <section className="management-panel anomalies-panel"><h2>Nguồn và phiên bản</h2><dl className="anomalies-facts"><div><dt>Mã kết quả</dt><dd>{detail.run_id}</dd></div><div><dt>Phiên bản dữ liệu</dt><dd>{detail.run.input_version}</dd></div><div><dt>Phiên bản đặc trưng</dt><dd>{detail.run.feature_version}</dd></div><div><dt>Mô hình</dt><dd>Rừng cô lập, {detail.run.model_version}</dd></div><div><dt>Thời điểm tạo</dt><dd>{formatDateTime(detail.run.created_at)}</dd></div><div><dt>Định nghĩa điểm</dt><dd>Đảo dấu điểm mẫu của rừng cô lập</dd></div>{detail.run.partitions.map(p => <div key={p.name}><dt>{partitionLabels[p.name] ?? 'Giai đoạn'}</dt><dd>{p.start} đến trước {p.end}; giới hạn thông tin {formatDateTime(p.information_cutoff)}</dd></div>)}</dl></section>
       {can(user?.role, 'anomaly:review') && <section className="management-panel anomalies-panel"><h2>Đánh giá cảnh báo</h2><p>Đánh giá chỉ cập nhật hồ sơ cảnh báo, không thay đổi tồn kho hay giao dịch.</p>{error && <><FeedbackMessage variant="error">{error}</FeedbackMessage><Button variant="secondary" onClick={() => setRetry(n => n + 1)}>Tải lại trạng thái</Button></>}{message && <FeedbackMessage variant="success">{message}</FeedbackMessage>}
         <Select label="Quyết định" value={decision} onChange={e => { if (e.target.value) setDecision(e.target.value as 'confirmed' | 'dismissed') }} options={[{ value: 'confirmed', label: 'Xác nhận' }, { value: 'dismissed', label: 'Bác bỏ' }]} />
