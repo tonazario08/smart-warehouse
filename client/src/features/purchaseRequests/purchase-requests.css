@@ -12,6 +12,16 @@
 .purchase-requests-page .purchase-identity span, .purchase-requests-page dt { color: var(--color-text-muted); font-size: 12px; }
 .purchase-requests-page .purchase-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 0; }
 .purchase-requests-page dd { margin: 6px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.purchase-requests-page .purchase-nearest { display: grid; gap: 12px; padding: 16px; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-app-background); }
+.purchase-requests-page .purchase-nearest > * { min-width: 0; }
+.purchase-requests-page .purchase-nearest h3 { margin: 0; font-size: 15px; line-height: 22px; }
+.purchase-requests-page .purchase-nearest-method { color: var(--color-text-muted); font-size: 13px; overflow-wrap: anywhere; }
+.purchase-requests-page .purchase-nearest-results { display: grid; gap: 12px; }
+.purchase-requests-page .purchase-nearest-results:empty { display: none; }
+.purchase-requests-page .purchase-nearest-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.purchase-requests-page .purchase-nearest-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.purchase-requests-page .purchase-nearest-list li > div { min-width: 0; overflow-wrap: anywhere; }
+.purchase-requests-page .purchase-nearest-list p { margin: 4px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .purchase-requests-page .purchase-recovery { border-color: var(--color-warning); background: var(--color-warning-soft); }
 .purchase-requests-page .purchase-confirmation-copy,
 .purchase-requests-page .purchase-confirmation-copy p { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }

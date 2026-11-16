@@ -2,6 +2,11 @@ export type PurchaseRequestStatus = 'pending' | 'approved' | 'rejected' | 'fulfi
 export const statusLabels: Record<PurchaseRequestStatus, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối', fulfilled: 'Đã xuất hàng' }
 export interface PurchaseRequestInput { warehouse_id: number; product_id: number; quantity: number; note: string | null }
 export interface PurchaseRequestDraft { warehouse: string; product: string; quantity: string; note: string }
+export interface NearestWarehouseInput { product_id: number; quantity: number; latitude: number; longitude: number }
+export interface NearestWarehouse { warehouse_id: number; code: string; name: string; available_quantity: number; distance_km: number }
+export interface NearestWarehouseResult {
+  product_id: number; quantity: number; method: 'great_circle_haversine'; earth_radius_meters: number; warehouses: NearestWarehouse[]
+}
 export interface PurchaseRequestFilters {
   status?: PurchaseRequestStatus; warehouse_id?: number; product_id?: number; requested_by_id?: number;
   created_from?: string; created_to?: string; page?: number; page_size?: number;

@@ -1,5 +1,6 @@
 """Strict customer-request inputs and explicit, non-secret response projections."""
 
+import re
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -101,3 +102,33 @@ class PurchaseRequestResponse(StrictBoundary):
     note: str | None
     decision: PurchaseRequestDecisionResponse | None
     fulfillment: PurchaseRequestFulfillmentResponse | None
+
+
+class NearestWarehouseQuery(StrictBoundary):
+    product_id: PositiveInteger
+    quantity: PositiveInteger
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+    @field_validator("product_id", "quantity", mode="before")
+    @classmethod
+    def parse_positive_integer(cls, value: object) -> object:
+        if isinstance(value, str) and re.fullmatch(r"[0-9]{1,10}", value):
+            return int(value)
+        return value
+
+
+class NearestWarehouseRead(StrictBoundary):
+    warehouse_id: int
+    code: str
+    name: str
+    available_quantity: int
+    distance_km: float
+
+
+class NearestWarehouseResponse(StrictBoundary):
+    product_id: int
+    quantity: int
+    method: Literal["great_circle_haversine"]
+    earth_radius_meters: float
+    warehouses: list[NearestWarehouseRead]

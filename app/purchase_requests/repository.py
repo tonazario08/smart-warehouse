@@ -3,11 +3,11 @@
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, select, text
 
 from app.core.pagination import PageParams
 from app.inventory.repository import InventoryRepository
-from app.models import Product, PurchaseRequest, PurchaseRequestWorkflow, Stock
+from app.models import Product, PurchaseRequest, PurchaseRequestWorkflow, Stock, Warehouse
 from app.purchase_requests.schemas import PurchaseRequestFilters
 
 PurchaseRequestRecord = tuple[PurchaseRequest, PurchaseRequestWorkflow | None]
@@ -93,6 +93,25 @@ class PurchaseRequestRepository(InventoryRepository):
             .with_for_update(read=True)
             .execution_options(populate_existing=True)
         )
+
+    def nearest_warehouse_stock(
+        self, product_id: int, quantity: int
+    ) -> list[tuple[Warehouse, int]] | None:
+        """Read active product and eligible stock in one statement, without locking rows."""
+        rows = self.session.execute(
+            select(Warehouse, Stock.quantity)
+            .select_from(Product)
+            .outerjoin(Stock, and_(Stock.product_id == Product.id, Stock.quantity >= quantity))
+            .outerjoin(Warehouse, Warehouse.id == Stock.warehouse_id)
+            .where(Product.id == product_id, Product.is_active.is_(True))
+        ).all()
+        if not rows:
+            return None
+        return [
+            (warehouse, available)
+            for warehouse, available in rows
+            if warehouse is not None and available is not None
+        ]
 
     def lock_existing_stock(self, warehouse_id: int, product_id: int) -> Stock | None:
         return self.session.scalar(

@@ -16,12 +16,20 @@ export const purchase: PurchaseRequest = { id: 8, request_number: 'PR-0008', war
 export const approvedPurchase: PurchaseRequest = { ...purchase, status: 'approved', updated_at: '2026-10-19T01:00:00Z', decision: { kind: 'approved', actor_id: 7, decided_at: '2026-10-19T01:00:00Z', rejection_reason: null } }
 export const fulfilledPurchase: PurchaseRequest = { ...approvedPurchase, status: 'fulfilled', updated_at: '2026-10-19T02:00:00Z', fulfillment: { outbound_id: 11, transaction_id: 21, actor_id: 9, fulfilled_at: '2026-10-19T02:00:00Z', quantity_before: 10, quantity_after: 7 } }
 export const purchasePage = (items = [purchase], total = items.length, page = 1) => ({ items, total, page, page_size: 20 })
+export const purchaseNearest = {
+  product_id: 3, quantity: 3, method: 'great_circle_haversine', earth_radius_meters: 6371008.8,
+  warehouses: [
+    { warehouse_id: 2, code: 'KHO-B', name: 'Kho khác', available_quantity: 12, distance_km: 3.5 },
+    { warehouse_id: 1, code: 'KHO-A', name: 'Kho yêu cầu', available_quantity: 45, distance_km: 8.25 },
+  ],
+}
 export function purchaseHandler(url: string): Response {
   const path = new URL(url).pathname
   if (path.endsWith('/products/3')) return jsonResponse(purchaseProduct)
   if (path.endsWith('/products')) return jsonResponse({ items: [purchaseProduct], total: 1, page: 1, page_size: 100 })
   if (path.endsWith('/warehouses')) return jsonResponse({ items: purchaseWarehouses, total: 2, page: 1, page_size: 100 })
   if (path.endsWith('/stock')) return jsonResponse({ items: [{ id: 1, warehouse_id: 1, product_id: 3, quantity: 10 }], total: 1, page: 1, page_size: 100 })
+  if (path.endsWith('/purchase-requests/nearest-warehouses')) return jsonResponse(purchaseNearest)
   if (path.endsWith('/purchase-requests/8')) return jsonResponse(purchase)
   if (path.endsWith('/purchase-requests')) return jsonResponse(purchasePage())
   return jsonResponse({ items: [], total: 0, page: 1, page_size: 100 })

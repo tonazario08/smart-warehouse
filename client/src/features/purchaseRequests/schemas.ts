@@ -1,7 +1,11 @@
 import type { PurchaseRequestDraft, PurchaseRequestInput } from './types'
 
+export function isPositivePurchaseInteger(value: string): boolean {
+  return /^[1-9]\d*$/.test(value) && value.length <= 10 && Number(value) <= 2147483647
+}
+
 export function validatePurchaseRequest(draft: PurchaseRequestDraft): { input?: PurchaseRequestInput; error?: string } {
-  if ([draft.warehouse, draft.product, draft.quantity].some(value => !/^[1-9]\d*$/.test(value) || value.length > 10 || Number(value) > 2147483647)) return { error: 'Chọn kho, sản phẩm và số lượng nguyên dương hợp lệ.' }
+  if (![draft.warehouse, draft.product, draft.quantity].every(isPositivePurchaseInteger)) return { error: 'Chọn kho, sản phẩm và số lượng nguyên dương hợp lệ.' }
   const note = draft.note.trim() || null
   if (Array.from(note ?? '').length > 2000) return { error: 'Ghi chú tối đa 2000 ký tự.' }
   return { input: { warehouse_id: Number(draft.warehouse), product_id: Number(draft.product), quantity: Number(draft.quantity), note } }

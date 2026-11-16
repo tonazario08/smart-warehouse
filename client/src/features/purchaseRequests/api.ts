@@ -1,6 +1,6 @@
 import { ApiError, request } from '../../api'
 import type { Page } from '../../types'
-import type { PurchaseRequest, PurchaseRequestFilters, PurchaseRequestInput } from './types'
+import type { PurchaseRequest, PurchaseRequestFilters, PurchaseRequestInput, NearestWarehouseInput, NearestWarehouseResult } from './types'
 
 export function listPurchaseRequests(token: string, filters: PurchaseRequestFilters): Promise<Page<PurchaseRequest>> {
   const params = new URLSearchParams()
@@ -9,6 +9,13 @@ export function listPurchaseRequests(token: string, filters: PurchaseRequestFilt
 }
 export function getPurchaseRequest(token: string, id: number): Promise<PurchaseRequest> { return request('/purchase-requests/' + id, {}, token) }
 export function getPurchaseRequestByKey(token: string, key: string): Promise<PurchaseRequest> { return request('/purchase-requests/by-key/' + encodeURIComponent(key), {}, token) }
+export function getNearestWarehouses(token: string, input: NearestWarehouseInput): Promise<NearestWarehouseResult> {
+  const params = new URLSearchParams({
+    product_id: String(input.product_id), quantity: String(input.quantity),
+    latitude: String(input.latitude), longitude: String(input.longitude),
+  })
+  return request('/purchase-requests/nearest-warehouses?' + params, {}, token)
+}
 export function createPurchaseRequest(token: string, key: string, input: PurchaseRequestInput): Promise<PurchaseRequest> { return request('/purchase-requests', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(input) }, token) }
 export function approvePurchaseRequest(token: string, id: number): Promise<PurchaseRequest> { return request('/purchase-requests/' + id + '/approve', { method: 'POST', body: '{}' }, token) }
 export function rejectPurchaseRequest(token: string, id: number, reason: string): Promise<PurchaseRequest> { return request('/purchase-requests/' + id + '/reject', { method: 'POST', body: JSON.stringify({ rejection_reason: reason }) }, token) }

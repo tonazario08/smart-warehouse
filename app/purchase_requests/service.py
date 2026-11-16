@@ -1,6 +1,7 @@
 """Customer requests: one caller-owned transaction and immutable effect history."""
 
 import json
+import math
 from hashlib import sha256
 from typing import NoReturn
 from uuid import UUID, uuid4
@@ -12,6 +13,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from app.auth.dependencies import PERMISSION_ROLES, Permission
 from app.core.errors import DomainError
 from app.core.pagination import PageParams
+from app.gis.schemas import distance_mm
 from app.inventory.schemas import InventoryMovementCreate
 from app.models import (
     MovementProvenance,
@@ -24,6 +26,9 @@ from app.models import (
 from app.models.domain import utc_now
 from app.purchase_requests.repository import PurchaseRequestRecord, PurchaseRequestRepository
 from app.purchase_requests.schemas import (
+    NearestWarehouseQuery,
+    NearestWarehouseRead,
+    NearestWarehouseResponse,
     PurchaseRequestCreate,
     PurchaseRequestFilters,
     PurchaseRequestReject,
@@ -41,6 +46,24 @@ def fingerprint(body: PurchaseRequestCreate) -> str:
 
 def conflict() -> NoReturn:
     raise DomainError(409, "PURCHASE_REQUEST_STATE_CONFLICT", "Purchase request state conflicts.")
+
+
+EARTH_RADIUS_METERS = 6_371_008.8
+
+
+def _warehouse_position(warehouse) -> tuple[float, float] | None:
+    latitude, longitude = warehouse.latitude, warehouse.longitude
+    if latitude is None or longitude is None:
+        return None
+    if not (math.isfinite(latitude) and math.isfinite(longitude)):
+        return None
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return None
+    return longitude, latitude
+
+
+def _longitude_on_date_line(longitude: float) -> float:
+    return -180.0 if longitude == 180.0 else longitude
 
 
 class PurchaseRequestService:
@@ -183,6 +206,49 @@ class PurchaseRequestService:
             )
         rows, total = self.repository.list_owned(filters, page, owner_id=self._owner(actor))
         return [self._project(row) for row in rows], total
+
+    def nearest_warehouses(
+        self, actor: User, query: NearestWarehouseQuery
+    ) -> NearestWarehouseResponse:
+        """Rank active stock-bearing warehouses by great-circle distance for the B2B flow."""
+        self._authorize(actor, Permission.PURCHASE_REQUEST_CREATE)
+        stock_rows = self.repository.nearest_warehouse_stock(query.product_id, query.quantity)
+        if stock_rows is None:
+            raise DomainError(404, "PRODUCT_NOT_FOUND", "Product was not found.")
+        candidates = []
+        origin_longitude = _longitude_on_date_line(query.longitude)
+        for warehouse, available in stock_rows:
+            position = _warehouse_position(warehouse)
+            if position is None:
+                continue
+            longitude, latitude = position
+            if abs(latitude) == 90.0 or abs(query.latitude) == 90.0:
+                # Longitude has no effect on distance to either pole.
+                millimetres = distance_mm(0.0, latitude, 0.0, query.latitude)
+            else:
+                millimetres = distance_mm(
+                    _longitude_on_date_line(longitude), latitude, origin_longitude, query.latitude
+                )
+            if not math.isfinite(millimetres) or millimetres < 0:
+                continue
+            candidates.append((millimetres, warehouse, available))
+        candidates.sort(key=lambda item: (item[0], item[1].id))
+        return NearestWarehouseResponse(
+            product_id=query.product_id,
+            quantity=query.quantity,
+            method="great_circle_haversine",
+            earth_radius_meters=EARTH_RADIUS_METERS,
+            warehouses=[
+                NearestWarehouseRead(
+                    warehouse_id=warehouse.id,
+                    code=warehouse.code,
+                    name=warehouse.name,
+                    available_quantity=available,
+                    distance_km=round(millimetres / 1_000_000, 3),
+                )
+                for millimetres, warehouse, available in candidates
+            ],
+        )
 
     def _write(self, actor: User, permission: Permission, operation):
         self._authorize(actor, permission)

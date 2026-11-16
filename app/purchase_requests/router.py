@@ -4,7 +4,7 @@ import re
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -16,6 +16,8 @@ from app.db.session import get_session
 from app.models import User
 from app.purchase_requests.repository import PurchaseRequestRepository
 from app.purchase_requests.schemas import (
+    NearestWarehouseQuery,
+    NearestWarehouseResponse,
     PurchaseRequestAction,
     PurchaseRequestCreate,
     PurchaseRequestFilters,
@@ -55,6 +57,12 @@ def parse_uuid(value: str, location: str, field: str) -> UUID:
         return UUID(value)
     except (ValueError, TypeError, AttributeError):
         invalid(location, field)
+
+
+def single_query_params(request: Request) -> None:
+    for field in request.query_params:
+        if len(request.query_params.getlist(field)) != 1:
+            invalid("query", field)
 
 
 def query_models(request: Request, actor: User):
@@ -187,6 +195,22 @@ def list_purchase_requests(request: Request, actor: ReadActor, session: Database
 )
 def get_by_key(key: str, actor: ReadActor, session: Database):
     return service(session).get_by_key(actor, parse_uuid(key, "path", "key"))
+
+
+@router.get(
+    "/nearest-warehouses",
+    response_model=NearestWarehouseResponse,
+    description="B2B read-only ranking: warehouses with enough stock and valid coordinates, "
+    "ordered by great-circle (haversine) distance. Client creation permission only.",
+)
+def nearest_warehouses(
+    request: Request,
+    query: Annotated[NearestWarehouseQuery, Query()],
+    actor: CreateActor,
+    session: Database,
+):
+    single_query_params(request)
+    return service(session).nearest_warehouses(actor, query)
 
 
 @router.get(

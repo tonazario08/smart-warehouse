@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
-import { deferredResponse, jsonResponse, purchase, purchaseHandler, purchaseProduct, renderPurchaseRequestRoute } from '../../test/renderPurchaseRequestRoute'
+import { deferredResponse, jsonResponse, purchase, purchaseHandler, purchaseNearest, purchaseProduct, renderPurchaseRequestRoute } from '../../test/renderPurchaseRequestRoute'
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
 async function fill() {
@@ -115,4 +115,125 @@ it.each(['empty', 'inactive'])('shows %s product choices honestly and prevents c
   expect(await screen.findByText('Chưa có sản phẩm đang hoạt động để yêu cầu.')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Xem lại yêu cầu' })).toBeDisabled()
   expect(within(screen.getByRole('combobox', { name: 'Sản phẩm' })).getAllByRole('option')).toHaveLength(1)
+})
+const nearestPanel = () => within(screen.getByRole('heading', { name: 'Kho gần điểm nhận' }).parentElement as HTMLElement)
+async function chooseProductAndPoint(quantity = '3', latitude = '10.5', longitude = '106.5') {
+  await screen.findByRole('option', { name: /B2B-003/ })
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '3')
+  await userEvent.type(screen.getByLabelText('Số lượng'), quantity)
+  await userEvent.type(screen.getByLabelText('Vĩ độ điểm nhận'), latitude)
+  await userEvent.type(screen.getByLabelText('Kinh độ điểm nhận'), longitude)
+}
+async function findNearest() {
+  await userEvent.click(screen.getByRole('button', { name: 'Tìm kho gần có đủ tồn' }))
+}
+it.each(['1e2', '1.0', '2147483648'])('does not search for quantity %s rejected by submission', async quantity => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new')
+  await chooseProductAndPoint()
+  const quantityInput = screen.getByLabelText<HTMLInputElement>('Số lượng')
+  fireEvent.change(quantityInput, { target: { value: quantity } })
+  expect(quantityInput.value).toBe(quantity)
+  await findNearest()
+  expect(nearestPanel().getByText('Nhập số lượng hợp lệ trước khi tìm kho gần.')).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/nearest-warehouses'))).toBe(false)
+})
+
+it('shows nearest warehouses in API order with distance, stock, method and the exact query', async () => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new')
+  await chooseProductAndPoint()
+  await findNearest()
+  const items = within(await nearestPanel().findByRole('list')).getAllByRole('listitem')
+  expect(items).toHaveLength(2)
+  expect(items[0]).toHaveTextContent('Kho khác (KHO-B)')
+  expect(items[0]).toHaveTextContent('3,5 km')
+  expect(items[0]).toHaveTextContent('còn 12 cái')
+  expect(items[1]).toHaveTextContent('Kho yêu cầu (KHO-A)')
+  expect(nearestPanel().getByText(/đường chim bay/)).toHaveTextContent(/haversine/)
+  const call = fetchMock.mock.calls.map(([input]) => String(input)).find(url => url.includes('/nearest-warehouses'))
+  expect(call).toBeDefined()
+  const query = new URL(call!).searchParams
+  expect(Object.fromEntries(query)).toEqual({ product_id: '3', quantity: '3', latitude: '10.5', longitude: '106.5' })
+  expect(new Headers(fetchMock.mock.calls.find(([input]) => String(input).includes('/nearest-warehouses'))?.[1]?.headers).get('Authorization')).toBe('Bearer client-purchase-token')
+})
+it('never reorders an empty result and keeps manual warehouse selection', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.includes('/nearest-warehouses') ? jsonResponse({ ...purchaseNearest, warehouses: [] }) : purchaseHandler(url))
+  await chooseProductAndPoint()
+  await findNearest()
+  expect(await screen.findByText('Không có kho đang hoạt động nào đủ tồn cho số lượng này. Vui lòng chọn kho thủ công.')).toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kho hàng' }), '1')
+  expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('1')
+})
+it('fills the warehouse select from a suggestion and submits through the existing flow', async () => {
+  const { fetchMock, active } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', (url, init) => init?.method === 'POST' ? jsonResponse(purchase, 201) : purchaseHandler(url))
+  await chooseProductAndPoint()
+  await findNearest()
+  await nearestPanel().findByRole('list')
+  await userEvent.click(nearestPanel().getByRole('button', { name: 'Chọn kho Kho khác' }))
+  expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('2')
+  await userEvent.click(screen.getByRole('button', { name: 'Xem lại yêu cầu' }))
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Gửi yêu cầu mua hàng' }))
+  await waitFor(() => expect(active.state.location.pathname).toBe('/purchase-requests/8'))
+  const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
+  expect(JSON.parse(String(post?.[1]?.body))).toEqual({ warehouse_id: 2, product_id: 3, quantity: 3, note: null })
+})
+it.each(['product', 'quantity', 'latitude'] as const)('clears stale suggestions when %s changes, dropping the auto-filled warehouse', async field => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => new URL(url).pathname.endsWith('/products') ? jsonResponse({ items: [purchaseProduct, { ...purchaseProduct, id: 4, sku: 'B2B-004' }], total: 2, page: 1, page_size: 100 }) : purchaseHandler(url))
+  await chooseProductAndPoint()
+  await findNearest()
+  await nearestPanel().findByRole('list')
+  await userEvent.click(nearestPanel().getByRole('button', { name: 'Chọn kho Kho khác' }))
+  if (field === 'product') await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '4')
+  if (field === 'quantity') fireEvent.change(screen.getByLabelText('Số lượng'), { target: { value: '4' } })
+  if (field === 'latitude') await userEvent.type(screen.getByLabelText('Vĩ độ điểm nhận'), '1')
+  expect(nearestPanel().queryByRole('list')).not.toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('')
+})
+it('ignores a late suggestion response after inputs change', async () => {
+  const first = deferredResponse(), second = deferredResponse()
+  let calls = 0
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => {
+    if (!url.includes('/nearest-warehouses')) return purchaseHandler(url)
+    return ++calls === 1 ? first.promise : second.promise
+  })
+  await chooseProductAndPoint()
+  await findNearest()
+  fireEvent.change(screen.getByLabelText('Số lượng'), { target: { value: '4' } })
+  await findNearest()
+  await act(async () => second.resolve(jsonResponse({ ...purchaseNearest, warehouses: [{ warehouse_id: 2, code: 'KHO-MOI', name: 'Kho mới', available_quantity: 12, distance_km: 1 }] })))
+  expect(await nearestPanel().findByText('Kho mới')).toBeInTheDocument()
+  await act(async () => first.resolve(jsonResponse({ ...purchaseNearest, warehouses: [{ warehouse_id: 1, code: 'KHO-CU', name: 'Kho cũ', available_quantity: 12, distance_km: 9 }] })))
+  expect(nearestPanel().queryByText('Kho cũ')).not.toBeInTheDocument()
+  expect(nearestPanel().getByText('Kho mới')).toBeInTheDocument()
+})
+it('shows a Vietnamese error and keeps manual selection when the lookup fails', async () => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.includes('/nearest-warehouses') ? jsonResponse({ detail: { code: 'PRODUCT_NOT_FOUND' } }, 404) : purchaseHandler(url))
+  await chooseProductAndPoint()
+  await findNearest()
+  expect(await nearestPanel().findByText('Không tìm thấy sản phẩm.')).toBeInTheDocument()
+  expect(nearestPanel().queryByRole('list')).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/nearest-warehouses'))).toHaveLength(1)
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kho hàng' }), '1')
+  expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('1')
+})
+it('keeps a manually chosen warehouse after a lookup and refuses an unknown suggestion', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.includes('/nearest-warehouses') ? jsonResponse({ ...purchaseNearest, warehouses: [{ warehouse_id: 999, code: 'GONE', name: 'Kho đã xóa', available_quantity: 5, distance_km: 1 }] }) : purchaseHandler(url))
+  await screen.findByRole('option', { name: /B2B-003/ })
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kho hàng' }), '1')
+  await chooseProductAndPoint()
+  await findNearest()
+  expect(await nearestPanel().findByText('Kho đã xóa')).toBeInTheDocument()
+  await userEvent.click(nearestPanel().getByRole('button', { name: 'Chọn kho Kho đã xóa' }))
+  expect(nearestPanel().getByText('Kho gợi ý không còn trong danh sách kho. Vui lòng tải lại biểu mẫu hoặc chọn kho thủ công.')).toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('1')
+})
+it.each([['', '106.5'], ['10.5', ''], ['91', '106.5'], ['10.5', '181'], ['abc', '106.5']])('rejects receive coordinates %s / %s without calling the API', async (latitude, longitude) => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new')
+  await screen.findByRole('option', { name: /B2B-003/ })
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '3')
+  await userEvent.type(screen.getByLabelText('Số lượng'), '3')
+  if (latitude) await userEvent.type(screen.getByLabelText('Vĩ độ điểm nhận'), latitude)
+  if (longitude) await userEvent.type(screen.getByLabelText('Kinh độ điểm nhận'), longitude)
+  await findNearest()
+  expect(nearestPanel().getByText('Nhập vĩ độ (-90 đến 90) và kinh độ (-180 đến 180) hợp lệ.')).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/nearest-warehouses'))).toBe(false)
 })

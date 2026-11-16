@@ -3,7 +3,7 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from app.auth.security import create_access_token
 from app.models import (
@@ -302,7 +302,7 @@ def test_openapi_purchase_request_contract(postgres_client):
         for path, methods in postgres_client.get("/openapi.json").json()["paths"].items()
         if path.startswith(BASE)
     }
-    assert len(paths) == 6 and sum(len(methods) for methods in paths.values()) == 7
+    assert len(paths) == 7 and sum(len(methods) for methods in paths.values()) == 8
     operation = paths[BASE]["post"]
     header = next(p for p in operation["parameters"] if p["name"] == "Idempotency-Key")
     assert header["required"] is True and header["schema"]["format"] == "uuid"
@@ -568,3 +568,232 @@ def test_recover_after_real_commit_with_deliberately_discarded_client_result(
     )
     assert create(postgres_client, ids, auth["client"], key).json() == after
     # This discards real returned results, not a claimed real network disconnect.
+
+
+NEAREST = BASE + "/nearest-warehouses"
+
+
+def seed_nearest(session):
+    users = [
+        User(email=f"m4-near-{name}@example.test", password_hash="fixture", role=role)
+        for name, role in (("client", "client"), ("admin", "admin"), ("warehouse", "warehouse"))
+    ]
+    category = Category(name="M4 nearest category")
+    product = Product(sku="M4-NEAR", name="M4 nearest product", category=category, unit="each")
+    inactive = Product(
+        sku="M4-NEAR-OFF",
+        name="M4 nearest inactive",
+        category=category,
+        unit="each",
+        is_active=False,
+    )
+    warehouses = [
+        Warehouse(
+            code="M4-NEAR-1",
+            name="M4 near tie first",
+            address="Fixture",
+            latitude=10.0,
+            longitude=106.0,
+        ),
+        Warehouse(
+            code="M4-NEAR-2",
+            name="M4 near tie second",
+            address="Fixture",
+            latitude=10.0,
+            longitude=106.0,
+        ),
+        Warehouse(
+            code="M4-NEAR-3",
+            name="M4 near farther",
+            address="Fixture",
+            latitude=10.0,
+            longitude=107.0,
+        ),
+        Warehouse(code="M4-NEAR-4", name="M4 near no coordinates", address="Fixture"),
+        Warehouse(
+            code="M4-NEAR-5",
+            name="M4 near low stock",
+            address="Fixture",
+            latitude=10.0,
+            longitude=106.0,
+        ),
+    ]
+    session.add_all([*users, product, inactive, *warehouses])
+    session.flush()
+    session.add_all(
+        [
+            Stock(warehouse_id=warehouses[0].id, product_id=product.id, quantity=5),
+            Stock(warehouse_id=warehouses[1].id, product_id=product.id, quantity=50),
+            Stock(warehouse_id=warehouses[2].id, product_id=product.id, quantity=100),
+            Stock(warehouse_id=warehouses[3].id, product_id=product.id, quantity=100),
+            Stock(warehouse_id=warehouses[4].id, product_id=product.id, quantity=2),
+        ]
+    )
+    session.commit()
+    return {
+        "client": users[0].id,
+        "admin": users[1].id,
+        "warehouse": users[2].id,
+        "product": product.id,
+        "inactive": inactive.id,
+        "warehouses": [warehouse.id for warehouse in warehouses],
+    }
+
+
+@pytest.fixture
+def nearest_data(postgres_session, unit_settings):
+    ids = seed_nearest(postgres_session)
+    auth = {
+        role: {"Authorization": "Bearer " + create_access_token(ids[role], unit_settings)}
+        for role in ("client", "admin", "warehouse")
+    }
+    return ids, auth
+
+
+def nearest_params(ids, **changes):
+    return {
+        "product_id": ids["product"],
+        "quantity": 3,
+        "latitude": 10.0,
+        "longitude": 106.0,
+        **changes,
+    }
+
+
+def test_nearest_warehouse_lookup_reads_active_product_and_stock_in_one_statement(
+    postgres_client, postgres_session, nearest_data
+):
+    ids, auth = nearest_data
+    connection = postgres_session.connection()
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if "FROM products" in statement or "JOIN stocks" in statement:
+            statements.append(statement)
+
+    event.listen(connection, "before_cursor_execute", capture)
+    try:
+        response = postgres_client.get(
+            NEAREST, headers=auth["client"], params=nearest_params(ids)
+        )
+    finally:
+        event.remove(connection, "before_cursor_execute", capture)
+
+    assert response.status_code == 200
+    assert response.json()["warehouses"]
+    assert len(statements) == 1
+    assert "products.is_active" in statements[0] and "JOIN stocks" in statements[0]
+
+
+def test_nearest_warehouses_rank_by_distance_and_ties_by_id(
+    postgres_client, postgres_session, nearest_data
+):
+    ids, auth = nearest_data
+    response = postgres_client.get(
+        NEAREST, headers=auth["client"], params=nearest_params(ids)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_id"] == ids["product"] and body["quantity"] == 3
+    assert body["method"] == "great_circle_haversine"
+    assert body["earth_radius_meters"] == pytest.approx(6_371_008.8)
+    rows = body["warehouses"]
+    assert [row["warehouse_id"] for row in rows] == ids["warehouses"][:3]
+    assert rows[0]["distance_km"] == 0.0 and rows[1]["distance_km"] == 0.0
+    # Asymmetric point: one degree of longitude at latitude 10 is ~109.5 km, so an
+    # accidental latitude/longitude swap in the distance call cannot pass unnoticed.
+    assert rows[2]["distance_km"] == pytest.approx(109.506, abs=0.001)
+    assert [row["available_quantity"] for row in rows] == [5, 50, 100]
+    assert set(rows[0]) == {
+        "warehouse_id",
+        "code",
+        "name",
+        "available_quantity",
+        "distance_km",
+    }
+
+    narrow = postgres_client.get(
+        NEAREST, headers=auth["client"], params=nearest_params(ids, quantity=60)
+    ).json()
+    assert [row["warehouse_id"] for row in narrow["warehouses"]] == [ids["warehouses"][2]]
+
+
+@pytest.mark.parametrize("role", ["admin", "warehouse"])
+def test_nearest_warehouses_are_forbidden_before_data_disclosure(
+    postgres_client, nearest_data, role
+):
+    ids, auth = nearest_data
+    response = postgres_client.get(NEAREST, headers=auth[role], params=nearest_params(ids))
+    assert response.status_code == 403
+    assert "warehouses" not in response.text
+
+
+@pytest.mark.parametrize(
+    "path", ["", "/by-key/00000000-0000-0000-0000-000000000000"]
+)
+def test_nearest_warehouses_anonymous_is_denied(postgres_client, path):
+    response = postgres_client.get(BASE + path)
+    assert response.status_code == 401
+
+
+def test_nearest_warehouses_anonymous_query_is_denied(postgres_client, nearest_data):
+    ids, _ = nearest_data
+    response = postgres_client.get(NEAREST, params=nearest_params(ids))
+    assert response.status_code == 401
+
+
+def test_nearest_warehouses_reject_missing_or_inactive_product(
+    postgres_client, postgres_session, nearest_data
+):
+    ids, auth = nearest_data
+    for product_id in (ids["inactive"], 999_999):
+        response = postgres_client.get(
+            NEAREST, headers=auth["client"], params=nearest_params(ids, product_id=product_id)
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
+        assert "warehouses" not in response.text
+    # Read-only: ranking leaves stock and request history untouched.
+    assert postgres_session.scalar(select(func.count()).select_from(PurchaseRequest)) == 0
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"quantity": 0},
+        {"quantity": 2_147_483_648},
+        {"product_id": 0},
+        {"product_id": "abc"},
+        {"latitude": 91},
+        {"latitude": "-90.1"},
+        {"longitude": 181},
+        {"longitude": "abc"},
+        {"latitude": "nan"},
+    ],
+)
+def test_nearest_warehouses_validate_scalar_query_bounds(postgres_client, nearest_data, params):
+    ids, auth = nearest_data
+    response = postgres_client.get(
+        NEAREST, headers=auth["client"], params=nearest_params(ids, **params)
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("extra", [("product_id", "1"), ("unknown", "1")])
+def test_nearest_warehouses_reject_duplicate_and_unknown_query(
+    postgres_client, nearest_data, extra
+):
+    ids, auth = nearest_data
+    params = list(nearest_params(ids).items()) + [extra]
+    response = postgres_client.get(NEAREST, headers=auth["client"], params=params)
+    assert response.status_code == 422
+
+
+def test_nearest_warehouses_reject_missing_query_fields(postgres_client, nearest_data):
+    ids, auth = nearest_data
+    for missing in ("product_id", "quantity", "latitude", "longitude"):
+        params = nearest_params(ids)
+        params.pop(missing)
+        assert (
+            postgres_client.get(NEAREST, headers=auth["client"], params=params).status_code == 422
+        )
