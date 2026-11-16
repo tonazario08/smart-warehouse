@@ -82,7 +82,7 @@ def test_migrations_build_expected_schema(
                 connection.execute(text("SELECT code FROM warehouses")).scalar_one(),
             )
             auth_version = connection.execute(text("SELECT auth_version FROM users")).scalar_one()
-        assert revision == "20261110_0006"
+        assert revision == "20261113_0007"
         assert auth_version == 0
         assert normalized_values == ("mixed@example.com", "BOLT-001", "HCM-01")
     finally:
@@ -90,6 +90,8 @@ def test_migrations_build_expected_schema(
 
     assert tables == {
         "alembic_version",
+        "assistant_sections",
+        "assistant_section_versions",
         "anomaly_runs",
         "anomaly_alerts",
         "anomaly_reviews",
@@ -154,13 +156,66 @@ def test_migration_blocks_legacy_normalization_collisions_without_mutating_data(
             command.upgrade(config, "head")
 
         with engine.connect() as connection:
-            assert connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "20260829_0001"
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == "20260829_0001"
+            )
             assert connection.execute(
                 text("SELECT email FROM users ORDER BY id")
             ).scalars().all() == ["Client@Example.com", " client@example.com "]
     finally:
         command.downgrade(config, "base")
         command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_assistant_migration_preserves_existing_business_records(postgres_url):
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", postgres_url)
+    engine = create_engine(postgres_url)
+    try:
+        command.downgrade(config, "20261110_0006")
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO categories (name) VALUES ('Assistant migration category')")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO products (sku, name, category_id, unit) VALUES "
+                    "('ASSISTANT-MIGRATION', 'Migration product', "
+                    "(SELECT id FROM categories WHERE name = 'Assistant migration category'), "
+                    "'piece')"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO users (email, password_hash, role, is_active) VALUES "
+                    "('assistant-migration@example.com', 'hash', 'warehouse', true)"
+                )
+            )
+        command.upgrade(config, "head")
+        command.downgrade(config, "20261110_0006")
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT name FROM products WHERE sku = 'ASSISTANT-MIGRATION'")
+                ).scalar_one()
+                == "Migration product"
+            )
+            assert (
+                connection.execute(
+                    text("SELECT role FROM users WHERE email = 'assistant-migration@example.com'")
+                ).scalar_one()
+                == "warehouse"
+            )
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM products WHERE sku = 'ASSISTANT-MIGRATION'"))
+            connection.execute(
+                text("DELETE FROM categories WHERE name = 'Assistant migration category'")
+            )
+            connection.execute(
+                text("DELETE FROM users WHERE email = 'assistant-migration@example.com'")
+            )
         engine.dispose()

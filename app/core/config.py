@@ -33,6 +33,17 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
+    assistant_enabled: bool = False
+    assistant_api_key: SecretStr | None = None
+    assistant_base_url: str = "https://api.openai.com/v1"
+    assistant_model: str = ""
+    assistant_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    assistant_max_question_chars: int = Field(default=1000, ge=1, le=10000)
+    assistant_max_context_chars: int = Field(default=16000, ge=100, le=100000)
+    assistant_search_limit: int = Field(default=5, ge=1, le=20)
+    assistant_rate_limit: int = Field(default=20, ge=1, le=1000)
+    assistant_rate_window_seconds: int = Field(default=3600, ge=1, le=86400)
+
     app_env: Literal["development", "test", "integration", "production"] = "development"
     app_name: str = "Smart Warehouse API"
     api_v1_prefix: str = "/api/v1"

@@ -7,6 +7,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.anomalies.router import router as anomaly_router
+from app.assistant.router import RateLimiter
+from app.assistant.router import router as assistant_router
 from app.audit.router import router as audit_router
 from app.auth.router import router as auth_router
 from app.cold_start.router import router as cold_start_router
@@ -31,6 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     application = FastAPI(title=settings.app_name, version="0.1.0")
     application.dependency_overrides[get_settings] = lambda: settings
+    application.state.assistant_rate_limiter = RateLimiter()
     application.state.gis_catalog = SnapshotCatalog(settings)
     application.add_middleware(
         CORSMiddleware,
@@ -39,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.include_router(assistant_router, prefix=settings.api_v1_prefix)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
     application.include_router(anomaly_router, prefix=settings.api_v1_prefix)
     application.include_router(master_data_router, prefix=settings.api_v1_prefix)

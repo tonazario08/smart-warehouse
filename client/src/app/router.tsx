@@ -18,6 +18,7 @@ import { WarehouseFormPage } from '../pages/WarehouseFormPage'
 import { MovementFormPage, MovementListPage } from '../pages/MovementPages'
 import { AppShell } from '../shared/layout/AppShell'
 import { RouteGuard } from './RouteGuard'
+import { AssistantPage } from '../features/assistant/AssistantPage'
 import { GISPage } from '../features/gis/GISPage'
 import { TransfersPage } from '../features/transfers/TransfersPage'
 import { TransferFormPage } from '../features/transfers/TransferFormPage'
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
     ] },
     { index: true, element: <Navigate replace to="/dashboard" /> },
     { path: '/change-password', element: <ChangePasswordPage /> },
+    { path: '/assistant', element: <RouteGuard permission="assistant:read" />, children: [{ index: true, element: <AssistantPage /> }] },
     { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }] },
     { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
     { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },

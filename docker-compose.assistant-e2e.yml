@@ -1,0 +1,14 @@
+# Apply with docker-compose.yml and docker-compose.e2e.yml under an isolated project name.
+services:
+  api:
+    environment:
+      APP_ENV: integration
+      ASSISTANT_ENABLED: "true"
+      CORS_ORIGINS: '["http://127.0.0.1:${E2E_WEB_PORT:-58081}"]'
+    volumes:
+      - ./tests/assistant_e2e_app.py:/app/assistant_e2e_app.py:ro
+      - ./docs/assistant:/assistant-docs:ro
+    command: ["uvicorn", "assistant_e2e_app:app", "--host", "0.0.0.0", "--port", "8000"]
+  web:
+    ports: !override
+      - "127.0.0.1:${E2E_WEB_PORT:-58081}:8080"

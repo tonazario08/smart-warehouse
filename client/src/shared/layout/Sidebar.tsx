@@ -22,12 +22,14 @@ import forecastingIcon from '../assets/icons/forecasting.svg'
 import replenishmentIcon from '../assets/icons/replenishment.svg'
 import anomaliesIcon from '../assets/icons/anomalies.svg'
 import gisIcon from '../assets/icons/gis.svg'
+import assistantIcon from '../assets/icons/assistant.svg'
 
 type Item = { to: string; label: string; permission: Permission; roles: Role[]; icon: string; activeIcon?: string }
 const items: Item[] = [
   { to: '/anomalies', label: 'Bất thường', permission: 'anomaly:read', roles: ['admin', 'warehouse'], icon: anomaliesIcon },
   { to: '/forecasting', label: 'Dự báo', permission: 'forecast:read', roles: ['admin', 'warehouse'], icon: forecastingIcon },
   { to: '/replenishment', label: 'Bổ sung hàng', permission: 'replenishment:read', roles: ['admin', 'warehouse'], icon: replenishmentIcon },
+  { to: '/assistant', label: 'Trợ lý kho', permission: 'assistant:read', roles: ['admin', 'warehouse'], icon: assistantIcon },
   { to: '/dashboard', label: 'Bảng điều khiển', permission: 'dashboard:read', roles: ['admin'], icon: dashboardInactiveIcon, activeIcon: dashboardIcon },
   { to: '/products', label: 'Sản phẩm', permission: 'product:read', roles: ['admin', 'client'], icon: productsIcon, activeIcon: productsActiveIcon },
   { to: '/inventory', label: 'Tồn kho', permission: 'inventory:read', roles: ['admin', 'warehouse', 'client'], icon: inventoryIcon, activeIcon: inventoryActiveIcon },

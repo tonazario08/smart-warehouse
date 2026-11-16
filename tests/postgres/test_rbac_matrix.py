@@ -52,6 +52,7 @@ def test_central_permission_mapping_matches_phase_one_capabilities() -> None:
         Permission.ANOMALY_REVIEW: warehouse,
         Permission.GIS_READ: warehouse,
         Permission.GIS_ROUTE: warehouse,
+        Permission.ASSISTANT_READ: warehouse,
     }
 
 
