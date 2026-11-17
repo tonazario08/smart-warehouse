@@ -5,7 +5,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, mkdtemp
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
@@ -13,10 +13,12 @@ from alembic.config import Config
 from sqlalchemy.engine import make_url
 
 from alembic import command
+from app.assistant.provider import ModelProvider
 from app.core.config import Settings
 from app.gis.catalog import MANIFEST_LIMIT, SNAPSHOT_ID, checked_path, verify_snapshot
 from app.gis.schemas import GRAPH_LIMIT
 from app.seed import load_seed_settings
+from deploy.render.integrated import prepare_bundle, seed_analytics
 
 DEMO_DATABASE = "smart_warehouse_render_demo"
 
@@ -110,7 +112,16 @@ def main() -> int:
             or settings.cors_origins[0] != f"https://{origin.hostname}"
         ):
             raise ValueError("Expected one HTTPS Render frontend origin")
-        load_seed_settings()
+        seed = load_seed_settings()
+        bundle_url = os.environ.get("RENDER_DEMO_BUNDLE_URL", "")
+        bundle_sha = os.environ.get("RENDER_DEMO_BUNDLE_SHA256", "")
+        if bool(bundle_url) != bool(bundle_sha):
+            raise ValueError("Synthetic bundle requires both URL and checksum")
+        if settings.assistant_enabled:
+            stage = "validate assistant provider"
+            if urlsplit(settings.assistant_base_url).scheme != "https":
+                raise ValueError("Render requires an HTTPS assistant provider")
+            ModelProvider(settings).validate_configuration()
 
         stage = "verify GIS snapshot"
         prepare_snapshot(
@@ -118,10 +129,34 @@ def main() -> int:
             settings.gis_snapshot_id,
             os.environ.get("GIS_RELEASE_ASSET_BASE", ""),
         )
+        anomaly_run = None
+        if bundle_url:
+            stage = "verify synthetic bundle"
+            catalogs, anomaly_run = prepare_bundle(
+                bundle_url, bundle_sha, Path(mkdtemp(prefix="render-integrated-")), download_asset
+            )
+            os.environ.update({
+                "APP_ENV": "integration",
+                "FORECAST_CATALOG_ROOT": str(catalogs / "forecast"),
+                "REPLENISHMENT_CATALOG_ROOT": str(catalogs / "replenishment"),
+                "COLD_START_CATALOG_ROOT": str(catalogs / "cold-start"),
+                "FORECAST_ALLOW_FIXTURE": "true",
+                "REPLENISHMENT_ALLOW_FIXTURE": "true",
+                "COLD_START_ALLOW_FIXTURE": "true",
+                "ANOMALIES_ALLOW_FIXTURE": "true",
+            })
         stage = "upgrade the demo database"
         upgrade_demo_database(settings.database_url)
         stage = "seed the demo database"
         subprocess.run([sys.executable, "-m", "app.seed"], check=True)
+        if anomaly_run is not None:
+            stage = "initialize synthetic demo data"
+            seed_analytics(settings.database_url, seed.admin_email, anomaly_run)
+        if settings.assistant_enabled:
+            stage = "import assistant corpus"
+            subprocess.run(
+                [sys.executable, "-m", "app.assistant.cli", "/app/assistant-corpus"], check=True
+            )
         stage = "start the API"
         os.execvp("uvicorn", ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)])
     except Exception:

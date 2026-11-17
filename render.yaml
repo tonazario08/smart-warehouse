@@ -24,6 +24,20 @@ services:
         sync: false
       - key: GIS_RELEASE_ASSET_BASE
         sync: false
+      - key: RENDER_DEMO_BUNDLE_URL
+        value: https://github.com/tonazario08/smart-warehouse/releases/download/render-integrated-fixture-20261118/smart-warehouse-synthetic-render-integrated.zip
+      - key: RENDER_DEMO_BUNDLE_SHA256
+        value: "042c35b792209a06c48575878d40c935609b028af0b63f9d8447d628ac7458d4"
+      - key: ASSISTANT_ENABLED
+        value: "true"
+      - key: ASSISTANT_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: ASSISTANT_MODEL
+        value: qwen/qwen3.8-27b
+      - key: ASSISTANT_SEARCH_LIMIT
+        value: "2"
+      - key: ASSISTANT_API_KEY
+        sync: false
       - key: SEED_ADMIN_EMAIL
         sync: false
       - key: SEED_ADMIN_PASSWORD

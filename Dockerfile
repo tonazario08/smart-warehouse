@@ -16,6 +16,8 @@ RUN python -m pip install --no-cache-dir /wheels/* \
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY deploy/render/start.py ./render-start.py
+COPY deploy/render/integrated.py ./deploy/render/integrated.py
+COPY docs/assistant/*.md ./assistant-corpus/
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
