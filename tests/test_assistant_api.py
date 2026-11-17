@@ -212,6 +212,9 @@ def test_provider_logs_only_upstream_status_for_http_errors(unit_settings, monke
     from app.assistant.provider import ModelProvider
     from app.core.errors import DomainError
 
+    logger = provider_module.logger
+    monkeypatch.setattr(logger, "propagate", False)
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
     unit_settings.assistant_enabled = True
     unit_settings.assistant_model = "test"
     unit_settings.assistant_base_url = "http://127.0.0.1:11434/v1"
@@ -376,6 +379,7 @@ def test_provider_limits_generated_tokens_and_marks_sources_as_data(unit_setting
 
     class Opener:
         def open(self, request, timeout):
+            assert request.get_header("User-agent") == "SmartWarehouse/0.1"
             seen.update(json.loads(request.data))
             return Response()
 

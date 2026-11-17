@@ -115,7 +115,7 @@ class ModelProvider:
                 },
             },
         }
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "User-Agent": "SmartWarehouse/0.1"}
         if settings.assistant_api_key:
             headers["Authorization"] = "Bearer " + settings.assistant_api_key.get_secret_value()
         request = Request(
