@@ -204,6 +204,30 @@ def test_provider_timeout_is_safe_and_does_not_log_secrets(unit_settings, monkey
     assert "private" not in caplog.text
 
 
+def test_provider_logs_only_upstream_status_for_http_errors(unit_settings, monkeypatch, caplog):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    import app.assistant.provider as provider_module
+    from app.assistant.provider import ModelProvider
+    from app.core.errors import DomainError
+
+    unit_settings.assistant_enabled = True
+    unit_settings.assistant_model = "test"
+    unit_settings.assistant_base_url = "http://127.0.0.1:11434/v1"
+
+    class Opener:
+        def open(self, *args, **kwargs):
+            raise HTTPError("private-url", 401, "private-reason", None, BytesIO(b"private-body"))
+
+    monkeypatch.setattr(provider_module, "build_opener", lambda *_: Opener())
+    with pytest.raises(DomainError) as exc:
+        ModelProvider(unit_settings).answer("private question", [])
+    assert exc.value.code == "ASSISTANT_PROVIDER_ERROR"
+    assert "upstream_status=401" in caplog.text
+    assert "private" not in caplog.text
+
+
 def test_rate_limit_is_per_account():
     from app.assistant.router import RateLimiter
     from app.core.errors import DomainError

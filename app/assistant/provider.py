@@ -1,10 +1,13 @@
 import json
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from app.assistant.evidence import enumerate_sentences
 from app.core.errors import DomainError
+
+logger = logging.getLogger("uvicorn.error.assistant")
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -135,15 +138,22 @@ class ModelProvider:
             raise DomainError(
                 504, "ASSISTANT_TIMEOUT", "Trợ lý phản hồi quá thời gian. Vui lòng thử lại."
             ) from None
+        except HTTPError as error:
+            logger.warning("event=assistant_upstream_failure upstream_status=%d", error.code)
+            raise DomainError(
+                502, "ASSISTANT_PROVIDER_ERROR", "Không thể kết nối trợ lý. Vui lòng thử lại."
+            ) from None
         except URLError as error:
             if isinstance(error.reason, TimeoutError):
                 raise DomainError(
                     504, "ASSISTANT_TIMEOUT", "Trợ lý phản hồi quá thời gian. Vui lòng thử lại."
                 ) from None
+            logger.warning("event=assistant_upstream_failure category=transport")
             raise DomainError(
                 502, "ASSISTANT_PROVIDER_ERROR", "Không thể kết nối trợ lý. Vui lòng thử lại."
             ) from None
-        except (HTTPError, OSError, ValueError, KeyError, IndexError, TypeError):
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            logger.warning("event=assistant_upstream_failure category=invalid_response")
             raise DomainError(
                 502, "ASSISTANT_PROVIDER_ERROR", "Không thể kết nối trợ lý. Vui lòng thử lại."
             ) from None

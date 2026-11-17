@@ -34,9 +34,9 @@ Nhánh feat/figma-ui-v2 tại a5a34f7 đã qua Quality. Nhánh Render hiện t�
 
 ## Acceptance Criteria
 
-- [ ] AC-1. Build và smoke với PostgreSQL cô lập thành công. Chỉ Render demo được mở cấu hình synthetic, không làm yếu cấu hình production mặc định. Startup chỉ vào database demo, seed có thể chạy lại, không ghi đè dữ liệu đang dùng và không in giá trị bí mật.
+- [x] AC-1. Build và smoke với PostgreSQL cô lập thành công. Chỉ Render demo được mở cấu hình synthetic, không làm yếu cấu hình production mặc định. Startup chỉ vào database demo, seed có thể chạy lại, không ghi đè dữ liệu đang dùng và không in giá trị bí mật.
 - [ ] AC-2. API và Static Site trên Render xác nhận cùng revision đã kiểm thử, readiness trả 200 và refresh deep link hoạt động. Phân quyền admin, warehouse, client và tra tồn/mua B2B/GIS chạy được bằng dữ liệu demo.
-- [ ] AC-3. Dự báo, bổ sung, cold-start và bất thường hiển thị lượt tổng hợp hợp lệ và gắn nhãn. Phân biệt bằng chứng mô phỏng với số liệu nghiên cứu trong đề cương.
+- [x] AC-3. Dự báo, bổ sung, cold-start và bất thường hiển thị lượt tổng hợp hợp lệ và gắn nhãn. Phân biệt bằng chứng mô phỏng với số liệu nghiên cứu trong đề cương.
 - [ ] AC-4. Trợ lý dùng model thật ở môi trường Render, câu hỏi chuyển kho trả câu có nguồn và mở được phiên bản tài liệu. Quyền client vẫn bị từ chối. Ghi model đã xác minh và giới hạn so với cấu hình chấm local.
 - [ ] AC-5. Ghi bằng chứng hỗ trợ mật khẩu, trạng thái quên mật khẩu qua email và các điều kiện chưa được xác minh. Bàn giao URL và cách rollback cấu hình/revision sau khi kiểm tra tương thích migration.
 
@@ -77,7 +77,7 @@ Task identifier deploy-latest-integrated-demo. Người dùng yêu cầu tạo v
 
 ## Trạng thái bàn giao
 
-IN_PROGRESS. Phần cấu hình và dữ liệu mẫu đã có bằng chứng cục bộ. Chưa commit, push, upload hoặc cập nhật dịch vụ Render. Cần nhà cung cấp mô hình được người dùng thiết lập để kiểm thử RAG online và chốt bản đầy đủ.
+IN_PROGRESS. Render đã chạy 7245955 cho API và Static Site. AC-1 và AC-3 đã xác minh. AC-4 vướng lỗi upstream và AC-2 còn thiếu smoke online theo các vai trò chưa thử. Chưa đánh dấu DONE.
 
 ## Handoff tiếp theo
 
@@ -95,3 +95,12 @@ IN_PROGRESS. Phần cấu hình và dữ liệu mẫu đã có bằng chứng c�
 ## Kiểm chứng trước phát hành
 
 - 2026-11-18. Người dùng xác nhận đã lưu key. Chỉ xác minh tên ASSISTANT_API_KEY xuất hiện trong Render Environment. Pin cấu hình công khai trong Blueprint, bắt buộc HTTPS cho model hosted và bổ sung test từ chối loopback. Cold-start được tạo từ fixture tổng hợp, các biến bí mật vẫn nhập riêng trên Render.
+
+
+## Kiểm chứng sau lần phát hành đầu
+
+- 2026-11-18. Push fast-forward 7245955 lên codex/render-smart-warehouse-demo. Phát hành ZIP synthetic tag render-integrated-fixture-20261118, tải lại HTTPS khớp SHA-256. Exact Docker entrypoint chạy trên PostgreSQL demo cô lập với giới hạn 512 MB/0,1 CPU, tải GitHub Release và GIS thật, readiness 200, bốn trạng thái phân tích và corpus admin đúng.
+- 2026-11-18. Quality 44163137451 lần đầu có 1 lỗi ở fixture guard của test migration yêu cầu mua. Chạy 3 lượt tập trung trên PostgreSQL cô lập đạt 36/36. Rerun cùng commit, backend 1.763 passed, frontend, Windows guards và E2E đạt.
+- 2026-11-18. Render API dep-dbube9mk1f9s739ondb0 và web dep-dbubffifngtc73c9bkd0 đều Live ở 7245955. API nâng schema tới 20261113_0007, nạp 6 mục corpus, readiness 200 và nguồn RAG chưa đăng nhập 401. Web HTTPS deep link /assistant trả SPA và phiên admin hiện dashboard. DEMO-001 vẫn 25 each; SKU synthetic riêng 2 unit.
+- 2026-11-18. Admin xác minh các trang dự báo, bổ sung hàng, cold-start đều hiển thị lượt gắn nhãn dữ liệu kiểm thử. Danh sách bất thường có dữ liệu tổng hợp và mở được phần đóng góp SHAP. Tách khỏi số liệu nghiên cứu trong đề cương.
+- 2026-11-18. Câu hỏi mẫu Chuyển kho thế nào? trên Render trả 502 ASSISTANT_PROVIDER_ERROR. Log cũ chỉ có mã chung, không phân biệt upstream HTTP, transport và invalid response. Bổ sung log trạng thái hoặc nhóm lỗi cố định, không ghi khóa, nội dung request hoặc body lỗi. Red/green test đạt và 62 test assistant/Render đạt.
