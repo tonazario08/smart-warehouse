@@ -59,6 +59,9 @@ Task identifier: optimize-render-demo-loading. Chủ dự án duyệt xử lý �
 - 2026-11-18. Kiểm tra cục bộ đạt khi dùng môi trường M9 có đủ phụ thuộc. Giữ VERIFYING vì AC-4 cần phát hành và đo trên Render. Chưa stage, commit, push hoặc deploy.
 - 2026-11-18. VERIFYING -> IN_PROGRESS. Kiểm tra độc lập trước phát hành phát hiện liên kết kết quả mới nhất trong Bổ sung hàng biến mất khi danh sách tải xong, có thể làm mất focus bàn phím. Sửa trong phạm vi hiển thị tiến độ và thêm test duy trì focus.
 - 2026-11-18. IN_PROGRESS -> VERIFYING. Test mới tái hiện mất liên kết. Sau khi sửa, liên kết giữ nguyên trong trạng thái sẵn sàng và reviewer xác minh lại không còn finding chặn phát hành. Chủ dự án duyệt review, commit và phát hành đúng bản tối ưu này trên nhánh Render.
+- 2026-11-18. Đã commit bbd413e sau khi kiểm tra đúng phạm vi, bốn test API Bất thường và toàn bộ frontend, rồi push lên origin/codex/render-smart-warehouse-demo. GitHub Quality 44290505947 bắt đầu. Backend đầy đủ đang chạy trên PostgreSQL cục bộ cô lập. Hai dịch vụ Render có cấu hình tắt auto-deploy.
+- 2026-11-18. VERIFYING -> IN_PROGRESS. GitHub Quality 44290505947 báo ca kiểm tra tuyến Bổ sung hàng cho warehouse đọc spy fetch ngay sau khi thấy tiêu đề. Tiêu đề không phụ thuộc API. Đồng bộ test theo nội dung do phản hồi trạng thái tạo ra và giữ kiểm tra request cũ.
+- 2026-11-18. IN_PROGRESS -> VERIFYING. Reviewer xác nhận cả hai vai trò vẫn kiểm tra route, menu và request. Thay đổi bổ sung chỉ ở test, không ảnh hưởng mã runtime. Toàn bộ frontend test, typecheck và build đạt sau khi đồng bộ.
 
 ## Verification Evidence
 
@@ -66,6 +69,7 @@ Task identifier: optimize-render-demo-loading. Chủ dự án duyệt xử lý �
 - Trong `client`, `npm.cmd run test:all` đạt 492 Vitest trên 50 file và 88 host test. `npm.cmd run typecheck` và `npm.cmd run build` đạt. Vite vẫn báo chunk vượt 500 kB.
 - Sau bản sửa focus, cả ba lệnh frontend tiếp tục đạt cùng số lượng test, gồm ca kiểm tra duy trì focus khi danh sách tải xong.
 - `ruff check app/anomalies/service.py tests/test_anomalies_api.py` đạt. `git diff --check` đạt và Git báo CRLF sẽ chuyển LF ở tài liệu deploy đã sửa từ trước.
+- `python -m pytest -q --tb=short` đạt 1.768 test bằng Python 3.14.2 với đủ phụ thuộc, PostgreSQL 16 riêng trên loopback và Alembic đến revision 20261113_0007. Đã tắt container kiểm thử sau khi chạy. Có hai cảnh báo deprecation.
 - Đo cục bộ riêng đoạn xác minh với ZIP Render đã kiểm SHA-256, 20 cảnh báo trong một lượt có 383 cảnh báo. So sánh trung vị bảy lần, xác minh toàn bộ cho từng dòng mất 756,0 ms, xác minh một lần rồi kiểm từng dòng mất 29,0 ms. Hai cách trả cùng danh sách bản ghi đã xác minh.
 - Chưa có kết quả đo lại trên Render vì chưa phát hành.
 

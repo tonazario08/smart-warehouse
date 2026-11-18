@@ -146,6 +146,7 @@ it.each(['admin', 'warehouse'] as const)('authorizes %s to the replenishment rou
     ? reply({ state: 'unavailable', reason_code: 'NO_REVIEWED_POLICY_INPUTS', latest: null }) : undefined)
   expect(await screen.findByRole('heading', { name: 'Bổ sung hàng' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Bổ sung hàng' })).toBeInTheDocument()
+  expect(await screen.findByText('Chưa có dữ liệu được duyệt để tính chính sách bổ sung hàng.')).toBeInTheDocument()
   expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/replenishment/status'))).toBe(true)
 })
 
