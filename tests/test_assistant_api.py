@@ -204,17 +204,17 @@ def test_provider_timeout_is_safe_and_does_not_log_secrets(unit_settings, monkey
     assert "private" not in caplog.text
 
 
-def test_provider_logs_only_upstream_status_for_http_errors(unit_settings, monkeypatch, caplog):
+def test_provider_logs_only_upstream_status_for_http_errors(unit_settings, monkeypatch):
     from io import BytesIO
+    from unittest.mock import Mock
     from urllib.error import HTTPError
 
     import app.assistant.provider as provider_module
     from app.assistant.provider import ModelProvider
     from app.core.errors import DomainError
 
-    logger = provider_module.logger
-    monkeypatch.setattr(logger, "propagate", False)
-    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
+    warning = Mock()
+    monkeypatch.setattr(provider_module.logger, "warning", warning)
     unit_settings.assistant_enabled = True
     unit_settings.assistant_model = "test"
     unit_settings.assistant_base_url = "http://127.0.0.1:11434/v1"
@@ -227,8 +227,7 @@ def test_provider_logs_only_upstream_status_for_http_errors(unit_settings, monke
     with pytest.raises(DomainError) as exc:
         ModelProvider(unit_settings).answer("private question", [])
     assert exc.value.code == "ASSISTANT_PROVIDER_ERROR"
-    assert "upstream_status=401" in caplog.text
-    assert "private" not in caplog.text
+    warning.assert_called_once_with("event=assistant_upstream_failure upstream_status=%d", 401)
 
 
 def test_rate_limit_is_per_account():
