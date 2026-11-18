@@ -62,6 +62,13 @@ it('offers retry after a request fails and keeps the session', async () => {
   expect(await screen.findByText('Chưa có dữ liệu vận hành đủ điều kiện để dự báo.')).toBeInTheDocument()
 })
 
+it('shows forecast status while the run list is still loading', async () => {
+  vi.mocked(api.listForecastRuns).mockReturnValue(new Promise(() => {}))
+  render(<MemoryRouter><ForecastingPage /></MemoryRouter>)
+  expect(await screen.findByText('Chưa có dữ liệu vận hành đủ điều kiện để dự báo.')).toBeInTheDocument()
+  expect(screen.queryByText('Đang tải kết quả dự báo...')).not.toBeInTheDocument()
+})
+
 it('shows each listed run’s information cutoff and actual horizons, including an unknown cutoff', async () => {
   const makeRun = (id: string, cutoff: string | null, horizons: number[]): ForecastRun => ({
     manifest: { run_id: id, mode: 'research', kind: 'evaluation', dataset_class: 'fixture', data_version: 'ddv2-test', target: 'reported_daily_unit_sales', reporting_scope: 'company_aggregate', unit: 'unit', knowledge_time_mode: 'retrospective_final_vintage', trained_through: '2021-12-31', training_information_cutoff: cutoff, admission_cutoff: null, knowledge_bound: null, origin_start: '2022-01-01', origin_end: '2022-12-01', horizons, generated_at: '2026-01-01T00:00:00Z', limitations: [] },

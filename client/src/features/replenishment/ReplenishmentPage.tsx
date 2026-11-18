@@ -32,8 +32,11 @@ export function ReplenishmentPage() {
     setLoaded(null); setFailure(null)
     void getReplenishmentStatus(token, allowedMode).then(async status => {
       if (!active) return
-      const runs = status.state === 'ready' ? await listReplenishmentRuns(token, allowedMode, page) : null
-      if (active) setLoaded({ key, status, runs })
+      setLoaded({ key, status, runs: null })
+      if (status.state === 'ready') {
+        const runs = await listReplenishmentRuns(token, allowedMode, page)
+        if (active) setLoaded({ key, status, runs })
+      }
     }).catch((cause: unknown) => { if (active && !(cause instanceof ApiError && cause.staleSession)) setFailure({ key, text: replenishmentError(cause) }) })
     return () => { active = false }
   }, [token, user?.id, user?.role, allowedMode, page, retry, key])
@@ -50,6 +53,8 @@ export function ReplenishmentPage() {
     {error ? <><FeedbackMessage variant="error">{error}</FeedbackMessage><Button onClick={() => setRetry(value => value + 1)}>Thử lại</Button></> : !current ? <FeedbackMessage>Đang tải kết quả bổ sung hàng...</FeedbackMessage> : <>
       {current.status.state === 'unavailable' && <EmptyState title="Chưa có kết quả khả dụng" description={replenishmentReason(current.status.reason_code)} />}
       {current.status.state === 'failed' && <><FeedbackMessage variant="error">{replenishmentReason(current.status.reason_code)}</FeedbackMessage><Button onClick={() => setRetry(value => value + 1)}>Thử lại</Button></>}
+      {current.status.state === 'ready' && current.status.latest && <p><Link to={'/replenishment/runs/' + current.status.latest.manifest.run_id}>Mở kết quả mới nhất</Link></p>}
+      {current.status.state === 'ready' && !current.runs && <FeedbackMessage>Đang tải danh sách kết quả bổ sung hàng...</FeedbackMessage>}
       {current.runs && current.runs.items.length === 0 && <EmptyState title="Chưa có kết quả" description="Chưa có kết quả trong phạm vi này." />}
       {current.runs && current.runs.items.length > 0 && <><div className="replenishment-scroll" role="region" aria-label="Cuộn danh sách kết quả bổ sung hàng" tabIndex={0}><DataTable caption="Danh sách kết quả bổ sung hàng" rows={current.runs.items} getRowKey={row => row.manifest.run_id} columns={[
         { id: 'run', header: 'Mã kết quả', render: row => <Link to={'/replenishment/runs/' + row.manifest.run_id}>{row.manifest.run_id}</Link> },

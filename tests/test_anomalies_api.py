@@ -1,10 +1,19 @@
+import hashlib
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.analytics.export import canonical_json
+from app.anomalies import service
+from app.anomalies.catalog import PublicAlert
+from app.anomalies.models import AnomalyAlert, AnomalyRun
 from app.auth.security import create_access_token
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -81,3 +90,76 @@ def test_old_token_observes_current_role_and_activity(client_and_headers):
     )
     session.commit()
     assert client.get("/api/v1/anomalies/status", headers=headers["admin"]).status_code == 401
+
+
+def test_list_checks_each_run_once_and_rejects_a_corrupted_alert(client_and_headers, monkeypatch):
+    client, headers, session, users = client_and_headers
+    settings = client.app.dependency_overrides[get_settings]().model_copy(
+        update={"anomalies_allow_fixture": True}
+    )
+    client.app.dependency_overrides[get_settings] = lambda: settings
+    admin = next(user for user in users if user.role == UserRole.ADMIN)
+    run_id = "arv1-" + "a" * 64
+    session.add(
+        AnomalyRun(
+            run_id=run_id,
+            digest="a" * 64,
+            payload={},
+            imported_at=datetime.now(UTC),
+            imported_by=admin.id,
+        )
+    )
+    now = datetime(2026, 11, 18, tzinfo=UTC)
+    alerts = tuple(
+        PublicAlert.model_validate(
+            {
+                "source_record_key": "aek1-" + key * 64,
+                "occurred_at": now,
+                "partition": "final_holdout",
+                "score": 0.8,
+                "features": (1.0,) * 6,
+                "explanation": {
+                    "state": "unavailable",
+                    "reason": "EXPLAINER_MISSING",
+                    "base_value": None,
+                    "contributions": None,
+                    "residual": None,
+                },
+            }
+        )
+        for key in ("b", "c")
+    )
+    rows = []
+    for alert in alerts:
+        identity = hashlib.sha256(canonical_json([run_id, alert.source_record_key])).hexdigest()
+        rows.append(
+            AnomalyAlert(
+                id="alv1-" + identity,
+                run_id=run_id,
+                source_record_key=alert.source_record_key,
+                payload=alert.model_dump(mode="json"),
+                review_status="new",
+                version=1,
+            )
+        )
+    session.add_all(rows)
+    session.commit()
+
+    checked = []
+
+    def check_payload(run):
+        checked.append(run.run_id)
+        return SimpleNamespace(alerts=alerts, threshold=0.6)
+
+    monkeypatch.setattr(service, "_checked_payload", check_payload)
+    response = client.get("/api/v1/anomalies", headers=headers["admin"])
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    assert checked == [run_id]
+
+    rows[-1].payload = {**rows[-1].payload, "score": 0.9}
+    session.commit()
+    response = client.get("/api/v1/anomalies", headers=headers["admin"])
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ANOMALY_CATALOG_INVALID"
+    assert checked == [run_id, run_id]

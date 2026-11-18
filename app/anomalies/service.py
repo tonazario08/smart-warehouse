@@ -269,8 +269,7 @@ def _checked_payload(run: AnomalyRun) -> PublicPayload:
         raise DomainError(409, "ANOMALY_CATALOG_INVALID", "Anomaly catalog is invalid.") from None
 
 
-def _checked_alert(alert: AnomalyAlert, run: AnomalyRun):
-    payload = _checked_payload(run)
+def _checked_alert(alert: AnomalyAlert, run: AnomalyRun, payload: PublicPayload) -> PublicAlert:
     try:
         public = PublicAlert.model_validate_json(canonical_json(alert.payload))
         expected = (
@@ -285,7 +284,7 @@ def _checked_alert(alert: AnomalyAlert, run: AnomalyRun):
             raise ValueError("invalid imported alert")
     except (ValueError, TypeError, KeyError):
         raise DomainError(409, "ANOMALY_CATALOG_INVALID", "Anomaly catalog is invalid.") from None
-    return payload, public
+    return public
 
 
 def _get_alert(session: Session, alert_id: str):
@@ -297,7 +296,8 @@ def _get_alert(session: Session, alert_id: str):
     if row is None:
         raise _not_found()
     alert, run = row
-    payload, public = _checked_alert(alert, run)
+    payload = _checked_payload(run)
+    public = _checked_alert(alert, run, payload)
     return alert, run, payload, public
 
 
@@ -349,8 +349,12 @@ def list_alerts(
         query.order_by(AnomalyAlert.id).offset((page - 1) * page_size).limit(page_size)
     ).all()
     items = []
+    checked_runs: dict[str, PublicPayload] = {}
     for alert, run in rows:
-        payload, public = _checked_alert(alert, run)
+        if run.run_id not in checked_runs:
+            checked_runs[run.run_id] = _checked_payload(run)
+        payload = checked_runs[run.run_id]
+        public = _checked_alert(alert, run, payload)
         items.append(_view(alert, run, payload, public))
     return AlertList(items=items, total=session.scalar(count), page=page, page_size=page_size)
 

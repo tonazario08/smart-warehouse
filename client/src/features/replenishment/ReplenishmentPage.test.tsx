@@ -55,6 +55,22 @@ it('lists verified ready runs with source and fixture labels', async () => {
   expect(api.listReplenishmentRuns).toHaveBeenCalledWith('token', 'operational', 1)
 })
 
+it('keeps the latest result link focused when the run list finishes loading', async () => {
+  const runId = 'rrv1-' + 'a'.repeat(64)
+  const run = { manifest: { run_id: runId } } as import('./types').ReplenishmentRun
+  vi.mocked(api.getReplenishmentStatus).mockResolvedValue({ state: 'ready', reason_code: null, latest: run })
+  let finish!: (value: Awaited<ReturnType<typeof api.listReplenishmentRuns>>) => void
+  vi.mocked(api.listReplenishmentRuns).mockReturnValue(new Promise(resolve => { finish = resolve }))
+  render(<MemoryRouter><ReplenishmentPage /></MemoryRouter>)
+  const latestLink = await screen.findByRole('link', { name: 'Mở kết quả mới nhất' })
+  expect(latestLink).toHaveAttribute('href', '/replenishment/runs/' + runId)
+  expect(screen.getByText('Đang tải danh sách kết quả bổ sung hàng...')).toBeInTheDocument()
+  latestLink.focus()
+  await act(async () => { finish({ items: [], total: 0, page: 1, page_size: 20 }) })
+  expect(screen.getByRole('link', { name: 'Mở kết quả mới nhất' })).toHaveFocus()
+  expect(screen.queryByText('Đang tải danh sách kết quả bổ sung hàng...')).not.toBeInTheDocument()
+})
+
 it('retries failed status without changing the session', async () => {
   vi.mocked(api.getReplenishmentStatus).mockResolvedValueOnce({ state: 'failed', reason_code: 'FORECAST_STALE', latest: null }).mockResolvedValueOnce({ state: 'unavailable', reason_code: 'NO_REVIEWED_POLICY_INPUTS', latest: null })
   render(<MemoryRouter><ReplenishmentPage /></MemoryRouter>)

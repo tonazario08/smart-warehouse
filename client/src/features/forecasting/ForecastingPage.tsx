@@ -20,20 +20,28 @@ import './forecasting.css'
 export function ForecastingPage() {
   const { token, user } = useAuth()
   const [mode, setMode] = useState<ForecastMode>('operational'), [page, setPage] = useState(1), [retry, setRetry] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: string; status: ForecastStatus; runs: Page<ForecastRun> } | null>(null)
+  const [loadedStatus, setLoadedStatus] = useState<{ key: string; status: ForecastStatus } | null>(null)
+  const [loadedRuns, setLoadedRuns] = useState<{ key: string; runs: Page<ForecastRun> } | null>(null)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
   const allowedMode = mode === 'research' && !can(user?.role, 'forecast:research:read') ? 'operational' : mode
   const key = `${token}:${user?.id}:${user?.role}:${allowedMode}:${page}:${retry}`
   useEffect(() => {
     if (!token || !user) return
     let active = true
-    setLoaded(null); setFailure(null)
-    void Promise.all([getForecastStatus(token, allowedMode), listForecastRuns(token, allowedMode, page)])
-      .then(([status, runs]) => { if (active) setLoaded({ key, status, runs }) })
-      .catch((cause: unknown) => { if (active && !(cause instanceof ApiError && cause.staleSession)) setFailure({ key, text: forecastError(cause) }) })
+    setLoadedStatus(null); setLoadedRuns(null); setFailure(null)
+    const reportFailure = (cause: unknown) => {
+      if (active && !(cause instanceof ApiError && cause.staleSession)) setFailure({ key, text: forecastError(cause) })
+    }
+    void getForecastStatus(token, allowedMode)
+      .then(status => { if (active) setLoadedStatus({ key, status }) })
+      .catch(reportFailure)
+    void listForecastRuns(token, allowedMode, page)
+      .then(runs => { if (active) setLoadedRuns({ key, runs }) })
+      .catch(reportFailure)
     return () => { active = false }
   }, [token, user?.id, user?.role, allowedMode, page, retry, key])
-  const current = loaded?.key === key ? loaded : null, error = failure?.key === key ? failure.text : ''
+  const current = loadedStatus?.key === key ? loadedStatus : null, error = failure?.key === key ? failure.text : ''
+  const runs = loadedRuns?.key === key ? loadedRuns.runs : null
   const choose = (next: ForecastMode) => { setMode(next); setPage(1) }
   return <section className="forecast-page management-workspace">
     <PageHeader title="Dự báo" description="Xem các kết quả dự báo đã được kiểm tra và phạm vi áp dụng." />
@@ -54,7 +62,8 @@ export function ForecastingPage() {
         {current.status.latest.stale === true && <FeedbackMessage variant="warning">Kết quả không còn cập nhật cho ngày hiện tại. Ngày gốc: {current.status.latest.manifest.origin_end ?? 'không xác định'}.</FeedbackMessage>}
         {current.status.latest.manifest.limitations.length > 0 && <p>Kết quả có giới hạn dữ liệu; xem chi tiết trước khi sử dụng.</p>}
       </section>}
-      {current.runs.items.length > 0 && <><DataTable caption="Danh sách kết quả dự báo" rows={current.runs.items} getRowKey={row => row.manifest.run_id} columns={[
+      {current.status.state === 'ready' && !runs && <FeedbackMessage>Đang tải danh sách kết quả dự báo...</FeedbackMessage>}
+      {runs && runs.items.length > 0 && <><DataTable caption="Danh sách kết quả dự báo" rows={runs.items} getRowKey={row => row.manifest.run_id} columns={[
         { id: 'run', header: 'Kết quả', render: row => <Link to={'/forecasting/runs/' + row.manifest.run_id}>{row.manifest.run_id}</Link> },
         { id: 'scope', header: 'Phạm vi', render: row => <>{row.applicability === 'retrospective' ? 'Nghiên cứu hồi cứu' : 'Vận hành'} {row.fixture_label && <Badge>{row.fixture_label}</Badge>}</> },
         { id: 'version', header: 'Phiên bản dữ liệu', render: row => row.manifest.data_version },
@@ -62,7 +71,7 @@ export function ForecastingPage() {
         { id: 'cutoff', header: 'Giới hạn thông tin', render: row => row.manifest.training_information_cutoff ? formatDateTime(row.manifest.training_information_cutoff) : 'Không xác định' },
         { id: 'horizons', header: 'Khoảng dự báo', render: row => row.manifest.horizons.map(horizon => `${horizon} ngày`).join(', ') },
         { id: 'time', header: 'Thời điểm tạo', render: row => formatDateTime(row.manifest.generated_at) },
-      ]} /><Pagination locale="vi" page={page} pageSize={20} total={current.runs.total} onPageChange={setPage} /></>}
+      ]} /><Pagination locale="vi" page={page} pageSize={20} total={runs.total} onPageChange={setPage} /></>}
     </>}
   </section>
 }
