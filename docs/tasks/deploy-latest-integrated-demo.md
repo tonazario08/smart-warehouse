@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Status: IN_PROGRESS
+- Status: VERIFYING
 - Plan: docs/tasks/deploy-latest-integrated-demo.md#implementation-plan
 - Depends on: docs/tasks/deploy-smart-warehouse.md, docs/tasks/integrate-full-system-demo.md, docs/tasks/verify-integrated-demo-ci.md
 - Created: 2026-11-18
@@ -77,7 +77,7 @@ Task identifier deploy-latest-integrated-demo. Người dùng yêu cầu tạo v
 
 ## Trạng thái bàn giao
 
-IN_PROGRESS. Render đã chạy 7245955 cho API và Static Site. AC-1 và AC-3 đã xác minh. AC-4 vướng lỗi upstream và AC-2 còn thiếu smoke online theo các vai trò chưa thử. Chưa đánh dấu DONE.
+VERIFYING. Chủ dự án đã xác nhận deploy bản sửa và smoke RAG admin có nguồn. AC-1 và AC-3 đã xác minh. Còn thiếu đối chiếu revision mới trong Dashboard, smoke online warehouse/client, kết quả Quality của checkpoint test và kiểm chứng có điều kiện về mật khẩu. Chưa đánh dấu DONE.
 
 ## Handoff tiếp theo
 
@@ -111,3 +111,8 @@ IN_PROGRESS. Render đã chạy 7245955 cho API và Static Site. AC-1 và AC-3 �
 - 2026-11-18. CI f673916 có lỗi capture log trong test mới và hai lỗi fixture PostgreSQL trong RBAC. Sửa test để bắt log trực tiếp từ logger ứng dụng ngay cả khi Uvicorn tắt propagate. 62 test Assistant/Render và Ruff đạt tại máy. Các fixture RBAC không đổi, cần đối chiếu CI của revision mới.
 - 2026-11-18. Chủ dự án xác nhận đã deploy bản sửa User-Agent và thử trong phiên admin trên Render. Câu hỏi “Chuyển kho thế nào?” trả lời có nguồn và mở được nguồn. Đây là smoke do chủ dự án thực hiện. Probe HTTPS độc lập xác nhận readiness 200, deep link /assistant 200 và API nguồn gọi ẩn danh trả 401. Cần xác minh lại quyền client trên Render.
 - 2026-11-18. Quality 44173984816 báo 1.763 backend pass và một test capture log fail. Đổi test sang kiểm tra đúng lời gọi logger và đối số status, tách khỏi cấu hình logger của tiến trình CI. Thay đổi chỉ ở test, không đổi runtime so với eff6f34. Phiên local chạy lại 62 test Assistant/Render và Ruff đạt.
+- 2026-11-18. IN_PROGRESS -> VERIFYING. Checkpoint test 16b8f6b đã push lên nhánh Render và chỉ đổi test/tài liệu so với eff6f34. Quality 44253056002 đang chạy. Public API readiness 200, preflight POST /assistant/chat trả 200 và CORS cho đúng frontend HTTPS. Hai probe CORS trước đó timeout khi chưa làm nóng API. Chờ xác nhận smoke warehouse/client và đường dẫn /assistant bị chặn với client.
+- 2026-11-18. Chủ dự án chưa kiểm tra được phiên warehouse và client trên Render. Giữ AC-2 và AC-4 chưa hoàn thành phần quyền online. Bằng chứng RAG admin đã có, chưa kiểm tra gửi email thật.
+- 2026-11-18. Probe public: /health/ready HTTP 200; trang /reset-password HTTP 200; thử /auth/forgot-password với địa chỉ mẫu không thuộc tài khoản trả 503 PASSWORD_RECOVERY_UNAVAILABLE; /auth/change-password không có phiên trả 401 AUTHENTICATION_REQUIRED. Chưa thử đổi mật khẩu bằng tài khoản thật hoặc gửi email. Để bật recovery cần cấu hình PASSWORD_RECOVERY_ENABLED, PASSWORD_RECOVERY_ORIGIN, PASSWORD_RECOVERY_FROM_EMAIL và RESEND_API_KEY phù hợp trên Render.
+- 2026-11-18. Chuẩn bị script PowerShell ngoài repo để chủ dự án nhập mật khẩu trực tiếp vào prompt che ký tự, chỉ in PASS/FAIL. Script đã kiểm tra cú pháp, chưa chạy với tài khoản thật. Tool truy cập phiên trình duyệt và cấu hình Render API chưa khả dụng.
+- 2026-11-18. Quality 44253056002 trên 16b8f6b hoàn tất xanh: backend, frontend, Windows guards và E2E. diff eff6f34..16b8f6b chỉ gồm test và tài liệu. Script nhập bí mật đã chạy qua mô phỏng cả ba dòng PASS, vẫn cần tài khoản demo thật để xác minh quyền online. Trạng thái VERIFYING giữ nguyên.
