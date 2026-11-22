@@ -11,6 +11,8 @@ import { Select } from '../../shared/ui/Select'
 import { Badge } from '../../shared/ui/Badge'
 import { Button } from '../../shared/ui/Button'
 import type { Page } from '../../types'
+import { ReplenishmentPositionPanel } from '../orderAnalytics/OrderAnalyticsPanels'
+import { analyticsTarget } from '../orderAnalytics/types'
 import { getReplenishmentAlertSources, getReplenishmentDays, getReplenishmentRun, replenishmentError } from './api'
 import type { Algorithm, Policy, ReplenishmentRun, SimulationDay } from './types'
 import { evaluateReplenishmentAlert, getFixtureWarehouseBinding } from './alert'
@@ -91,6 +93,10 @@ export function ReplenishmentRunPage() {
     return () => { active = false }
   }, [token, user?.id, user?.role, current, alertBinding, traceKey])
   const currentTrace = trace?.owner === current && trace.key === traceKey ? trace.value : null
+  const target = current?.run.manifest.mode === 'operational' && current.run.manifest.reporting_scope === 'warehouse'
+    ? analyticsTarget(current.run.manifest.binding) : null
+  const referenceDate = currentTrace?.items.find(day => !day.warmup)?.day
+  const selection = { algorithm, lead_time: horizon, service, policy, reference_date: referenceDate }
   const traceError = traceFailure?.owner === current && traceFailure.key === traceKey ? traceFailure.value : ''
   const sources = alertSources?.owner === current && alertSources.key === traceKey ? alertSources.value : null
   const sourceError = alertFailure?.owner === current && alertFailure.key === traceKey ? alertFailure.value : ''
@@ -136,6 +142,7 @@ export function ReplenishmentRunPage() {
         <Select label="Mức dịch vụ danh nghĩa" value={service} onChange={e => { if (e.target.value) { setService(e.target.value); setPage(1) } }} options={['0.80','0.90','0.95'].map(value => ({ value, label: number(Number(value)*100) + '%' }))} />
         <Select label="Chính sách" value={policy} onChange={e => { if (e.target.value) { setPolicy(e.target.value as Policy); setPage(1) } }} options={[{ value: 'baseline', label: 'Đối chứng' }, { value: 'proposed', label: 'Có tồn an toàn' }]} />
       </div>
+      {token && target && <ReplenishmentPositionPanel token={token} context={traceKey} target={target} view="operational" selection={selection} />}
       <section className="replenishment-panel replenishment-alert" aria-label="Cảnh báo bổ sung hàng demo">
         <h2>Đối chiếu ngưỡng bổ sung hàng (demo)</h2>
         {waitingForAlertData ? <FeedbackMessage>Đang kiểm tra tồn kho, danh mục và ROP của ngày mô phỏng...</FeedbackMessage>
@@ -143,7 +150,7 @@ export function ReplenishmentRunPage() {
           : alert?.status === 'missing' || sourceError || traceError ? <FeedbackMessage variant="warning">Thiếu dữ liệu để đối chiếu. {sourceError || traceError || (alert?.status === 'missing' ? alert.reason : '')}</FeedbackMessage>
           : alert?.status === 'reorder' || alert?.status === 'above' ? <>
             <FeedbackMessage variant={alert.status === 'reorder' ? 'warning' : undefined}>
-              {alert.status === 'reorder' ? 'Đề xuất xem xét bổ sung' : 'Tồn kho trên ngưỡng ROP tham chiếu'}.
+              {alert.status === 'reorder' ? 'Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng' : 'Tồn kho trên ngưỡng ROP tham chiếu'}.
             </FeedbackMessage>
             <p>Ngày ROP tham chiếu: <strong>{alert.day}</strong>. SKU: <strong>{alert.sku}</strong>;
               kho: <strong>{alert.warehouseCode}</strong>; tồn: <strong>{number(alert.onHand)}</strong> {alert.unit};
@@ -155,6 +162,7 @@ export function ReplenishmentRunPage() {
         <p className="replenishment-alert-disclosure">Dữ liệu demo/fixture, chỉ dùng trình diễn; lead time {horizon} ngày là giả định của kịch bản.
           ROP thuộc ngày mô phỏng, không phải ngưỡng đã phê duyệt cho vận hành thực tế.
           Số tồn là dữ liệu API tại thời điểm đọc; đơn vị tính lấy từ danh mục sản phẩm đã đối chiếu.</p>
+        {token && alertBinding && referenceDate && <ReplenishmentPositionPanel token={token} context={traceKey} target={alertBinding} view="demo" selection={{ ...selection, run_id: runId }} />}
       </section>
       <section className="replenishment-panel"><h2>Độ bất định</h2><p>Khoảng danh nghĩa 90%; kết quả quan sát có thể khác và không bảo đảm mức phục vụ. Các cửa sổ có thể chồng lấp, không được xem là độc lập.</p><dl className="replenishment-facts"><div><dt>Cửa sổ hiệu chỉnh</dt><dd>{entry?.windows.length ?? 0}</dd></div>
         <div><dt>Cửa sổ bị loại</dt><dd>{entry ? Math.max(0, possible - entry.windows.length) : 'Không xác định'}</dd></div>

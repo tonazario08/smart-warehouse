@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 
 from app.anomalies import service
+from app.anomalies.outbound_link import VerifiedOutboundView, verified_outbound
 from app.anomalies.service import (
     AlertDetail,
     AlertList,
@@ -31,6 +32,15 @@ def _fresh_user(actor: Annotated[User, Depends(get_current_user)], session: Db) 
 
 Actor = Annotated[User, Depends(require_permission(Permission.ANOMALY_READ, _fresh_user))]
 Reviewer = Annotated[User, Depends(require_permission(Permission.ANOMALY_REVIEW, _fresh_user))]
+VoucherActor = Annotated[
+    User,
+    Depends(
+        require_permission(
+            Permission.INVENTORY_HISTORY_READ,
+            require_permission(Permission.ANOMALY_READ, _fresh_user),
+        )
+    ),
+]
 
 
 @router.get("/status", response_model=StatusView)
@@ -53,6 +63,14 @@ def list_alerts(
 @router.get("/{alert_id}", response_model=AlertDetail)
 def detail(alert_id: str, actor: Actor, session: Db, settings: Config):
     return service.detail(alert_id, actor, session, settings)
+
+
+@router.get("/{alert_id}/outbound", response_model=VerifiedOutboundView)
+def outbound_voucher(
+    alert_id: str, response: Response, actor: VoucherActor, session: Db, settings: Config
+):
+    response.headers["Cache-Control"] = "no-store"
+    return verified_outbound(session, settings, alert_id)
 
 
 @router.get("/{alert_id}/reviews", response_model=ReviewList)

@@ -11,3 +11,15 @@ export const statusLabels: Record<Status, string> = { new: 'Chưa đánh giá', 
 export const featureLabels: Record<string, string> = { log_quantity: 'Số lượng xuất (log)', hour_fraction: 'Giờ trong ngày', weekday_fraction: 'Thứ trong tuần', log_prior_quantity_mean_7d: 'Lượng xuất trung bình 7 ngày trước (log)', log_prior_event_count_7d: 'Số giao dịch 7 ngày trước (log)', log_quantity_to_prior_mean: 'Tỷ lệ lượng xuất so với lịch sử (log)' }
 export const partitionLabels: Record<string, string> = { train: 'Huấn luyện', validation: 'Kiểm định', final_holdout: 'Đánh giá cuối' }
 export const reasons: Record<string, string> = { EXPLAINER_MISSING: 'Thiếu công cụ giải thích', EXPLAINER_ERROR: 'Không thể tính giải thích', ADDITIVITY_MISMATCH: 'Giải thích không khớp điểm', MODEL_UNAVAILABLE: 'Mô hình không khả dụng' }
+
+export type AlertOutbound = {
+  outbound_id: number
+  product_name: string
+  product_sku: string
+  warehouse_code: string
+  warehouse_name: string
+  quantity: number
+  unit: string
+  occurred_at: string
+  performed_by_id: number
+}

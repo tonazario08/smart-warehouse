@@ -114,14 +114,14 @@ it.each([
     expect(api.getReplenishmentAlertSources).not.toHaveBeenCalled()
     return
   }
-  expect(await screen.findByText(/Đề xuất xem xét bổ sung/)).toBeInTheDocument()
+  expect(await screen.findByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)).toBeInTheDocument()
   expect(screen.getByText(/Lượng đặt tham khảo theo EOQ/)).toHaveTextContent('10')
   expect(api.getReplenishmentAlertSources).toHaveBeenCalledWith('token', 10, 20)
   vi.mocked(api.getReplenishmentAlertSources).mockResolvedValue(demoSources(20))
   await userEvent.selectOptions(screen.getByLabelText('Thời gian cung ứng'), '7')
   expect(await screen.findByText(/Tồn kho trên ngưỡng ROP tham chiếu/)).toBeInTheDocument()
   expect(screen.getByRole('region', { name: 'Cảnh báo bổ sung hàng demo' })).toHaveTextContent(/tồn: 20/)
-  expect(screen.queryByText(/Đề xuất xem xét bổ sung/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)).not.toBeInTheDocument()
   expect(screen.getByText(/lead time 7 ngày là giả định/)).toBeInTheDocument()
 })
 
@@ -138,26 +138,26 @@ it('reports denied stock after a case change even while the new trace is pending
   vi.clearAllMocks()
   mockDemoRun()
   renderDemo()
-  expect(await screen.findByText(/Đề xuất xem xét bổ sung/)).toBeInTheDocument()
+  expect(await screen.findByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)).toBeInTheDocument()
   vi.mocked(api.getReplenishmentAlertSources).mockRejectedValueOnce(new ApiError('Forbidden', 403))
   vi.mocked(api.getReplenishmentDays).mockReturnValueOnce(new Promise(() => {}))
   await userEvent.selectOptions(screen.getByLabelText('Thời gian cung ứng'), '7')
   expect(await screen.findByText(/Thiếu dữ liệu để đối chiếu/)).toBeInTheDocument()
-  expect(screen.queryByText(/Đề xuất xem xét bổ sung/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)).not.toBeInTheDocument()
 })
 
 it('does not display the previous advisory while revisiting a run', async () => {
   vi.clearAllMocks()
   mockDemoRun()
   renderDemo()
-  expect(await screen.findByText(/Đề xuất xem xét bổ sung/)).toBeInTheDocument()
+  expect(await screen.findByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)).toBeInTheDocument()
   vi.mocked(api.getReplenishmentRun).mockReturnValueOnce(new Promise(() => {}))
   await userEvent.click(screen.getByRole('link', { name: 'Mở bản mô phỏng khác' }))
   expect(await screen.findByText('Đang tải chi tiết bổ sung hàng...')).toBeInTheDocument()
 
   const advisoryAtReload = vi.fn()
   vi.mocked(api.getReplenishmentDays).mockImplementationOnce(() => {
-    advisoryAtReload(Boolean(screen.queryByText(/Đề xuất xem xét bổ sung/)))
+    advisoryAtReload(Boolean(screen.queryByText(/Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng/)))
     return new Promise(() => {})
   })
   await userEvent.click(screen.getByRole('link', { name: 'Quay lại bản mô phỏng' }))

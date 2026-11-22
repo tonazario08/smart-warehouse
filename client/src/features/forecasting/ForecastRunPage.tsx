@@ -11,6 +11,8 @@ import { Select } from '../../shared/ui/Select'
 import { Badge } from '../../shared/ui/Badge'
 import { Button } from '../../shared/ui/Button'
 import type { Page } from '../../types'
+import { OpenDemandPanel } from '../orderAnalytics/OrderAnalyticsPanels'
+import { analyticsTarget } from '../orderAnalytics/types'
 import { forecastError, getForecastPredictions, getForecastRun } from './api'
 import type { Algorithm, ForecastRun, Prediction } from './types'
 import '../../shared/styles/management.css'
@@ -38,6 +40,7 @@ export function ForecastRunPage() {
   }, [token, user?.id, user?.role, runId, horizon, algorithm, page, retry, key])
   const current = loaded?.key === key ? loaded : null, error = failure?.key === key ? failure.text : ''
   const metric = current?.run.metrics?.[`${algorithm}:${horizon}`]
+  const target = current?.run.applicability === 'operational' ? analyticsTarget(current.run.binding) : null
   return <section className="forecast-page management-workspace">
     <PageHeader title="Chi tiết dự báo" description="Kiểm tra phạm vi, giới hạn và các giá trị của kết quả." />
     <Link to="/forecasting">Về danh sách dự báo</Link>
@@ -45,6 +48,7 @@ export function ForecastRunPage() {
       {current.run.applicability === 'retrospective' && <FeedbackMessage variant="warning">Kết quả nghiên cứu hồi cứu, không phải dự báo tồn kho vận hành.</FeedbackMessage>}
       {current.run.stale === true && <FeedbackMessage variant="warning">Kết quả vận hành không còn cập nhật cho ngày hiện tại. Ngày gốc: {current.run.manifest.origin_end ?? 'không xác định'}.</FeedbackMessage>}
       {current.run.fixture_label && <Badge>{current.run.fixture_label}</Badge>}
+      {target && token && <OpenDemandPanel token={token} context={key} target={target} />}
       <section className="forecast-panel"><h2>Thông tin kết quả</h2><dl className="forecast-facts">
         <div><dt>Mã kết quả</dt><dd>{current.run.manifest.run_id}</dd></div><div><dt>Phiên bản dữ liệu</dt><dd>{current.run.manifest.data_version}</dd></div>
         <div><dt>Chỉ tiêu</dt><dd>{current.run.manifest.target === 'reported_daily_unit_sales' ? 'Đơn vị bán được báo cáo' : 'Đơn vị xuất hàng'}</dd></div><div><dt>Đơn vị</dt><dd>{current.run.manifest.unit === 'unit' ? 'đơn vị' : current.run.manifest.unit}</dd></div>

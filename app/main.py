@@ -21,6 +21,7 @@ from app.gis.router import router as gis_router
 from app.gis.service import SnapshotCatalog
 from app.inventory.router import router as inventory_router
 from app.master_data.router import router as master_data_router
+from app.order_analytics.router import router as order_analytics_router
 from app.purchase_requests.router import router as purchase_request_router
 from app.replenishment.router import router as replenishment_router
 from app.transfers.router import router as transfer_router
@@ -57,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(audit_router, prefix=settings.api_v1_prefix)
     application.include_router(transfer_router, prefix=settings.api_v1_prefix)
     application.include_router(purchase_request_router, prefix=settings.api_v1_prefix)
+    application.include_router(order_analytics_router, prefix=settings.api_v1_prefix)
     register_exception_handlers(application)
 
     @application.get(f"{settings.api_v1_prefix}/health", tags=["system"])

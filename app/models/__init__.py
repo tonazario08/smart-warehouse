@@ -1,4 +1,4 @@
-from app.anomalies.models import AnomalyAlert, AnomalyReview, AnomalyRun
+from app.anomalies.models import AnomalyAlert, AnomalyOutboundLink, AnomalyReview, AnomalyRun
 from app.auth.recovery_models import PasswordRecoveryBudget, PasswordResetToken
 from app.models.domain import (
     Category,
@@ -19,15 +19,24 @@ from app.models.domain import (
     UserRole,
     Warehouse,
 )
+from app.order_analytics.models import (
+    OrderAnalyticsJob,
+    OrderAnalyticsKeyState,
+    OrderAnalyticsOrderCheck,
+)
 
 __all__ = [
     "AuditLog",
     "AnomalyAlert",
+    "AnomalyOutboundLink",
     "AnomalyReview",
     "AnomalyRun",
     "Category",
     "Inbound",
     "MovementProvenance",
+    "OrderAnalyticsJob",
+    "OrderAnalyticsKeyState",
+    "OrderAnalyticsOrderCheck",
     "Outbound",
     "PasswordRecoveryBudget",
     "PasswordResetToken",

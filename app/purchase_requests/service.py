@@ -17,6 +17,7 @@ from app.gis.schemas import distance_mm
 from app.inventory.schemas import InventoryMovementCreate
 from app.models import (
     MovementProvenance,
+    OrderAnalyticsJob,
     Outbound,
     PurchaseRequest,
     PurchaseRequestWorkflow,
@@ -343,6 +344,14 @@ class PurchaseRequestService:
                 note=body.note,
             )
             self.repository.session.add(workflow)
+            self.repository.flush()
+            self.repository.session.add(
+                OrderAnalyticsJob(
+                    purchase_request_id=row.id,
+                    warehouse_id=row.warehouse_id,
+                    product_id=row.product_id,
+                )
+            )
             self.repository.flush()
             return self._project((row, workflow)), False
 

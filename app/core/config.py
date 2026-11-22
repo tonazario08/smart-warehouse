@@ -5,7 +5,15 @@ from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import EmailStr, Field, SecretStr, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    UUID4,
+    EmailStr,
+    Field,
+    SecretStr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -63,6 +71,7 @@ class Settings(BaseSettings):
     replenishment_catalog_root: Path | None = None
     replenishment_allow_fixture: bool = False
     anomalies_allow_fixture: bool = False
+    anomalies_outbound_link_demo_id: UUID4 | None = None
     gis_catalog_root: Path | None = None
     gis_snapshot_id: str | None = None
     gis_allow_fixture: bool = False
@@ -76,6 +85,10 @@ class Settings(BaseSettings):
             raise ValueError("forecast fixture serving requires a test environment")
         if self.replenishment_allow_fixture and self.app_env not in ("test", "integration"):
             raise ValueError("replenishment fixture serving requires a test environment")
+        if self.anomalies_outbound_link_demo_id is not None and (
+            not self.anomalies_allow_fixture or self.app_env not in ("test", "integration")
+        ):
+            raise ValueError("anomaly outbound link requires explicitly enabled demo fixtures")
         if self.anomalies_allow_fixture and self.app_env not in ("test", "integration"):
             raise ValueError("anomaly fixture serving requires a test environment")
         if self.gis_allow_fixture and self.app_env not in ("test", "integration"):

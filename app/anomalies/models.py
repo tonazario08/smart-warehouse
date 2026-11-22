@@ -1,4 +1,4 @@
-"""Persisted fixture anomaly batches and append-only review events."""
+"""Persisted fixture anomaly batches, review events and verified outbound links."""
 
 from datetime import datetime
 from uuid import UUID
@@ -70,3 +70,37 @@ class AnomalyReview(Base):
     idempotency_key: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnomalyOutboundLink(Base):
+    """One private demo provenance link per anomaly alert; no business mutation."""
+
+    __tablename__ = "anomaly_outbound_links"
+    __table_args__ = (
+        CheckConstraint(
+            "length(bundle_id) = 69 AND substr(bundle_id, 1, 5) = 'ddv1-'",
+            name="ck_anomaly_outbound_link_bundle_id",
+        ),
+        CheckConstraint(
+            "length(source_checksum) = 64", name="ck_anomaly_outbound_link_source_checksum"
+        ),
+        CheckConstraint(
+            "length(source_fingerprint) = 64", name="ck_anomaly_outbound_link_source_fingerprint"
+        ),
+        CheckConstraint("length(trim(unit)) > 0", name="ck_anomaly_outbound_link_unit"),
+    )
+
+    alert_id: Mapped[str] = mapped_column(
+        ForeignKey("anomaly_alerts.id", ondelete="RESTRICT"), primary_key=True
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    outbound_id: Mapped[int] = mapped_column(
+        ForeignKey("outbounds.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    demo_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    bundle_id: Mapped[str] = mapped_column(String(69), nullable=False)
+    source_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    unit: Mapped[str] = mapped_column(String(40), nullable=False)

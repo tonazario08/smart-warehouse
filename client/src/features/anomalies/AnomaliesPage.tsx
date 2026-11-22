@@ -11,6 +11,7 @@ import { Pagination } from '../../shared/ui/Pagination'
 import { Select } from '../../shared/ui/Select'
 import { Badge } from '../../shared/ui/Badge'
 import { Button } from '../../shared/ui/Button'
+import { OrderChecksPanel } from '../orderAnalytics/OrderAnalyticsPanels'
 import { getAlerts, getStatus } from './api'
 import { statusLabels } from './types'
 import type { AlertPage, StatusResponse } from './types'
@@ -40,6 +41,7 @@ export function AnomaliesPage() {
   const error = failure?.key === key ? failure.text : ''
   return <section className="anomalies-page management-workspace">
     <PageHeader title="Bất thường" description="Rà soát các bản ghi có đặc trưng khác thường." />
+    {token && user && <OrderChecksPanel key={`${user.id}:${user.role}`} token={token} context={`${user.id}:${user.role}`} />}
     <FeedbackMessage variant="warning">Dữ liệu kiểm thử tổng hợp. Hiệu quả trên dữ liệu thực chưa được xác minh.</FeedbackMessage>
     {error ? <><FeedbackMessage variant="error">{error}</FeedbackMessage><Button onClick={() => setRetry(n => n + 1)}>Thử lại</Button></> : !current ? <FeedbackMessage>Đang tải cảnh báo...</FeedbackMessage> : current.status.state === 'unavailable' ? <EmptyState title="Chưa có cảnh báo khả dụng" description="Chưa có kết quả kiểm thử được nhập." /> : <>
       <Select label="Trạng thái đánh giá" value={filter} placeholder="Tất cả trạng thái" onChange={e => { setFilter(e.target.value); setPage(1) }} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} />
