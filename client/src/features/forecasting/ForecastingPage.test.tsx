@@ -76,9 +76,17 @@ it('shows each listed run’s information cutoff and actual horizons, including 
   })
   const first = makeRun('frv1-' + 'a'.repeat(64), '2024-06-15T00:00:00Z', [1, 7])
   const second = makeRun('frv1-' + 'b'.repeat(64), null, [7])
+  vi.mocked(api.getForecastStatus).mockResolvedValue({ state: 'ready', reason_code: null, latest: { ...first, stale: false, applicability: 'operational' } })
   vi.mocked(api.listForecastRuns).mockResolvedValue({ items: [first, second], total: 2, page: 1, page_size: 20 })
   render(<MemoryRouter><ForecastingPage /></MemoryRouter>)
-  const row1 = (await screen.findByRole('link', { name: first.manifest.run_id })).closest('tr')!
+  const firstLink = await screen.findByRole('link', { name: first.manifest.run_id })
+  expect(firstLink).toHaveTextContent(first.manifest.run_id.slice(0, 14) + '…')
+  expect(firstLink).toHaveAttribute('title', first.manifest.run_id)
+  expect(firstLink).toHaveAttribute('href', '/forecasting/runs/' + first.manifest.run_id)
+  const row1 = firstLink.closest('tr')!
+  expect(within(row1).getByText('Mô phỏng kiểm thử')).toBeInTheDocument()
+  expect(screen.getByText('Kết quả của kịch bản kiểm thử, không phản ánh dự báo hay độ mới của kho thật.')).toBeInTheDocument()
+  expect(screen.queryByText('Cập nhật cho ngày hiện tại')).not.toBeInTheDocument()
   const row2 = screen.getByRole('link', { name: second.manifest.run_id }).closest('tr')!
   expect(screen.getByRole('columnheader', { name: 'Giới hạn thông tin' })).toBeInTheDocument()
   expect(screen.getByRole('columnheader', { name: 'Khoảng dự báo' })).toBeInTheDocument()

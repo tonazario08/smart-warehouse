@@ -2,14 +2,15 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Path, Query, Request
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import Permission, require_permission
 from app.core.config import Settings, get_settings
 from app.core.errors import DomainError, ErrorResponse
 from app.core.pagination import Page
 from app.db.session import get_session
+from app.forecasting.chart import CHART_POINTS
 from app.forecasting.repository import ForecastRepository
 from app.forecasting.schemas import PredictionRow
 from app.forecasting.service import ForecastService
@@ -133,3 +134,31 @@ def predictions(
         "page": page,
         "page_size": page_size,
     }
+
+
+
+class ForecastChart(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    series_key: str | None
+    items: list[PredictionRow] = Field(max_length=CHART_POINTS)
+
+
+@router.get(
+    "/runs/{run_id}/chart",
+    response_model=ForecastChart,
+    dependencies=[Depends(keys({"horizon", "algorithm", "lead"}))],
+)
+def chart(
+    actor: Actor,
+    forecast: Service,
+    response: Response,
+    horizon: Annotated[int, Query(ge=1, le=7, json_schema_extra={"enum": [1, 7]})],
+    algorithm: Literal["persistence", "seasonal_naive", "xgboost"],
+    lead: Annotated[int, Query(ge=1, le=7)],
+    run_id: str = Path(pattern=r"^frv1-[0-9a-f]{64}$"),
+) -> ForecastChart:
+    if horizon not in (1, 7) or lead > horizon:
+        raise DomainError(422, "REQUEST_VALIDATION_ERROR", "Invalid query parameters.")
+    series_key, items = forecast.chart_rows(actor, run_id, horizon, algorithm, lead)
+    response.headers["Cache-Control"] = "no-store"
+    return ForecastChart(series_key=series_key, items=items)

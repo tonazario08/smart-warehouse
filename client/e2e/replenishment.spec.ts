@@ -44,9 +44,15 @@ test.describe('actual generated fixture', () => {
     expect(first.items).toHaveLength(20)
     await page.goto('/replenishment')
     await expect(page.getByText('Dữ liệu kiểm thử').first()).toBeVisible()
-    await page.getByRole('link', { name: fixtureId, exact: true }).click()
+    const runLink = page.getByRole('link', { name: fixtureId, exact: true })
+    await expect(runLink).toHaveText(fixtureId.slice(0, 14) + '…')
+    await expect(runLink).toHaveAttribute('title', fixtureId)
+    await expect(runLink).toHaveAttribute('href', '/replenishment/runs/' + fixtureId)
+    await runLink.click()
     await expect(page.getByText(/Kịch bản kiểm thử tổng hợp/)).toBeVisible()
-    await expect(page.getByText('M7-E2E-SYNTHETIC', { exact: false })).toBeVisible()
+    const source = page.getByRole('heading', { name: 'Nguồn và giả định', exact: true }).locator('..')
+    const product = source.locator('dl > div').filter({ has: page.getByText('Sản phẩm', { exact: true }) })
+    await expect(product.locator('dd')).toContainText('M7-E2E-SYNTHETIC')
     const trace = page.getByRole('table', { name: 'Diễn biến tồn và đơn hàng theo ngày' })
     const firstRow = trace.getByRole('row').filter({ hasText: first.items[0].day })
     await expect(firstRow).toBeVisible()
@@ -195,3 +201,42 @@ for (const [name, message] of [
     await signOut(page)
   })
 }
+
+// Keep the frozen hosted matrix's collected/skipped counts unchanged.
+if (process.env.E2E_WAREHOUSE_FORECAST_PILOT === 'true' && process.env.GITHUB_ACTIONS !== 'true') test('paired warehouse pilot is read-only, shows fixed seven-day lineage and rejects customer access', async ({ page }) => {
+  test.skip(scenario !== 'valid', 'Requires the approved paired synthetic-only artifacts')
+  await signIn(page, e2eCredentials.seededWarehouse)
+  const token = await storedToken(page)
+  const path = '/replenishment/runs/' + fixtureId + '/forecast-pilot'
+  const result = await apiAs<{ state: string; pilot: {
+    forecast_run_id: string; replenishment_run_id: string; lead_time: number; scenario_day: string;
+    sku: string; warehouse_code: string; threshold: string; simulated_inventory_position: number; rop: number;
+  } }>(page, token, path)
+  expect(result.state).toBe('ready')
+  expect(result.pilot.replenishment_run_id).toBe(fixtureId)
+  expect(result.pilot.lead_time).toBe(7)
+  const writes: string[] = []
+  const checkReadOnly = (request: import('@playwright/test').Request) => {
+    if (new URL(request.url()).pathname.includes('/api/v1/') && !['GET', 'HEAD'].includes(request.method())) writes.push(request.method())
+  }
+  page.on('request', checkReadOnly)
+  await page.goto('/replenishment/runs/' + fixtureId)
+  const panel = page.getByRole('region', { name: 'Demo: Từ dự báo đến điểm đặt lại' })
+  await expect(panel.getByText(/Dữ liệu giả lập cho một kho và một SKU/)).toBeVisible()
+  await expect(panel.getByText(result.pilot.scenario_day, { exact: true })).toBeVisible()
+  await expect(panel.getByText(/thời gian cung ứng giả định 7 ngày/)).toBeVisible()
+  const comparator = result.pilot.simulated_inventory_position === result.pilot.rop ? /Bằng điểm đặt lại/
+    : result.pilot.simulated_inventory_position < result.pilot.rop ? /Dưới điểm đặt lại/ : /Trên điểm đặt lại/
+  await expect(panel.getByText(comparator)).toBeVisible()
+  const source = panel.getByRole('link', { name: 'Mở đúng kết quả dự báo nguồn' })
+  await expect(source).toHaveAttribute('href', '/forecasting/runs/' + result.pilot.forecast_run_id)
+  await source.click()
+  await expect(page.getByRole('heading', { name: 'Chi tiết dự báo', exact: true })).toBeVisible()
+  expect(writes).toEqual([])
+  page.off('request', checkReadOnly)
+  await signOut(page)
+  await signIn(page, e2eCredentials.seededClient)
+  await apiAs(page, await storedToken(page), path, 'GET', undefined, 403)
+  await page.goto('/replenishment/runs/' + fixtureId)
+  await expect(page.getByRole('region', { name: 'Demo: Từ dự báo đến điểm đặt lại' })).toHaveCount(0)
+})

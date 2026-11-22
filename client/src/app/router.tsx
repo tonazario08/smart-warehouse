@@ -17,6 +17,7 @@ import { WarehouseDetailPage } from '../pages/WarehouseDetailPage'
 import { WarehouseFormPage } from '../pages/WarehouseFormPage'
 import { MovementFormPage, MovementListPage } from '../pages/MovementPages'
 import { AppShell } from '../shared/layout/AppShell'
+import { useAuth } from './AuthProvider'
 import { RouteGuard } from './RouteGuard'
 import { AssistantPage } from '../features/assistant/AssistantPage'
 import { GISPage } from '../features/gis/GISPage'
@@ -36,6 +37,11 @@ import { AnomalyDetailPage } from '../features/anomalies/AnomalyDetailPage'
 import { AnomalyOutboundPage } from '../features/anomalies/AnomalyOutboundPage'
 import { OperationalAnomaliesPage, OperationalAnomalyDetailPage, OperationalAnomalyOutboundPage } from '../features/operationalAnomalies/OperationalAnomaliesPages'
 
+function RoleHome() {
+  const { user } = useAuth()
+  return <Navigate replace to={user?.role === 'admin' ? '/dashboard' : user?.role === 'warehouse' ? '/inventory' : '/products'} />
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
@@ -48,7 +54,7 @@ export const router = createBrowserRouter([
       { path: '/transactions', element: <RouteGuard permission="inventory:history:read" />, children: [{ index: true, element: <TransactionsPage /> }] },
       { path: '/audit', element: <RouteGuard permission="audit:read" />, children: [{ index: true, element: <AuditPage /> }] },
     ] },
-    { index: true, element: <Navigate replace to="/dashboard" /> },
+    { index: true, element: <RoleHome /> },
     { path: '/change-password', element: <ChangePasswordPage /> },
     { path: '/assistant', element: <RouteGuard permission="assistant:read" />, children: [{ index: true, element: <AssistantPage /> }] },
     { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }, { path: 'operational', element: <OperationalAnomaliesPage /> }, { path: 'operational/:transactionId', element: <OperationalAnomalyDetailPage /> }, { element: <RouteGuard permission="inventory:history:read" />, children: [{ path: ':alertId/outbound', element: <AnomalyOutboundPage /> }, { path: 'operational/:transactionId/outbound', element: <OperationalAnomalyOutboundPage /> }] }] },

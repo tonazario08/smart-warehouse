@@ -231,10 +231,19 @@ def _checked(path: Path) -> Path:
 
 
 def verify_catalog_run(
-    path: Path, *, allow_fixture: bool = False, require_name: bool = True
+    path: Path,
+    *,
+    allow_fixture: bool = False,
+    require_name: bool = True,
+    expected_public_manifest_sha256: str | None = None,
 ) -> PublicRun:
     root = _checked(path)
     raw = _bounded_read(_checked(root / "public-manifest.json"), 256 * 1024 * 1024)
+    if (
+        expected_public_manifest_sha256 is not None
+        and hashlib.sha256(raw).hexdigest() != expected_public_manifest_sha256
+    ):
+        raise ValueError("unexpected public manifest")
     decoded = _decode_json(raw.decode("utf-8"))
     if canonical_json(decoded) != raw:
         raise ValueError("noncanonical manifest")
@@ -404,7 +413,13 @@ class ForecastRepository:
                 receipts.append(receipt)
         return max(receipts, key=lambda item: (item.created_at, item.attempt_id), default=None)
 
-    def get_scoped(self, run_id: str, scopes: tuple[str, ...]) -> PublicRun | None:
+    def get_scoped(
+        self,
+        run_id: str,
+        scopes: tuple[str, ...],
+        *,
+        expected_public_manifest_sha256: str | None = None,
+    ) -> PublicRun | None:
         root = self._root()
         for scope in scopes:
             folder = root / scope
@@ -418,5 +433,9 @@ class ForecastRepository:
             manifest = _manifest(raw)
             if manifest.dataset_class == "fixture" and not self.allow_fixture:
                 return None
-            return verify_catalog_run(candidate, allow_fixture=self.allow_fixture)
+            return verify_catalog_run(
+                candidate,
+                allow_fixture=self.allow_fixture,
+                expected_public_manifest_sha256=expected_public_manifest_sha256,
+            )
         return None

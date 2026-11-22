@@ -69,3 +69,6 @@
 .anomaly-copy { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
 .anomaly-copy [role="status"] { flex-basis: 100%; }
 .anomaly-copy [role="status"]:empty { position: absolute; }
+.anomaly-comparison { font-weight: 650; }
+.anomaly-comparison + .anomalies-facts dd { font-variant-numeric: tabular-nums; }
+.anomaly-technical[open] summary { margin-bottom: .75rem; }

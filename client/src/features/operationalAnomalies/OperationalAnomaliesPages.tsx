@@ -11,7 +11,7 @@ import { EmptyState } from '../../shared/ui/EmptyState'
 import { FeedbackMessage } from '../../shared/ui/FeedbackMessage'
 import { PageHeader } from '../../shared/ui/PageHeader'
 import { Pagination } from '../../shared/ui/Pagination'
-import { formatVietnamTime, number, probability } from '../anomalies/alertReadability'
+import { formatVietnamTime, number, readScoreComparison } from '../anomalies/alertReadability'
 import type { AlertOutbound } from '../anomalies/types'
 import { OperationalAnomalyReviews } from './OperationalAnomalyReviews'
 import '../../shared/styles/management.css'
@@ -164,30 +164,67 @@ export function OperationalAnomaliesPage() {
   </section>
 }
 
+function scoring(row: Result) {
+  const comparison = readScoreComparison(row.score, row.threshold)
+  return comparison && (comparison.relation === 'above') === (row.state === 'flagged') ? comparison : null
+}
+
 function Scoring({ row }: { row: Result }) {
   if (row.state !== 'normal' && row.state !== 'flagged') return null
-  const { score, threshold, base_value: base, contributions } = row
-  if (!probability(score) || !probability(threshold) || (score > threshold) !== (row.state === 'flagged')) {
+  const comparison = scoring(row)
+  if (!comparison) {
     return <FeedbackMessage variant="warning">Không thể xác minh điểm và ngưỡng đã ghi.</FeedbackMessage>
   }
-  const explain = typeof base === 'number' && Number.isFinite(base) && Array.isArray(contributions)
-    && contributions.length === features.length && contributions.every(Number.isFinite)
-  return <div>
+  return <>
+    <h3>Vì sao có kết quả này?</h3>
+    <p className="anomaly-comparison">{comparison.label}</p>
     <dl className="anomalies-facts">
-      <div><dt>Điểm bất thường</dt><dd>{number(score)}</dd></div>
-      <div><dt>Ngưỡng của mô hình</dt><dd>{number(threshold)}</dd></div>
+      <div><dt>Điểm bất thường</dt><dd>{comparison.scoreText}</dd></div>
+      <div><dt>Ngưỡng của mô hình</dt><dd>{comparison.thresholdText}</dd></div>
+    </dl>
+    <p>Chỉ gắn cờ khi điểm lớn hơn ngưỡng. Điểm không phải xác suất giao dịch sai.</p>
+  </>
+}
+
+function matchingExplanation(row: Result) {
+  const { base_value: base, contributions, score } = row
+  if (row.state !== 'flagged' || !scoring(row) || row.feature_version !== 'anomaly-features/1'
+    || typeof base !== 'number' || !Number.isFinite(base) || typeof score !== 'number' || !Array.isArray(contributions)
+    || contributions.length !== features.length || !contributions.every(Number.isFinite)) return null
+  // Match the published operational result contract before naming a feature.
+  const difference = Math.abs(base + contributions.reduce((total, value) => total + value, 0) - score)
+  return difference <= 1e-8 ? { base, contributions } : null
+}
+
+function OperationalNextCheck({ row }: { row: Result }) {
+  const explanation = matchingExplanation(row)
+  const driverIndex = explanation?.contributions.reduce((best, contribution, index, contributions) =>
+    contribution > 0 && (best === -1 || contribution > contributions[best]) ? index : best, -1) ?? -1
+  return <>
+    {driverIndex !== -1 && <p>Yếu tố làm tăng điểm nhiều nhất theo mô hình: <strong>{features[driverIndex]}</strong>. Đây không phải nguyên nhân đã được xác minh.</p>}
+    <h3>Nên kiểm tra gì?</h3>
+    <p>Đối chiếu sản phẩm, số lượng và thời điểm ghi nhận với phiếu xuất nếu có liên kết đã xác minh. Cảnh báo là gợi ý kiểm tra, không phải kết luận giao dịch sai.</p>
+  </>
+}
+
+function TechnicalScoring({ row }: { row: Result }) {
+  if ((row.state !== 'normal' && row.state !== 'flagged') || !scoring(row)) return null
+  const explanation = matchingExplanation(row)
+  return <details className="management-panel anomalies-panel anomaly-technical" key={row.transaction_id}>
+    <summary>Thông tin kỹ thuật</summary>
+    <dl className="anomalies-facts">
       <div><dt>Phiên bản mô hình</dt><dd>{row.model_version ?? '—'}</dd></div>
       <div><dt>Phiên bản đặc trưng</dt><dd>{row.feature_version ?? '—'}</dd></div>
     </dl>
-    <p>Chỉ gắn cờ khi điểm lớn hơn ngưỡng. Điểm không phải xác suất giao dịch sai.</p>
-    {explain && <>
-      <h3>Giải thích đóng góp SHAP</h3>
-      <p>Điểm nền: {number(base)}. Mỗi giá trị cho biết yếu tố đó làm tăng hay giảm điểm của mô hình, không phải phần trăm thay đổi lượng hàng hay bằng chứng nguyên nhân.</p>
-      <dl className="anomalies-facts">
-        {features.map((name, i) => <div key={name}><dt>{name}</dt><dd>{contributions[i] > 0 ? '+' : ''}{number(contributions[i])}</dd></div>)}
-      </dl>
+    {row.state === 'flagged' && <><h2>Giải thích đóng góp SHAP</h2>
+      {explanation ? <>
+        <p>Điểm nền: {number(explanation.base)}. Mỗi giá trị cho biết yếu tố đó làm tăng hay giảm điểm của mô hình, không phải phần trăm thay đổi lượng hàng hay bằng chứng nguyên nhân.</p>
+        <dl className="anomalies-facts">
+          {features.map((name, i) => <div key={name}><dt>{name}</dt><dd>{explanation.contributions[i] > 0 ? '+' : ''}{number(explanation.contributions[i])}</dd></div>)}
+        </dl>
+      </> : <p>Chưa có giải thích đáng tin để đối chiếu.</p>}
     </>}
-  </div>
+  </details>
 }
 
 type OperationalVoucher = AlertOutbound & { dataset_class?: DatasetClass | null }
@@ -224,12 +261,14 @@ export function OperationalAnomalyDetailPage() {
         <StateBadge state={row.state} />{' '}<DatasetBadge datasetClass={row.dataset_class} />
         {reason(row) && <FeedbackMessage>{reason(row)}</FeedbackMessage>}
         <Scoring row={row} />
+        {row.state === 'flagged' && <OperationalNextCheck row={row} />}
         <Button variant="secondary" onClick={retry}>Tải lại kết quả</Button>
       </section>
       {row.state === 'flagged' && <>
         <OperationalVoucherLink id={row.transaction_id} />
         <OperationalAnomalyReviews transactionId={row.transaction_id} />
       </>}
+      <TechnicalScoring row={row} />
     </> : <ReadStatus kind={state.kind === 'ready' ? 'failed' : state.kind} retry={retry} />}
   </section>
 }

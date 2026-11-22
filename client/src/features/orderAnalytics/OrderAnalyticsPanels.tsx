@@ -57,25 +57,33 @@ export function OpenDemandPanel({ token, context, target }: RunPanelProps) {
   </section>
 }
 
-export function ReplenishmentPositionPanel({ token, context, target, view, selection }: RunPanelProps & { view: 'operational' | 'demo'; selection: SimulationSelection }) {
-  const [retry, setRetry] = useState(0)
-  const { data, error } = useOrderAnalytics(
-    requestKey(context, token, target, view, selection, retry),
+export function useReplenishmentPosition({ token, context, target, view, selection }: Omit<RunPanelProps, 'target'> & {
+  target: AnalyticsTarget | null; view: 'operational' | 'demo'; selection: SimulationSelection;
+}) {
+  const [attempt, setAttempt] = useState(0)
+  const result = useOrderAnalytics(
+    target ? requestKey(context, token, target, view, selection, attempt) : null,
     async signal => {
-      const result = await getReplenishmentPosition(token, target, view, selection, signal)
-      if (!match(result, target)) throw new Error('order analytics target mismatch')
-      if (view === 'demo' && selection.run_id && result.run_id && result.run_id !== selection.run_id) {
+      if (!target) throw new Error('order analytics target missing')
+      const value = await getReplenishmentPosition(token, target, view, selection, signal)
+      if (!match(value, target)) throw new Error('order analytics target mismatch')
+      if (view === 'demo' && selection.run_id && value.run_id && value.run_id !== selection.run_id) {
         throw new Error('order analytics simulation mismatch')
       }
-      return result
+      return value
     }, isPending,
   )
+  return { ...result, retry: () => setAttempt(n => n + 1) }
+}
+
+export function ReplenishmentPositionPanel({ token, context, target, view, selection, verifiedEoq }: RunPanelProps & { view: 'operational' | 'demo'; selection: SimulationSelection; verifiedEoq?: number | null }) {
+  const { data, error, retry } = useReplenishmentPosition({ token, context, target, view, selection })
   const validRop = data?.state === 'available' && data.rop !== null && Number.isFinite(data.rop) && data.rop >= 0 && data.projected_quantity !== null
     && (view === 'demo' ? data.dataset_class === 'fixture' : Boolean(data.dataset_class && !['fixture', 'research'].includes(data.dataset_class)))
   const title = view === 'demo' ? 'Tham chiếu demo: tồn dự kiến so với ROP mô phỏng' : 'Tồn dự kiến (tạm tính)'
   return <section className="replenishment-panel" aria-label={title}>
     {view === 'demo' ? <h3>{title}</h3> : <h2>{title}</h2>}
-    <Status data={data} error={error} retry={() => setRetry(n => n + 1)} />
+    <Status data={data} error={error} retry={retry} />
     {view === 'demo' && <p>Dữ liệu demo/fixture; ROP thuộc ngày mô phỏng, không phải ngưỡng vận hành đã phê duyệt.</p>}
     {data && <>
       <dl className="replenishment-facts">
@@ -87,7 +95,7 @@ export function ReplenishmentPositionPanel({ token, context, target, view, selec
         <p>ROP {data.rop_date ? `ngày ${data.rop_date}` : 'tham chiếu'}: {amount(data.rop, data.unit)}.</p>
         {view === 'demo' && data.projected_quantity !== null && data.rop !== null && <p>{data.projected_quantity <= data.rop ? 'Tồn dự kiến tại hoặc dưới ROP mô phỏng.' : 'Tồn dự kiến trên ROP mô phỏng.'}</p>}
         {view === 'operational' && data.recommendation && <FeedbackMessage variant="warning">Đề xuất xem xét bổ sung</FeedbackMessage>}
-        {data.eoq !== null && Number.isSafeInteger(data.eoq) && data.eoq > 0 && <p>Lượng đặt tham khảo theo EOQ: {amount(data.eoq, data.unit)}.</p>}
+        {data.eoq !== null && Number.isSafeInteger(data.eoq) && data.eoq > 0 && (verifiedEoq === undefined || verifiedEoq === data.eoq) && <p>Lượng đặt tham khảo theo EOQ: {amount(data.eoq, data.unit)}.</p>}
       </>}
     </>}
   </section>

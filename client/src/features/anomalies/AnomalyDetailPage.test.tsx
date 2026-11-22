@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api'
+import { readScoreComparison } from './alertReadability'
 import { AnomalyDetailPage } from './AnomalyDetailPage'
 import * as api from './api'
 import type { Detail, ReviewResult } from './types'
@@ -13,6 +14,14 @@ const detail: Detail = { alert_id: 'alert', run_id: 'run', source_record_key: 's
 const result: ReviewResult = { alert_id: 'alert', status: 'confirmed', version: 2, review_id: 'review', replayed: false }
 const view = () => <MemoryRouter initialEntries={['/anomalies/alert']}><Routes><Route path="/anomalies/:alertId" element={<AnomalyDetailPage />} /></Routes></MemoryRouter>
 beforeEach(() => { vi.resetAllMocks(); auth.token = 'token'; auth.id = 1; auth.role = 'admin'; vi.mocked(api.getAlert).mockResolvedValue(detail); vi.mocked(api.getAlertOutbound).mockRejectedValue(new ApiError('unlinked', 404)); vi.mocked(api.getReviews).mockResolvedValue({ items: [] }) })
+async function openTechnical() {
+  const summary = await screen.findByText('Thông tin kỹ thuật')
+  const technical = summary.closest('details')!
+  expect(technical).not.toHaveAttribute('open')
+  await userEvent.click(summary)
+  expect(technical).toHaveAttribute('open')
+  return technical
+}
 it('shows a recoverable error if the alert cannot be loaded', async () => {
   vi.mocked(api.getAlert).mockRejectedValue(new Error())
   render(view())
@@ -20,13 +29,10 @@ it('shows a recoverable error if the alert cannot be loaded', async () => {
 })
 it('shows signed attribution and explicit fixture limitation', async () => {
   render(view())
-  const chart = await screen.findByRole('list', { name: 'Mức đóng góp SHAP' })
+  const technical = await openTechnical()
+  const chart = within(technical).getByRole('list', { name: 'Mức đóng góp SHAP' })
   expect(within(chart).getAllByRole('listitem')[0]).toHaveTextContent(/Lượng ghi trong dữ liệu mẫu.*\+0,1/)
   expect(within(chart).getAllByRole('listitem')[0]).toHaveTextContent('12')
-  const technical = screen.getByText('Thông tin kỹ thuật').closest('details')!
-  expect(technical).not.toHaveAttribute('open')
-  expect(within(technical).getByText('Giá trị nền: 0,6. Sai số đối chiếu: 0. Điểm được giải thích: 0,7.')).not.toBeVisible()
-  await userEvent.click(within(technical).getByText('Thông tin kỹ thuật'))
   expect(within(technical).getByText(/Giá trị nền: 0,6/)).toBeVisible()
   expect(screen.getByText(/không chứng minh quan hệ nhân quả/)).toBeInTheDocument()
 })
@@ -36,7 +42,7 @@ it('uses equal scale for signed bars and keeps zero and small contributions read
     explanation: { ...detail.explanation, base_value: .6500000001, contributions: [0.1, -0.1, 0, 0.05, -1e-10, 0] },
   })
   render(view())
-  const chart = await screen.findByRole('list', { name: 'Mức đóng góp SHAP' })
+  const chart = within(await openTechnical()).getByRole('list', { name: 'Mức đóng góp SHAP' })
   const [positive, negative, zero, half, small] = within(chart).getAllByRole('listitem')
   expect(positive.querySelector('[data-direction="increase"]')).toHaveStyle({ width: '50%' })
   expect(negative.querySelector('[data-direction="decrease"]')).toHaveStyle({ width: '50%' })
@@ -52,12 +58,14 @@ it.each([
 ])('omits a chart with $name', async ({ contributions }) => {
   vi.mocked(api.getAlert).mockResolvedValue({ ...detail, explanation: { ...detail.explanation, contributions } })
   render(view())
+  await openTechnical()
   expect(await screen.findByText('Dữ liệu SHAP không đầy đủ hoặc không hợp lệ.')).toBeInTheDocument()
   expect(screen.queryByRole('list', { name: 'Mức đóng góp SHAP' })).not.toBeInTheDocument()
 })
 it.each(['__proto__', 'hour_fraction', ''])('rejects an invalid feature key %j without losing the alert', async (name) => {
   vi.mocked(api.getAlert).mockResolvedValue({ ...detail, feature_order: [name, ...detail.feature_order.slice(1)] })
   render(view())
+  await openTechnical()
   expect(await screen.findByText('Dữ liệu SHAP không đầy đủ hoặc không hợp lệ.')).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Thông tin cảnh báo' })).toBeVisible()
 })
@@ -67,6 +75,7 @@ it('uses a readable fallback for an unknown explanation reason', async () => {
     explanation: { state: 'unavailable', reason: '__proto__', base_value: null, residual: null, contributions: null },
   })
   render(view())
+  await openTechnical()
   expect(await screen.findByText('Chưa có giải thích. Không thể tính giải thích.')).toBeInTheDocument()
 })
 it('retries the same payload with the same key and changes key for edited payload', async () => {
@@ -121,6 +130,7 @@ it('discards a delayed history response after identity changes', async () => {
 it('shows unavailable explanation without fabricated contributions', async () => {
   vi.mocked(api.getAlert).mockResolvedValue({ ...detail, explanation: { state: 'unavailable', reason: 'EXPLAINER_ERROR', base_value: null, contributions: null, residual: null } })
   render(view())
+  await openTechnical()
   expect(await screen.findByText(/Không thể tính giải thích/)).toBeInTheDocument()
   expect(screen.queryByRole('list', { name: 'Mức đóng góp SHAP' })).not.toBeInTheDocument()
   expect(screen.queryByText(/Số lượng xuất \(log\):/)).not.toBeInTheDocument()
@@ -146,6 +156,8 @@ it('does not claim that a point equal to threshold exceeds it', async () => {
   vi.mocked(api.getAlert).mockResolvedValue({ ...detail, score: detail.threshold })
   render(view())
   expect(await screen.findByText(/Dữ liệu điểm và ngưỡng không nhất quán/)).toBeVisible()
+  expect(screen.getByText('Điểm bằng ngưỡng')).toBeVisible()
+  await openTechnical()
   expect(screen.queryByRole('list', { name: 'Mức đóng góp SHAP' })).not.toBeInTheDocument()
 })
 
@@ -159,8 +171,26 @@ it('preserves strict comparison even when displayed scores round to the same val
   })
   render(view())
   expect(await screen.findByText(/Điểm vượt ngưỡng.*E-10/)).toBeVisible()
+  expect(screen.getByText('0,5923000001', { exact: true })).toBeVisible()
+  expect(screen.getByText('0,5923', { exact: true })).toBeVisible()
 })
 
+it('reports a below-threshold fixture display without validating it as a real warning', async () => {
+  vi.mocked(api.getAlert).mockResolvedValue({ ...detail, score: 0.591999999, threshold: 0.592 })
+  render(view())
+  expect(await screen.findByText('Điểm thấp hơn ngưỡng')).toBeVisible()
+  expect(screen.getByText('0,591999999', { exact: true })).toBeVisible()
+  expect(screen.getByText(/Không thể xác nhận cảnh báo vượt ngưỡng/)).toBeVisible()
+})
+it('separates adjacent tiny values and fails closed on nonfinite or absent inputs', () => {
+  const threshold = 1e-100
+  const score = threshold * (1 + Number.EPSILON)
+  const comparison = readScoreComparison(score, threshold)
+  expect(comparison).toMatchObject({ relation: 'above' })
+  expect(comparison?.scoreText).not.toBe(comparison?.thresholdText)
+  expect(readScoreComparison(Infinity, threshold)).toBeNull()
+  expect(readScoreComparison(null, threshold)).toBeNull()
+})
 it('does not misread zero history as missing data', async () => {
   vi.mocked(api.getAlert).mockResolvedValue({
     ...detail, features: [Math.log1p(12), 1, 4/6, 0, 0, Math.log1p(12)],
@@ -248,7 +278,7 @@ it('keeps the general check guidance when valid SHAP has no positive driver', as
   expect(await screen.findByText('Không có yếu tố làm tăng điểm trong phần giải thích.')).toBeVisible()
   expect(screen.queryByText(/Yếu tố làm tăng điểm nhiều nhất theo mô hình/)).not.toBeInTheDocument()
   expect(screen.getByText(/Đối chiếu thông tin giao dịch với chứng từ xuất/)).toBeVisible()
-  expect(screen.getByRole('list', { name: 'Mức đóng góp SHAP' })).toBeVisible()
+  expect(within(await openTechnical()).getByRole('list', { name: 'Mức đóng góp SHAP' })).toBeVisible()
 })
 
 it('shows the verified outbound link by alert ID, not the numeric voucher ID', async () => {
@@ -258,13 +288,17 @@ it('shows the verified outbound link by alert ID, not the numeric voucher ID', a
     quantity: 10000, unit: 'each', occurred_at: '2026-01-16T23:00:00Z', performed_by_id: 17,
   })
   render(view())
-  expect(await screen.findByRole('link', { name: 'Mở phiếu xuất' })).toHaveAttribute('href', '/anomalies/alert/outbound')
+  const linked = await screen.findByRole('link', { name: 'Mở phiếu xuất #451' })
+  expect(linked).toHaveAttribute('href', '/anomalies/alert/outbound')
+  const technical = screen.getByText('Thông tin kỹ thuật')
+  expect(linked.compareDocumentPosition(technical) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(technical.closest('details')).not.toHaveAttribute('open')
   expect(getAlertOutbound).toHaveBeenCalledWith('token', 'alert')
 })
 
 it('shows no voucher link when the existing fixture is generic', async () => {
   render(view())
   expect(await screen.findByText('Chưa liên kết được phiếu xuất đối chiếu.')).toBeVisible()
-  expect(screen.queryByRole('link', { name: 'Mở phiếu xuất' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: /Mở phiếu xuất/ })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Thông tin cảnh báo' })).toBeVisible()
 })

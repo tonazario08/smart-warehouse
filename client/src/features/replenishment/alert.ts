@@ -1,6 +1,7 @@
 import type { StockPageData } from '../inventory/types'
 import type { Product } from '../products/types'
 import type { Warehouse } from '../warehouses/types'
+import { validatedEoq } from './eoqRead'
 import type { ReplenishmentRun, SimulationDay } from './types'
 
 export type ReplenishmentAlertSources = {
@@ -80,12 +81,6 @@ export function evaluateReplenishmentAlert(
     || !Number.isSafeInteger(reference.reorder_point) || reference.reorder_point < 0) {
     return { status: 'missing', reason: 'Không có ROP hợp lệ cho ngày đánh giá trên trang hiện tại.' }
   }
-  const eoq = run.calibration?.eoq
-  const validEoq = eoq?.state === 'ready' && eoq.reason_code === null
-    && Number.isSafeInteger(eoq.quantity) && (eoq.quantity ?? 0) > 0
-    && eoq.raw !== null && eoq.raw !== undefined && eoq.raw.trim() !== ''
-    && Number.isFinite(Number(eoq.raw)) && Number(eoq.raw) > 0
-    ? eoq.quantity : null
   return {
     status: row.quantity <= reference.reorder_point ? 'reorder' : 'above',
     day: reference.day,
@@ -94,6 +89,6 @@ export function evaluateReplenishmentAlert(
     unit: product.unit,
     sku: product.sku,
     warehouseCode: warehouse.code,
-    eoq: validEoq ?? null,
+    eoq: validatedEoq(run),
   }
 }

@@ -12,7 +12,7 @@ const blank = {
 }
 const flagged = {
   ...blank, state: 'flagged', reason_code: null, score: 0.75, threshold: 0.5, base_value: 0.5,
-  contributions: [0.25, 0, 0, 0, 0, 0], model_version: 'verified-release', feature_version: 'feature/1',
+  contributions: [0.25, 0, 0, 0, 0, 0], model_version: 'verified-release', feature_version: 'anomaly-features/1',
 }
 const voucher = {
   outbound_id: 82, product_name: 'Sản phẩm A', product_sku: 'SKU-A', warehouse_code: 'KHO-A', warehouse_name: 'Kho A',
@@ -55,9 +55,16 @@ it('keeps lack of approved model distinct from a normal verdict and does not req
 
 it('shows SHAP and opens the server-verified voucher, never inferring voucher ID from transaction ID', async () => {
   mount(route + '/41', 'admin', url => url.pathname === prefix + '/41/outbound' ? reply(voucher) : reply(flagged))
-  expect(await screen.findByRole('heading', { name: 'Giải thích đóng góp SHAP' })).toBeVisible()
-  expect(screen.getByText('verified-release')).toBeVisible()
+  expect(await screen.findByRole('heading', { name: 'Nên kiểm tra gì?' })).toBeVisible()
+  expect(screen.getByText(/Yếu tố làm tăng điểm nhiều nhất theo mô hình/)).toHaveTextContent('Lượng hàng xuất')
   const link = await screen.findByRole('link', { name: 'Mở phiếu xuất #82' })
+  const summary = screen.getByText('Thông tin kỹ thuật')
+  expect(link.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(summary.closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByText('verified-release')).not.toBeVisible()
+  fireEvent.click(summary)
+  expect(screen.getByRole('heading', { name: 'Giải thích đóng góp SHAP' })).toBeVisible()
+  expect(screen.getByText('verified-release')).toBeVisible()
   expect(link).toHaveAttribute('href', route + '/41/outbound')
   fireEvent.click(link)
   expect(await screen.findByRole('heading', { name: 'Phiếu xuất #82' })).toBeVisible()
@@ -65,6 +72,24 @@ it('shows SHAP and opens the server-verified voucher, never inferring voucher ID
   expect(screen.queryByRole('heading', { name: 'Phiếu xuất #41' })).not.toBeInTheDocument()
 })
 
+it.each([
+  [0.592000001, 'flagged', 'Điểm cao hơn ngưỡng', '0,592000001'],
+  [0.592, 'normal', 'Điểm bằng ngưỡng', '0,592'],
+  [0.591999999, 'normal', 'Điểm thấp hơn ngưỡng', '0,591999999'],
+] as const)('shows the exact comparison for %s without changing the verdict', async (score, state, comparison, displayed) => {
+  mount(route + '/41', 'warehouse', url => url.pathname.endsWith('/outbound') ? reply(voucher)
+    : reply({ ...blank, state, reason_code: null, score, threshold: 0.592 }))
+  expect(await screen.findByText(comparison, { exact: true })).toBeVisible()
+  expect(screen.getAllByText(displayed, { exact: true }).length).toBe(score === 0.592 ? 2 : 1)
+})
+it('does not attribute a driver if contributions do not add up to the scored result', async () => {
+  mount(route + '/41', 'warehouse', url => url.pathname.endsWith('/outbound') ? reply(voucher)
+    : reply({ ...flagged, contributions: [0.1, 0, 0, 0, 0, 0] }))
+  expect(await screen.findByRole('heading', { name: 'Nên kiểm tra gì?' })).toBeVisible()
+  expect(screen.queryByText(/Yếu tố làm tăng điểm nhiều nhất/)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByText('Thông tin kỹ thuật'))
+  expect(await screen.findByText('Chưa có giải thích đáng tin để đối chiếu.')).toBeVisible()
+})
 it.each([
   [404, 'Chưa liên kết được phiếu xuất đối chiếu.'],
   [403, 'Bạn không có quyền xem phiếu xuất.'],

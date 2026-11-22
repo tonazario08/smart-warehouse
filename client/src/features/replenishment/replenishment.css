@@ -13,3 +13,36 @@
 
 .replenishment-alert { border-left: 4px solid var(--color-border); }
 .replenishment-alert-disclosure { font-size: .875rem; opacity: .85; margin-bottom: 0; }
+
+.replenishment-pilot__verdict,
+.replenishment-pilot__examples {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.replenishment-pilot__verdict { border-inline-start: 4px solid var(--color-primary); background: var(--color-primary-soft); }
+.replenishment-pilot__verdict--review { border-inline-start-color: var(--color-warning); background: var(--color-warning-soft); }
+.replenishment-pilot__verdict h3,
+.replenishment-pilot__examples h3 { margin-top: 0; }
+.replenishment-pilot__verdict p:last-child,
+.replenishment-pilot__examples p:last-child { margin-bottom: 0; }
+.replenishment-pilot__example-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+.replenishment-page .forecast-identifier {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem;
+  max-width: 100%;
+}
+.replenishment-page .forecast-identifier :is(a, code) { white-space: nowrap; overflow-wrap: normal; }
+.replenishment-page .forecast-identifier .ui-button { min-height: 30px; }
+.replenishment-page .forecast-identifier [role='status'] { font-size: .8rem; }
+.replenishment-page .forecast-identifier__fallback { display: grid; gap: .25rem; width: min(100%, 22rem); }
+.replenishment-page .forecast-identifier__fallback input { min-width: 0; }
+.replenishment-comparison__decisions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: .75rem;
+}

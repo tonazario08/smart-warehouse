@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react'
+import { ForecastIdentifier } from '../forecasting/ForecastIdentifier'
+import { ReplenishmentComparisonPanel } from './ReplenishmentComparisonPanel'
+import { validatedEoq } from './eoqRead'
+import { ForecastPilotPanel } from './ForecastPilotPanel'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api'
 import { useAuth } from '../../app/AuthProvider'
@@ -33,6 +37,19 @@ const percent = (value: string | null, reason?: string | null) => {
 const moment = (value: string | null) => value ? formatDateTime(value) : 'Không xác định'
 type LoadedRun = { key: string; run: ReplenishmentRun }
 type CaseResult<T> = { owner: LoadedRun; key: string; value: T }
+
+function entityLabel(name: string, code: string) {
+  const normalize = (value: string) => value.trim().normalize('NFC').toLocaleLowerCase('vi-VN')
+  return !name.trim() ? code : !code.trim() || normalize(name) === normalize(code) ? name.trim() : `${name.trim()} (${code.trim()})`
+}
+
+function ropRange(min: number, max: number) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return 'Không xác định'
+  if (min === max) return number(min)
+  const keepExact = number(min) === number(max)
+  const display = (value: number) => keepExact ? String(value).replace('.', ',') : number(value)
+  return <>Thấp nhất {display(min)} / Cao nhất {display(max)}</>
+}
 
 export function ReplenishmentRunPage() {
   const { runId = '' } = useParams()
@@ -95,7 +112,10 @@ export function ReplenishmentRunPage() {
   const currentTrace = trace?.owner === current && trace.key === traceKey ? trace.value : null
   const target = current?.run.manifest.mode === 'operational' && current.run.manifest.reporting_scope === 'warehouse'
     ? analyticsTarget(current.run.manifest.binding) : null
-  const referenceDate = currentTrace?.items.find(day => !day.warmup)?.day
+  const reference = currentTrace?.items.find(day => !day.warmup)
+  const referenceDate = reference?.day
+  const referenceRop = reference && Number.isSafeInteger(reference.reorder_point) && reference.reorder_point >= 0
+    ? reference.reorder_point : null
   const selection = { algorithm, lead_time: horizon, service, policy, reference_date: referenceDate }
   const traceError = traceFailure?.owner === current && traceFailure.key === traceKey ? traceFailure.value : ''
   const sources = alertSources?.owner === current && alertSources.key === traceKey ? alertSources.value : null
@@ -103,6 +123,7 @@ export function ReplenishmentRunPage() {
   const alert = current ? evaluateReplenishmentAlert(current.run, currentTrace?.items ?? null, sources) : null
   const waitingForAlertData = Boolean(alertBinding && !sourceError && !traceError && (!sources || !currentTrace))
   const calibration = current?.run.calibration, manifest = current?.run.manifest
+  const verifiedEoq = current ? validatedEoq(current.run) : null
   const metric = calibration?.interval_metrics.find(item => item.algorithm === algorithm && item.horizon === horizon && item.subset === 'all')
   const entry = calibration?.calibration.entries.find(item => item.algorithm === algorithm && item.horizon === horizon)
   const possible = manifest ? Math.max(0, Math.round((Date.parse(manifest.config.calibration_end) - Date.parse(manifest.config.calibration_start)) / 86400000) - horizon + 1) : 0
@@ -112,10 +133,11 @@ export function ReplenishmentRunPage() {
       <FeedbackMessage variant="warning">{current.run.applicability === 'research_scenario' ? 'Nghiên cứu hồi cứu dựa trên doanh số tổng hợp và giả định, không chứng minh hiệu quả tại kho thực tế.' : 'Kịch bản kiểm thử tổng hợp, không phải đề xuất đặt hàng vận hành.'}</FeedbackMessage>
       {current.run.fixture_label && <Badge>{current.run.fixture_label}</Badge>}
       {current.run.stale && <FeedbackMessage variant="warning">Dự báo không bao phủ khoảng thời gian được yêu cầu.</FeedbackMessage>}
+      {token && alertBinding && <ForecastPilotPanel token={token} context={key} run={current.run} />}
       <section className="replenishment-panel"><h2>Nguồn và giả định</h2><dl className="replenishment-facts">
-        <div><dt>Mã kết quả</dt><dd>{manifest.run_id}</dd></div>
-        <div><dt>Phiên bản dữ liệu</dt><dd>{manifest.data_version}</dd></div>
-        <div><dt>Kết quả dự báo</dt><dd>{manifest.forecast_run_id}</dd></div>
+        <div><dt>Mã kết quả</dt><dd><ForecastIdentifier value={manifest.run_id} label="Mã kết quả" /></dd></div>
+        <div><dt>Phiên bản dữ liệu</dt><dd><ForecastIdentifier value={manifest.data_version} label="Phiên bản dữ liệu" /></dd></div>
+        <div><dt>Kết quả dự báo</dt><dd><ForecastIdentifier value={manifest.forecast_run_id} label="Mã dự báo nguồn" /></dd></div>
         <div><dt>Chỉ tiêu</dt><dd>{manifest.target === 'reported_daily_unit_sales' ? 'Đơn vị bán được báo cáo' : 'Đơn vị xuất hàng'}</dd></div>
         <div><dt>Phạm vi nguồn</dt><dd>{manifest.reporting_scope === 'company_aggregate' ? 'Tổng hợp toàn công ty' : 'Kho hàng'}</dd></div>
         <div><dt>Thời điểm tạo</dt><dd>{moment(manifest.created_at)}</dd></div>
@@ -134,7 +156,10 @@ export function ReplenishmentRunPage() {
         <div><dt>Hàng đang đến ban đầu giả định</dt><dd>{manifest.config.initial_pipeline.length === 0 ? 'Không có' : manifest.config.initial_pipeline.map(order => `${order.quantity} ${order.unit}, dự kiến ${order.due_date}`).join('; ')}</dd></div>
         <div><dt>Đã giữ chỗ giả định</dt><dd>{number(manifest.config.reservations)}</dd></div>
         <div><dt>Đơn tồn đọng giả định</dt><dd>{number(manifest.config.backlog)}</dd></div>
-        {current.run.entity && <div><dt>Sản phẩm và kho kiểm thử</dt><dd>{current.run.entity.product_name} ({current.run.entity.sku}), {current.run.entity.warehouse_name} ({current.run.entity.warehouse_code})</dd></div>}
+        {current.run.entity && <>
+          <div><dt>Sản phẩm</dt><dd>{entityLabel(current.run.entity.product_name, current.run.entity.sku)}</dd></div>
+          <div><dt>Kho</dt><dd>{entityLabel(current.run.entity.warehouse_name, current.run.entity.warehouse_code)}</dd></div>
+        </>}
       </dl><p>Chi phí mô phỏng chỉ gồm đặt hàng và lưu kho; không phải tổng chi phí kinh doanh. Chưa xác thực tại kho thực tế.</p></section>
       <div className="replenishment-filters">
         <Select label="Phương pháp" value={algorithm} onChange={e => { if (e.target.value) { setAlgorithm(e.target.value as Algorithm); setPage(1) } }} options={Object.entries(algorithms).map(([value, label]) => ({ value, label }))} />
@@ -142,42 +167,33 @@ export function ReplenishmentRunPage() {
         <Select label="Mức dịch vụ danh nghĩa" value={service} onChange={e => { if (e.target.value) { setService(e.target.value); setPage(1) } }} options={['0.80','0.90','0.95'].map(value => ({ value, label: number(Number(value)*100) + '%' }))} />
         <Select label="Chính sách" value={policy} onChange={e => { if (e.target.value) { setPolicy(e.target.value as Policy); setPage(1) } }} options={[{ value: 'baseline', label: 'Đối chứng' }, { value: 'proposed', label: 'Có tồn an toàn' }]} />
       </div>
-      {token && target && <ReplenishmentPositionPanel token={token} context={traceKey} target={target} view="operational" selection={selection} />}
-      <section className="replenishment-panel replenishment-alert" aria-label="Cảnh báo bổ sung hàng demo">
-        <h2>Đối chiếu ngưỡng bổ sung hàng (demo)</h2>
-        {waitingForAlertData ? <FeedbackMessage>Đang kiểm tra tồn kho, danh mục và ROP của ngày mô phỏng...</FeedbackMessage>
-          : alert?.status === 'research' ? <FeedbackMessage>Kịch bản nghiên cứu — không đối chiếu với tồn kho.</FeedbackMessage>
-          : alert?.status === 'missing' || sourceError || traceError ? <FeedbackMessage variant="warning">Thiếu dữ liệu để đối chiếu. {sourceError || traceError || (alert?.status === 'missing' ? alert.reason : '')}</FeedbackMessage>
-          : alert?.status === 'reorder' || alert?.status === 'above' ? <>
-            <FeedbackMessage variant={alert.status === 'reorder' ? 'warning' : undefined}>
-              {alert.status === 'reorder' ? 'Tồn thực tại hoặc dưới ngưỡng ROP mô phỏng' : 'Tồn kho trên ngưỡng ROP tham chiếu'}.
-            </FeedbackMessage>
-            <p>Ngày ROP tham chiếu: <strong>{alert.day}</strong>. SKU: <strong>{alert.sku}</strong>;
-              kho: <strong>{alert.warehouseCode}</strong>; tồn: <strong>{number(alert.onHand)}</strong> {alert.unit};
-              ROP: <strong>{number(alert.rop)}</strong> {alert.unit}.</p>
-            {alert.status === 'reorder' && (alert.eoq !== null
-              ? <p>Lượng đặt tham khảo theo EOQ: <strong>{number(alert.eoq)}</strong> {alert.unit}.</p>
-              : <p>Chưa đủ cơ sở hiển thị lượng đặt EOQ.</p>)}
-          </> : <FeedbackMessage>Đang kiểm tra dữ liệu cảnh báo...</FeedbackMessage>}
-        <p className="replenishment-alert-disclosure">Dữ liệu demo/fixture, chỉ dùng trình diễn; lead time {horizon} ngày là giả định của kịch bản.
-          ROP thuộc ngày mô phỏng, không phải ngưỡng đã phê duyệt cho vận hành thực tế.
-          Số tồn là dữ liệu API tại thời điểm đọc; đơn vị tính lấy từ danh mục sản phẩm đã đối chiếu.</p>
-        {token && alertBinding && referenceDate && <ReplenishmentPositionPanel token={token} context={traceKey} target={alertBinding} view="demo" selection={{ ...selection, run_id: runId }} />}
-      </section>
+      {token && target && !alertBinding && <ReplenishmentPositionPanel token={token} context={traceKey} target={target} view="operational" selection={selection} verifiedEoq={verifiedEoq} />}
+      {token && alertBinding && current.run.entity && alertBinding.unit === manifest.unit ? <ReplenishmentComparisonPanel
+        token={token} context={traceKey} target={alertBinding} runId={runId} selection={selection}
+        sku={current.run.entity.sku} warehouseCode={current.run.entity.warehouse_code} unit={alertBinding.unit}
+        alert={alert} waiting={waitingForAlertData} referenceRop={referenceRop} sourceError={sourceError} traceError={traceError}
+        verifiedEoq={verifiedEoq} />
+        : <section className="replenishment-panel replenishment-alert" aria-label="Cảnh báo bổ sung hàng demo">
+          <h2>Đối chiếu ngưỡng bổ sung hàng (demo)</h2>
+          {alert?.status === 'research'
+            ? <FeedbackMessage>Kịch bản nghiên cứu — không đối chiếu với tồn kho.</FeedbackMessage>
+            : <FeedbackMessage variant="warning">Thiếu dữ liệu để đối chiếu. {alert?.status === 'missing' ? alert.reason : ''}</FeedbackMessage>}
+        </section>}
       <section className="replenishment-panel"><h2>Độ bất định</h2><p>Khoảng danh nghĩa 90%; kết quả quan sát có thể khác và không bảo đảm mức phục vụ. Các cửa sổ có thể chồng lấp, không được xem là độc lập.</p><dl className="replenishment-facts"><div><dt>Cửa sổ hiệu chỉnh</dt><dd>{entry?.windows.length ?? 0}</dd></div>
         <div><dt>Cửa sổ bị loại</dt><dd>{entry ? Math.max(0, possible - entry.windows.length) : 'Không xác định'}</dd></div>
         <div><dt>Độ bao phủ quan sát</dt><dd>{metric ? percent(metric.coverage, metric.reason_code) : 'Không xác định'}</dd></div>
         <div><dt>Số cửa sổ đánh giá</dt><dd>{metric?.count ?? 0}</dd></div>
         <div><dt>Độ rộng trung bình</dt><dd>{metric ? number(metric.mean_width) : 'Không xác định'}</dd></div>
         <div><dt>Điểm khoảng</dt><dd>{metric ? number(metric.mean_interval_score) : 'Không xác định'}</dd></div></dl></section>
-      <section className="replenishment-panel"><h2>So sánh chính sách</h2><div className="replenishment-scroll" role="region" aria-label="Cuộn bảng so sánh chính sách" tabIndex={0}><DataTable caption="So sánh chính sách bổ sung hàng" rows={current.run.summaries ?? []} getRowKey={row => `${row.case.algorithm}:${row.case.horizon}:${row.case.service}:${row.case.policy}`} columns={[
+      <section className="replenishment-panel"><h2>So sánh chính sách</h2>
+        <p>Điểm đặt hàng là ROP thấp nhất và cao nhất qua các ngày mô phỏng, không phải cặp (s, S) hoặc khoảng tin cậy.</p><div className="replenishment-scroll" role="region" aria-label="Cuộn bảng so sánh chính sách" tabIndex={0}><DataTable caption="So sánh chính sách bổ sung hàng" rows={current.run.summaries ?? []} getRowKey={row => `${row.case.algorithm}:${row.case.horizon}:${row.case.service}:${row.case.policy}`} columns={[
         { id: 'algorithm', header: 'Phương pháp', render: row => algorithms[row.case.algorithm] },
         { id: 'lead', header: 'Cung ứng', render: row => row.case.horizon + ' ngày' },
         { id: 'service', header: 'Danh nghĩa', render: row => number(Number(row.case.service)*100) + '%' },
         { id: 'policy', header: 'Chính sách', render: row => row.case.policy === 'baseline' ? 'Đối chứng' : 'Có tồn an toàn' },
         { id: 'safety', header: 'Tồn an toàn', render: row => { const q = calibration?.calibration.entries.find(item => item.algorithm === row.case.algorithm && item.horizon === row.case.horizon)?.quantiles[row.case.service]; return row.case.policy === 'baseline' ? '0' : q === undefined ? 'Không xác định' : number(Math.max(0, Number(q))) } },
-        { id: 'rop', header: 'Điểm đặt hàng', render: row => `${number(row.rop_min)}–${number(row.rop_max)}` },
-        { id: 'q', header: 'Lượng đặt EOQ', render: () => calibration?.eoq.quantity ?? 'Không xác định' },
+        { id: 'rop', header: 'Điểm đặt hàng', render: row => ropRange(row.rop_min, row.rop_max) },
+        { id: 'q', header: 'Lượng đặt EOQ', render: () => verifiedEoq ?? 'Không xác định' },
         { id: 'lost', header: 'Thiếu hàng', render: row => number(row.summary.lost) },
         { id: 'fill', header: 'Tỷ lệ đáp ứng', render: row => percent(row.summary.fill_rate, row.summary.fill_reason) },
         { id: 'stock', header: 'Tồn trung bình', render: row => number(row.summary.average_on_hand) },
@@ -195,7 +211,7 @@ export function ReplenishmentRunPage() {
         { id: 'demand', header: 'Nhu cầu mô phỏng', render: row => number(row.demand) },
         { id: 'lost', header: 'Thiếu', render: row => number(row.lost) },
         { id: 'end', header: 'Tồn cuối ngày', render: row => number(row.on_hand_end) },
-        { id: 'pending', header: 'Đang đến', render: row => number(row.pipeline_end) },
+        { id: 'pending', header: 'Hàng đang đến (mô phỏng)', render: row => number(row.pipeline_end) },
       ]} /></div><Pagination locale="vi" page={page} pageSize={20} total={currentTrace.total} onPageChange={setPage} /></>}</section>
     </>}
   </section>

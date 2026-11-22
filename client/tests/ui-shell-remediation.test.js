@@ -187,28 +187,22 @@ test('real login keeps its credentials and return route without a decorative rem
   assert.deepEqual(host.navigations, [['/inventory', { replace: true }]])
 })
 
-test('Topbar presents unsupported search and notifications as explicitly unavailable controls', () => {
-  const host = componentHost('shared/layout/Topbar.js', 'Topbar')
+test('Topbar does not show unsupported search or notifications', () => {
+  const host = componentHost('shared/layout/Topbar.js', 'Topbar', { menu: { type: 'button', props: { children: 'Mở menu' } } })
   const tree = host.render()
-  const search = nodes(tree, node => node.type === 'input' && node.props.type === 'search')[0]
-  assert.ok(search)
-  assert.equal(search.props.disabled, true)
-  assert.match(search.props['aria-label'], /chưa khả dụng/)
-  const notification = nodes(tree, node => node.type === 'button')[0]
-  assert.equal(notification.props.disabled, true)
-  assert.match(notification.props['aria-label'], /chưa khả dụng/)
+  assert.equal(nodes(tree, node => node.type === 'input').length, 0)
+  assert.deepEqual(nodes(tree, node => node.type === 'button').map(text), ['Mở menu'])
 })
 
 for (const [role, expectedLinks] of [
   ['admin', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/assistant', 'Trợ lý kho'], ['/dashboard', 'Bảng điều khiển'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/gis', 'Bản đồ kho'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/users', 'Người dùng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch'], ['/audit', 'Nhật ký quản trị']]],
-  ['warehouse', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/assistant', 'Trợ lý kho'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/gis', 'Bản đồ kho'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
+  ['warehouse', [['/anomalies', 'Bất thường'], ['/forecasting', 'Dự báo'], ['/replenishment', 'Bổ sung hàng'], ['/assistant', 'Trợ lý kho'], ['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/gis', 'Bản đồ kho'], ['/inbound', 'Nhập kho'], ['/outbound', 'Xuất kho'], ['/transfers', 'Chuyển kho'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục'], ['/suppliers', 'Nhà cung cấp'], ['/transactions', 'Giao dịch']]],
   ['client', [['/products', 'Sản phẩm'], ['/inventory', 'Tồn kho'], ['/warehouses', 'Kho hàng'], ['/purchase-requests', 'Yêu cầu mua hàng'], ['/categories', 'Danh mục']]],
-]) test(`${role} sidebar destinations retain accessible names when responsive CSS hides visible labels`, () => {
+]) test(`${role} sidebar shows exactly the permitted destinations with readable labels`, () => {
   const user = { id: 1, email: `${role}@example.com`, role, is_active: true }
   const host = componentHost('shared/layout/Sidebar.js', 'Sidebar', { user, onLogout() {} })
   const links = nodes(host.render(), node => node.type === 'a')
-  assert.deepEqual(links.map(link => [link.props.to, link.props['aria-label']]), expectedLinks)
-  assert.deepEqual(links.map(link => link.props.title), expectedLinks.map(([, label]) => label))
+  assert.deepEqual(links.map(link => [link.props.to, text(link.props.children({ isActive: false }))]).sort(), expectedLinks.sort())
 })
 
 for (const [role, roleLabel] of [['admin', 'Quản trị viên'], ['warehouse', 'Nhân viên kho'], ['client', 'Khách hàng']]) test(`${role} account summary identifies the account without its responsive text and still logs out`, () => {

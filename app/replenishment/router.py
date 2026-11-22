@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict
 
 from app.auth.dependencies import get_current_user
@@ -12,6 +12,7 @@ from app.core.errors import DomainError, ErrorResponse
 from app.core.pagination import Page
 from app.db.session import get_session
 from app.models import User
+from app.replenishment.pilot import ForecastPilotRead, read_forecast_pilot
 from app.replenishment.repository import ReplenishmentRepository
 from app.replenishment.schemas import SimulationDay
 from app.replenishment.service import ReplenishmentService
@@ -92,6 +93,22 @@ def runs(
 @router.get("/runs/{run_id}", response_model=ReplenishmentRead, dependencies=[Depends(keys(set()))])
 def detail(actor: Actor, repo: Service, run_id: str = Path(pattern=r"^rrv1-[0-9a-f]{64}$")):
     return repo._view(repo.get(actor, run_id), detail=True)
+
+
+@router.get(
+    "/runs/{run_id}/forecast-pilot",
+    response_model=ForecastPilotRead,
+    dependencies=[Depends(keys(set()))],
+)
+def forecast_pilot(
+    actor: Actor,
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[object, Depends(get_session)],
+    run_id: str = Path(pattern=r"^rrv1-[0-9a-f]{64}$"),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return read_forecast_pilot(actor, run_id, settings, session)
 
 
 @router.get(

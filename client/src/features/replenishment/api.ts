@@ -4,11 +4,13 @@ import type { StockPageData } from '../inventory/types'
 import type { Product } from '../products/types'
 import type { Warehouse } from '../warehouses/types'
 import type { ReplenishmentAlertSources } from './alert'
-import type { Algorithm, Policy, ReplenishmentMode, ReplenishmentRun, ReplenishmentStatus, SimulationDay } from './types'
+import type { Algorithm, ForecastPilotResult, Policy, ReplenishmentMode, ReplenishmentRun, ReplenishmentStatus, SimulationDay } from './types'
 
 export const getReplenishmentStatus = (token: string, mode: ReplenishmentMode) => request<ReplenishmentStatus>('/replenishment/status?' + new URLSearchParams({ mode }), {}, token)
 export const listReplenishmentRuns = (token: string, mode: ReplenishmentMode, page: number) => request<Page<ReplenishmentRun>>('/replenishment/runs?' + new URLSearchParams({ mode, page: String(page), page_size: '20' }), {}, token)
 export const getReplenishmentRun = (token: string, id: string) => request<ReplenishmentRun>('/replenishment/runs/' + encodeURIComponent(id), {}, token)
+export const getForecastPilot = (token: string, id: string, signal: AbortSignal) =>
+  request<ForecastPilotResult>('/replenishment/runs/' + encodeURIComponent(id) + '/forecast-pilot', { signal }, token)
 export const getReplenishmentDays = (token: string, id: string, algorithm: Algorithm, leadTime: number, service: string, policy: Policy, page: number) => request<Page<SimulationDay>>('/replenishment/runs/' + encodeURIComponent(id) + '/days?' + new URLSearchParams({ algorithm, lead_time: String(leadTime), service, policy, page: String(page), page_size: '20' }), {}, token)
 // Reuse existing authenticated request/session handling and read-only catalogue endpoints.
 export async function getReplenishmentAlertSources(

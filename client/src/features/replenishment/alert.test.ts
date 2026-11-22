@@ -7,7 +7,7 @@ const makeRun = (): ReplenishmentRun => ({
   manifest: {
     run_id: 'rrv1-' + 'a'.repeat(64), mode: 'operational', dataset_class: 'fixture',
     reporting_scope: 'warehouse', binding: { product_id: 10, warehouse_id: 20, unit: 'unit' },
-    unit: 'unit',
+    unit: 'unit', config: { costs: { currency: 'VND', holding_period: 'year', ordering_cost: '100', holding_cost: '365' } },
   },
   applicability: 'fixture_scenario',
   entity: { product_id: 10, warehouse_id: 20, sku: 'SKU-DEMO', product_name: 'Demo', warehouse_name: 'Warehouse', warehouse_code: 'WH-DEMO' },
@@ -105,4 +105,15 @@ describe('fixture replenishment alert (read-only)', () => {
     expect(evaluateReplenishmentAlert(run, days(5), stock).status).toBe('above')
     expect(evaluateReplenishmentAlert(run, days(7), stock).status).toBe('reorder')
   })
+})
+
+it('never exposes EOQ when cost inputs do not meet the published VND/year contract', () => {
+  for (const override of [
+    { currency: 'USD' }, { holding_period: 'month' }, { ordering_cost: null },
+    { holding_cost: '0' }, { ordering_cost: '  ' }, { ordering_cost: '0x10' }, { holding_cost: 'Infinity' },
+  ]) {
+    const run = makeRun()
+    Object.assign(run.manifest.config.costs, override)
+    expect(evaluateReplenishmentAlert(run, days(5), makeSources(5))).toMatchObject({ status: 'reorder', eoq: null })
+  }
 })

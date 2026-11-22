@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from app.analytics.schemas import load_timezone
 from app.auth.dependencies import PERMISSION_ROLES, Permission
 from app.core.errors import DomainError
+from app.forecasting.chart import latest_chart_rows
 from app.forecasting.repository import ForecastRepository, UnsupportedSchema
 from app.models import Product, Warehouse
 
@@ -142,3 +143,9 @@ class ForecastService:
         if run is None:
             raise DomainError(404, "FORECAST_NOT_FOUND", "Forecast not found.")
         return run
+
+
+    def chart_rows(self, actor, run_id, horizon, algorithm, lead):
+        run = self.get_run(actor, run_id)
+        self._binding(run)
+        return latest_chart_rows(run.rows, horizon=horizon, algorithm=algorithm, lead=lead)

@@ -5,3 +5,5 @@ export type Manifest = { run_id: string; mode: ForecastMode; kind: 'evaluation' 
 export type ForecastRun = { manifest: Manifest; metrics: Record<string, Metric> | null; binding: Record<string, unknown> | null; entity: { product_name: string; sku: string; warehouse_name: string; warehouse_code: string } | null; applicability: 'retrospective' | 'operational'; stale: boolean | null; fixture_label: string | null }
 export type ForecastStatus = { state: 'ready' | 'unavailable' | 'failed'; reason_code: string | null; latest: ForecastRun | null; latest_failure_code?: string | null }
 export type Prediction = { series_key: string; origin: string; target_date: string; lead: number; horizon: number; algorithm: Algorithm; prediction: number; actual: number | null; unit: string }
+
+export type ForecastChartResult = { items: Prediction[]; series_key: string | null }

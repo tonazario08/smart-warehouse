@@ -12,6 +12,7 @@ import { Pagination } from '../../shared/ui/Pagination'
 import { Badge } from '../../shared/ui/Badge'
 import { Button } from '../../shared/ui/Button'
 import type { Page } from '../../types'
+import { ForecastIdentifier } from '../forecasting/ForecastIdentifier'
 import { getReplenishmentStatus, listReplenishmentRuns, replenishmentError, replenishmentReason } from './api'
 import type { ReplenishmentMode, ReplenishmentRun, ReplenishmentStatus } from './types'
 import '../../shared/styles/management.css'
@@ -57,9 +58,9 @@ export function ReplenishmentPage() {
       {current.status.state === 'ready' && !current.runs && <FeedbackMessage>Đang tải danh sách kết quả bổ sung hàng...</FeedbackMessage>}
       {current.runs && current.runs.items.length === 0 && <EmptyState title="Chưa có kết quả" description="Chưa có kết quả trong phạm vi này." />}
       {current.runs && current.runs.items.length > 0 && <><div className="replenishment-scroll" role="region" aria-label="Cuộn danh sách kết quả bổ sung hàng" tabIndex={0}><DataTable caption="Danh sách kết quả bổ sung hàng" rows={current.runs.items} getRowKey={row => row.manifest.run_id} columns={[
-        { id: 'run', header: 'Mã kết quả', render: row => <Link to={'/replenishment/runs/' + row.manifest.run_id}>{row.manifest.run_id}</Link> },
+        { id: 'run', header: 'Mã kết quả', render: row => <ForecastIdentifier value={row.manifest.run_id} label="Mã kết quả" to={'/replenishment/runs/' + row.manifest.run_id} /> },
         { id: 'scope', header: 'Nguồn và phạm vi', render: row => <>{row.applicability === 'research_scenario' ? 'Nghiên cứu hồi cứu' : 'Kịch bản kiểm thử'} {row.fixture_label && <Badge>{row.fixture_label}</Badge>}</> },
-        { id: 'source', header: 'Phiên bản dữ liệu', render: row => row.manifest.data_version },
+        { id: 'source', header: 'Phiên bản dữ liệu', render: row => <ForecastIdentifier value={row.manifest.data_version} label="Phiên bản dữ liệu" /> },
         { id: 'created', header: 'Thời điểm tạo', render: row => formatDateTime(row.manifest.created_at) },
         { id: 'view', header: 'Chi tiết', render: row => <Link aria-label={'Xem chi tiết ' + row.manifest.run_id} to={'/replenishment/runs/' + row.manifest.run_id}>Xem chi tiết</Link> },
       ]} /></div><Pagination locale="vi" page={page} pageSize={20} total={current.runs.total} onPageChange={setPage} /></>}

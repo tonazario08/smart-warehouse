@@ -27,3 +27,31 @@
 @media(pointer:coarse){.sidebar-link{min-height:44px}}
 
 .user-menu__panel a{display:block;white-space:nowrap;border-radius:6px;padding:8px 12px;color:var(--color-text-primary);font-size:13px;text-decoration:none}.user-menu__panel a:hover,.user-menu__panel a:focus-visible{background:var(--color-app-background)}
+
+/* The desktop rail and compact-screen disclosure share one navigation tree. */
+.app-skip-link{position:fixed;inset:8px auto auto 8px;z-index:30;transform:translateY(calc(-100% - 12px));padding:10px 14px;border-radius:8px;background:var(--color-surface);color:var(--color-text-primary);font-weight:600}
+.app-skip-link:focus{transform:none}
+.app-frame :is(.app-skip-link,.app-menu-toggle,.sidebar-link,.user-menu__trigger):focus-visible,.app-content:focus,.app-denial:focus{outline:3px solid var(--color-primary);outline-offset:3px}
+.app-sidebar{flex-shrink:0}
+.sidebar-nav{gap:14px;margin:18px 0 0}
+.sidebar-group ul{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.sidebar-label{margin:0 8px 6px;color:#a9b8cc;text-transform:uppercase}
+.app-topbar{justify-content:flex-start;gap:12px;min-height:60px;height:auto;padding-block:12px}
+.breadcrumbs{min-width:0;flex-wrap:wrap;overflow-wrap:anywhere}
+.app-menu-toggle{display:none}
+.app-content:focus{outline-offset:-3px}
+.app-denial{display:grid;justify-items:start;gap:8px;margin:0 0 20px;padding:14px 16px;border:1px solid var(--color-border);border-inline-start:4px solid var(--color-primary);border-radius:var(--radius-md);background:var(--color-surface)}
+.app-denial p{margin:0}
+.app-denial p:first-child{font-weight:650}
+@media(max-width:800px){
+  .app-frame{position:relative}
+  .app-sidebar{display:none;position:absolute;inset:60px auto auto 0;z-index:10;width:min(320px,100%);height:auto;max-height:calc(100vh - 60px);max-height:calc(100dvh - 60px);padding:16px;box-shadow:var(--shadow-md)}
+  .app-sidebar--open{display:flex}
+  .app-sidebar .brand{justify-content:flex-start}
+  .app-sidebar :is(.brand>span:last-child,.sidebar-label,.sidebar-link span,.user-menu__trigger>span:not(.user-menu__avatar)){display:revert}
+  .app-sidebar .sidebar-link{justify-content:flex-start;min-height:44px;height:auto;padding:8px 10px}
+  .app-topbar{position:relative;z-index:11}
+  .app-menu-toggle{display:inline-flex;flex:none;align-items:center;min-height:40px;padding:6px 9px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-primary);font:inherit;font-size:13px;font-weight:650}
+  .app-content{padding:18px 14px}
+}
+.app-content .ui-page-header>div:first-child{min-width:0;overflow-wrap:anywhere}

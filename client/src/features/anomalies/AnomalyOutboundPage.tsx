@@ -75,7 +75,7 @@ export function AnomalyOutboundLink({ alertId }: { alertId: string }) {
   return <section className="management-panel anomalies-panel">
     <h2>Phiếu xuất đối chiếu</h2>
     {state.kind === 'verified'
-      ? <Link to={alertPath(alertId) + '/outbound'}>Mở phiếu xuất</Link>
+      ? <Link to={alertPath(alertId) + '/outbound'}>Mở phiếu xuất #{state.voucher.outbound_id}</Link>
       : <OutboundStatus kind={state.kind} retry={retry} />}
   </section>
 }

@@ -38,10 +38,17 @@ export async function signIn(page: Page, credentials: Credentials) {
   const me = apiResponse(page, '/auth/me')
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
   expect((await me).status()).toBe(200)
-  await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible()
+  const nav = page.getByRole('navigation', { name: 'Điều hướng chính' })
+  const closedMobileMenu = page.getByRole('button', { name: 'Mở menu', exact: true })
+  await expect(nav.or(closedMobileMenu)).toBeVisible()
   expect(Boolean(await storedToken(page))).toBe(true)
 }
 export async function signOut(page: Page) {
+  const closedMobileMenu = page.getByRole('button', { name: 'Mở menu', exact: true })
+  if (await closedMobileMenu.isVisible()) {
+    await closedMobileMenu.click()
+    await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible()
+  }
   await page.locator('.user-menu__trigger').click()
   await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)

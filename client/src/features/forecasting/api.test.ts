@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { advanceApiSession, onApiUnauthorized } from '../../api'
-import { forecastError, getForecastStatus, getForecastPredictions, listForecastRuns } from './api'
+import { forecastError, getForecastChart, getForecastStatus, getForecastPredictions, listForecastRuns } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 it('uses bearer transport and exact scoped filters', async () => {
@@ -35,4 +35,18 @@ it.each([
   ['UNKNOWN', 'Không thể tải'],
 ])('uses a safe translation for %s', (code, expected) => {
   expect(forecastError({ code, message: 'private server text' })).toContain(expected)
+})
+
+it('queries the chart with run/horizon/algorithm/lead only and separate cancellation', async () => {
+  const fetcher = vi.fn(async (_url: string, _options?: RequestInit) => new Response('{"items":[],"series_key":null}'))
+  vi.stubGlobal('fetch', fetcher)
+  const controller = new AbortController()
+  const run = 'frv1-' + 'b'.repeat(64)
+  expect(await getForecastChart('token', run, 7, 'persistence', 6, controller.signal)).toEqual({ items: [], series_key: null })
+  const [url, config] = fetcher.mock.calls[0]
+  const parsed = new URL(url)
+  expect(parsed.pathname).toBe(`/api/v1/forecasts/runs/${run}/chart`)
+  expect(Object.fromEntries(parsed.searchParams)).toEqual({ horizon: '7', algorithm: 'persistence', lead: '6' })
+  expect(config?.signal).toBe(controller.signal)
+  expect(config?.headers).toMatchObject({ Authorization: 'Bearer token' })
 })

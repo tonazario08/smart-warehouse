@@ -35,6 +35,30 @@ export function number(value: number) {
 export function probability(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
 }
+export function readScoreComparison(score: unknown, threshold: unknown) {
+  if (!probability(score) || !probability(threshold)) return null
+  const relation = score > threshold ? 'above' : score < threshold ? 'below' : 'equal'
+  let scoreText = number(score)
+  let thresholdText = number(threshold)
+  if (relation !== 'equal' && scoreText === thresholdText) {
+    for (let digits = 9; digits <= 20 && scoreText === thresholdText; digits++) {
+      const precise = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits })
+      scoreText = precise.format(score)
+      thresholdText = precise.format(threshold)
+    }
+    if (scoreText === thresholdText) {
+      // Round-trip representations cannot merge two distinct finite doubles.
+      const roundTrip = (value: number) => value.toString().replace('.', ',').replace('e', 'E')
+      scoreText = roundTrip(score)
+      thresholdText = roundTrip(threshold)
+    }
+  }
+  return {
+    relation, scoreText, thresholdText,
+    label: relation === 'above' ? 'Điểm cao hơn ngưỡng' : relation === 'below' ? 'Điểm thấp hơn ngưỡng' : 'Điểm bằng ngưỡng',
+  } as const
+}
+
 function timestamp(value: unknown) {
   if (typeof value !== 'string' || !/T.*(?:Z|[+-]\d\d:\d\d)$/i.test(value)) return null
   const parsed = new Date(value)

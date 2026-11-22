@@ -9,3 +9,35 @@ export type Manifest = { binding?: { product_id: number; warehouse_id: number; u
 export type ReplenishmentRun = { manifest: Manifest; calibration: Calibration | null; summaries: Summary[] | null; applicability: 'research_scenario' | 'fixture_scenario'; fixture_label: string | null; stale: boolean | null; reason_codes: string[]; entity: { product_id: number; warehouse_id: number; product_name: string; sku: string; warehouse_name: string; warehouse_code: string } | null }
 export type ReplenishmentStatus = { state: 'ready' | 'unavailable' | 'failed'; reason_code: string | null; latest: ReplenishmentRun | null }
 export type SimulationDay = { day: string; origin: string; warmup: boolean; opening_on_hand: number; received: number; position: number; forecast_mean: string; residual_quantile: string; safety_stock: string; reorder_point: number; order_quantity: number; ordered: number; due_date: string | null; demand: number; fulfilled: number; lost: number; on_hand_end: number; pipeline_end: number; ordering_cost: string; holding_cost: string }
+
+export type ForecastPilot = {
+  forecast_run_id: string
+  replenishment_run_id: string
+  product_id: number
+  warehouse_id: number
+  sku: string
+  warehouse_code: string
+  unit: string
+  data_version: string
+  algorithm: 'xgboost'
+  lead_time: 7
+  service_level: '0.90'
+  policy: 'proposed'
+  training_cutoff: string
+  origin: string
+  scenario_day: string
+  forecast_during_lead_time: string
+  safety_stock: string
+  rop: number
+  simulated_inventory_position: number
+  threshold: 'at_or_below' | 'above'
+  eoq: number | null
+  holdout_wape: string | null
+  holdout_lead_time_mae: string | null
+}
+
+export type ForecastPilotResult = {
+  state: 'ready' | 'unavailable'
+  reason_code: string | null
+  pilot: ForecastPilot | null
+}

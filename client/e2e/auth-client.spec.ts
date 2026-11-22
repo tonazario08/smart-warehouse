@@ -33,7 +33,7 @@ for (const role of ['admin', 'warehouse', 'client'] as const) {
   test('Figma navigation and direct-route guards for ' + role, async ({ page }) => {
     const credentials = role === 'admin' ? e2eCredentials.admin : role === 'warehouse' ? e2eCredentials.seededWarehouse : e2eCredentials.seededClient
     await signIn(page, credentials)
-    const allowed = role === 'admin' ? ['Dự báo', 'Bổ sung hàng', 'Trợ lý kho', 'Bất thường', 'Bảng điều khiển', 'Sản phẩm', 'Tồn kho', 'Kho hàng', 'Bản đồ kho', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Người dùng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch', 'Nhật ký quản trị'] : role === 'warehouse' ? ['Dự báo', 'Bổ sung hàng', 'Trợ lý kho', 'Bất thường', 'Tồn kho', 'Kho hàng', 'Bản đồ kho', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch'] : ['Sản phẩm', 'Tồn kho', 'Kho hàng', 'Yêu cầu mua hàng', 'Danh mục']
+    const allowed = role === 'admin' ? ['Dự báo', 'Bổ sung hàng', 'Trợ lý kho', 'Bất thường', 'Bảng điều khiển', 'Sản phẩm', 'Tồn kho', 'Kho hàng', 'Bản đồ kho', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Người dùng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch', 'Nhật ký quản trị'] : role === 'warehouse' ? ['Dự báo', 'Bổ sung hàng', 'Trợ lý kho', 'Bất thường', 'Sản phẩm', 'Tồn kho', 'Kho hàng', 'Bản đồ kho', 'Nhập kho', 'Xuất kho', 'Chuyển kho', 'Yêu cầu mua hàng', 'Danh mục', 'Nhà cung cấp', 'Giao dịch'] : ['Sản phẩm', 'Tồn kho', 'Kho hàng', 'Yêu cầu mua hàng', 'Danh mục']
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' })
     await expect(nav.getByRole('link')).toHaveCount(allowed.length)
     for (const name of allowed) await expect(nav.getByRole('link', { name, exact: true })).toBeVisible()
@@ -49,6 +49,7 @@ for (const role of ['admin', 'warehouse', 'client'] as const) {
         await page.goto(path)
         await expect(page).toHaveURL(role === 'client' ? /\/products$/ : /\/inventory$/)
         await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible()
+        await expect(page.getByText('Bạn không có quyền mở trang vừa yêu cầu.', { exact: true })).toBeVisible()
       }
     }
     await signOut(page)

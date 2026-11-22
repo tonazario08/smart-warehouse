@@ -10,7 +10,7 @@ import { Button } from '../../shared/ui/Button'
 import { Select } from '../../shared/ui/Select'
 import { getAlert, getReviews, submitReview } from './api'
 import { featureLabels, partitionLabels, reasons, statusLabels } from './types'
-import { attribution, formatVietnamTime, number, probability, readFeatures } from './alertReadability'
+import { attribution, formatVietnamTime, number, readFeatures, readScoreComparison } from './alertReadability'
 import type { Detail, Review, ReviewRequest } from './types'
 import '../../shared/styles/management.css'
 import './anomalies.css'
@@ -88,13 +88,13 @@ const checksByFeature: Record<string, string> = {
   log_quantity_to_prior_mean: 'Đối chiếu lượng xuất lần này với các lần xuất trước của cùng sản phẩm và kho.',
 }
 
-function AlertReadout({ detail }: { detail: Detail }) {
+function AlertReadout({ detail, alertId }: { detail: Detail; alertId: string }) {
   const features = readFeatures(detail)
   const rows = attribution(detail, features)
   const driver = rows?.reduce<(NonNullable<Attribution>)[number] | null>((highest, row) =>
     row.amount > 0 && (!highest || row.amount > highest.amount) ? row : highest, null)
-  const comparable = probability(detail.score) && probability(detail.threshold)
-  const exceeds = comparable && detail.score > detail.threshold
+  const comparison = readScoreComparison(detail.score, detail.threshold)
+  const exceeds = comparison?.relation === 'above'
   const localTime = formatVietnamTime(detail.occurred_at)
   const history = features.history
   const explanation = detail.explanation
@@ -104,10 +104,11 @@ function AlertReadout({ detail }: { detail: Detail }) {
       <h3>Vì sao có cảnh báo?</h3>
       <p>Điểm cao hơn ngưỡng thì mô hình gắn cờ. Đây không phải xác suất giao dịch sai.</p>
       <dl className="anomalies-facts">
-        <div><dt>Điểm bất thường</dt><dd>{comparable ? number(detail.score) : 'Không khả dụng'}</dd></div>
-        <div><dt>Ngưỡng cảnh báo</dt><dd>{comparable ? number(detail.threshold) : 'Không khả dụng'}</dd></div>
+        <div><dt>Điểm bất thường</dt><dd>{comparison?.scoreText ?? 'Không khả dụng'}</dd></div>
+        <div><dt>Ngưỡng cảnh báo</dt><dd>{comparison?.thresholdText ?? 'Không khả dụng'}</dd></div>
         <div><dt>Trạng thái đánh giá</dt><dd>{statusLabels[detail.review_status]}</dd></div>
       </dl>
+      {comparison && <p className="anomaly-comparison">{comparison.label}</p>}
       {exceeds
         ? <p>Điểm vượt ngưỡng {number(detail.score - detail.threshold)} điểm.</p>
         : <FeedbackMessage variant="warning">Dữ liệu điểm và ngưỡng không nhất quán. Không thể xác nhận cảnh báo vượt ngưỡng.</FeedbackMessage>}
@@ -118,6 +119,7 @@ function AlertReadout({ detail }: { detail: Detail }) {
       <p>{driver ? checksByFeature[driver.key] : 'Đối chiếu thông tin giao dịch với chứng từ xuất, số lượng và thời điểm ghi nhận.'}</p>
       <p>Cảnh báo giúp kiểm tra giao dịch đã ghi nhận; dự báo ước tính nhu cầu tương lai.</p>
     </section>
+    <AnomalyOutboundLink alertId={alertId} />
     <section className="management-panel anomalies-panel">
       <h2>Số liệu để đối chiếu</h2>
       <dl className="anomalies-facts">
@@ -133,12 +135,10 @@ function AlertReadout({ detail }: { detail: Detail }) {
         <div><dt>Số giao dịch trong cả kỳ</dt><dd>{number(history.count)}</dd></div>
       </dl></> : <p>Không đủ dữ liệu lịch sử</p>}
     </section>
-    <section className="management-panel anomalies-panel">
-      <h2>Giải thích của mô hình</h2>
-      <ShapExplanation detail={detail} rows={rows} />
-    </section>
     <details className="management-panel anomalies-panel anomaly-technical">
       <summary>Thông tin kỹ thuật</summary>
+      <h2>Giải thích của mô hình</h2>
+      <ShapExplanation detail={detail} rows={rows} />
       <dl className="anomalies-facts">
         <CopyId label="Mã cảnh báo" value={detail.alert_id} />
         <CopyId label="Mã bản ghi nguồn" value={detail.source_record_key} />
@@ -152,7 +152,7 @@ function AlertReadout({ detail }: { detail: Detail }) {
         {detail.run.partitions.map(p => <div key={p.name}><dt>{partitionLabels[p.name] ?? 'Giai đoạn'}</dt><dd>{p.start} đến trước {p.end} (UTC); giới hạn dữ liệu: {p.information_cutoff}</dd></div>)}
       </dl>
       {rows && explanation?.base_value !== null && explanation.residual !== null && <>
-        <p>Giá trị nền: {number(explanation.base_value)}. Sai số đối chiếu: {number(explanation.residual)}. Điểm được giải thích: {number(detail.score)}.</p>
+        <p>Giá trị nền: {number(explanation.base_value)}. Sai số đối chiếu: {number(explanation.residual)}. Điểm được giải thích: {comparison?.scoreText ?? number(detail.score)}.</p>
         <p>Phép giải thích giả định các đặc trưng độc lập khi che dữ liệu.</p>
       </>}
       {features.valid && <dl className="anomalies-facts">
@@ -210,8 +210,7 @@ export function AnomalyDetailPage() {
     <PageHeader title="Chi tiết bất thường" description="Xem lý do mô hình gắn cờ và số liệu để đối chiếu." actions={<Link to="/anomalies">Về danh sách</Link>} />
     <FeedbackMessage variant="warning">Dữ liệu kiểm thử tổng hợp. Hiệu quả trên dữ liệu thực chưa được xác minh. Đóng góp của mô hình không chứng minh quan hệ nhân quả.</FeedbackMessage>
     {loadError ? <><FeedbackMessage variant="error">{loadError}</FeedbackMessage><Button onClick={() => setRetry(n => n + 1)}>Thử lại</Button></> : !detail ? <FeedbackMessage>Đang tải cảnh báo...</FeedbackMessage> : <>
-      <AlertReadout key={scope} detail={detail} />
-      <AnomalyOutboundLink alertId={alertId} />
+      <AlertReadout key={scope} detail={detail} alertId={alertId} />
       {can(user?.role, 'anomaly:review') && <section className="management-panel anomalies-panel"><h2>Đánh giá cảnh báo</h2><p>Đánh giá chỉ cập nhật hồ sơ cảnh báo, không thay đổi tồn kho hay giao dịch.</p>{error && <><FeedbackMessage variant="error">{error}</FeedbackMessage><Button variant="secondary" onClick={() => setRetry(n => n + 1)}>Tải lại trạng thái</Button></>}{message && <FeedbackMessage variant="success">{message}</FeedbackMessage>}
         <Select label="Quyết định" value={decision} onChange={e => { if (e.target.value) setDecision(e.target.value as 'confirmed' | 'dismissed') }} options={[{ value: 'confirmed', label: 'Xác nhận' }, { value: 'dismissed', label: 'Bác bỏ' }]} />
         <label className="anomalies-note">Ghi chú<textarea value={note} maxLength={500} onChange={e => setNote(e.target.value)} rows={4} /></label>
