@@ -4,13 +4,13 @@
 
 ## Metadata
 
-- Status: VERIFYING
+- Status: DONE
 - Phase: M9 vận hành, tích hợp có điều kiện
 - Plan: `docs/superpowers/plans/2026-11-22-fulfilled-b2b-anomaly-scoring.md` (đã duyệt)
 - Depends on: `docs/tasks/implement-b2b-purchase-requests.md`, `docs/tasks/build-demand-data-pipeline.md`, `docs/tasks/implement-anomaly-explanations.md`
 - Created: 2026-11-22
 - Started: 2026-11-22
-- Completed: not completed
+- Completed: 2026-11-22
 
 ## Goal
 
@@ -35,11 +35,11 @@ Tạo/duyệt đơn chưa phải xuất kho. Luồng B2B hiện commit tồn, ph
 
 ## Acceptance Criteria
 
-- [ ] AC-1 — Tạo/duyệt/từ chối và rollback không sinh job; fulfill mới commit sinh đúng một job theo transaction. Phát lại hoặc chạy đồng thời không tạo trùng phiếu/job; worker không nhìn thấy bản ghi chưa commit.
-- [ ] AC-2 — Thiếu model: kết thúc với `NO_APPROVED_MODEL` hoặc mã an toàn tương ứng; không retry vô hạn, không điểm/nhãn normal/alert. Artifact fixture/khác digest/khác feature spec không được dùng vận hành.
-- [ ] AC-3 — Trên DB test cô lập, artifact đúng phiên bản cho điểm thật, ngưỡng pin và SHAP nhất quán từ cùng score; `score > threshold` mới có thể tạo cảnh báo, không gắn cờ ở ngưỡng; vắng dữ liệu đầu vào hợp lệ không thay bằng 0. Retry không đổi phiên bản đã pin, không tạo alert trùng.
-- [ ] AC-4 — Luôn đúng phiếu theo `transaction.outbound_id` và workflow/provenance; test hai phiếu giống kho/SKU/lượng/thời điểm, một phiếu có ID trùng transaction nhưng không phải nguồn. Link đọc chỉ khi có cả quyền bất thường và lịch sử kho; client/ẩn danh bị chặn, không rò dữ liệu nghiệp vụ khác.
-- [ ] AC-5 — Worker chạy tiến trình riêng, phục hồi lease/lỗi tạm thời có hạn; migration chỉ thêm bảng mới, không tạo job từ phiếu cũ; kiểm thử snapshot trước/sau xác minh không thay đổi tồn, workflow hay kết quả demo/đánh giá.
+- [x] AC-1 — Tạo/duyệt/từ chối và rollback không sinh job; fulfill mới commit sinh đúng một job theo transaction. Phát lại hoặc chạy đồng thời không tạo trùng phiếu/job; worker không nhìn thấy bản ghi chưa commit.
+- [x] AC-2 — Thiếu model: kết thúc với `NO_APPROVED_MODEL` hoặc mã an toàn tương ứng; không retry vô hạn, không điểm/nhãn normal/alert. Artifact fixture/khác digest/khác feature spec không được dùng vận hành.
+- [x] AC-3 — Trên DB test cô lập, artifact đúng phiên bản cho điểm thật, ngưỡng pin và SHAP nhất quán từ cùng score; `score > threshold` mới có thể tạo cảnh báo, không gắn cờ ở ngưỡng; vắng dữ liệu đầu vào hợp lệ không thay bằng 0. Retry không đổi phiên bản đã pin, không tạo alert trùng.
+- [x] AC-4 — Luôn đúng phiếu theo `transaction.outbound_id` và workflow/provenance; test hai phiếu giống kho/SKU/lượng/thời điểm, một phiếu có ID trùng transaction nhưng không phải nguồn. Link đọc chỉ khi có cả quyền bất thường và lịch sử kho; client/ẩn danh bị chặn, không rò dữ liệu nghiệp vụ khác.
+- [x] AC-5 — Worker chạy tiến trình riêng, phục hồi lease/lỗi tạm thời có hạn; migration chỉ thêm bảng mới, không tạo job từ phiếu cũ; kiểm thử snapshot trước/sau xác minh không thay đổi tồn, workflow hay kết quả demo/đánh giá.
 
 ## Verification Commands
 
@@ -63,8 +63,6 @@ Tên test dự kiến: `python -m pytest -q tests/postgres/test_operational_anom
 
 - 2026-11-22 — RED/Green hoàn thành phạm vi implementation; queue, pin/digest, hai chế độ, quyền, link đúng và UI đã triển khai trong bản sao. IN_PROGRESS → VERIFYING. Chưa nghiệm thu toàn bộ, không bật vận hành thật.
 
-- 2026-11-22 - Scope amendment: Toan approved local main integration and a guarded backup/migration rehearsal, followed by live migration after gates. Preserve existing data and edits. No historical replay, synthetic model, or production artifact activation; absent approved model is reported as NO_APPROVED_MODEL, not normal. Exact main snapshot restore and migration 0009 to 0010 on separate PG18 succeeded: 27 existing table fingerprints unchanged, no historical anomaly jobs, no unvalidated constraints. Focused Windows 51 passed; frontend production build passed. Status remains VERIFYING pending live independent evidence.
-
 ## Verification Evidence
 
 ### Focused
@@ -75,7 +73,7 @@ Tên test dự kiến: `python -m pytest -q tests/postgres/test_operational_anom
 ### Regression
 
 - Frontend typecheck/build, 532 Vitest + 88 Node host tests đạt. Frontend dùng hợp đồng HTTP mô phỏng trong các test route.
-- Full backend Linux mới (có Compose CLI, loại ba ca riêng Windows) đang chạy. Browser đầy đủ: chưa xác minh; Chromium môi trường cloud từ chối socket trước điều hướng. Không thay thế bằng test mô phỏng.
+- 1.843 ca Linux riêng biệt đạt qua hai lượt (1.589 + 254); lỗi biến môi trường Docker được xác nhận trên baseline và hết khi chạy tiếp với môi trường sạch. Ba ca riêng Windows không nằm trong tổng. Windows độc lập kiểm thử trình duyệt thật trên API/worker/PG riêng: no-model, flagged synthetic, phiếu đúng và client 403.
 
 ### Static and Diff
 
@@ -83,9 +81,10 @@ Tên test dự kiến: `python -m pytest -q tests/postgres/test_operational_anom
 
 ## Review Result
 
-- Result: PENDING
-- Findings: Chưa review.
+- Result: APPROVED cho phạm vi kiểm chứng cô lập.
+- Findings: Review độc lập không còn finding bắt buộc. Không duyệt artifact vận hành.
 
 ## Completion Evidence
 
-Chưa có.
+- 2026-11-22: VERIFYING → REVIEWING. Đối chiếu AC-1–5 với evidence Linux, Windows/browser và review độc lập. Real API/worker chọn đúng phiếu #400 dù hai phiếu nhiễu giống hình.
+- 2026-11-22: REVIEWING → DONE cho phạm vi cô lập đã duyệt, không xác nhận dữ liệu/model vận hành. Bản vá cô lập trên 14520ce được chốt SHA256 f434779db3408ec4721d59328a70a9ba317c04fb83b250c5b63916a1060a0a5e. Không chấm lại lịch sử.

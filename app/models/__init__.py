@@ -1,5 +1,5 @@
 from app.anomalies.models import AnomalyAlert, AnomalyOutboundLink, AnomalyReview, AnomalyRun
-from app.anomalies.operational_models import OperationalAnomalyJob
+from app.anomalies.operational_models import OperationalAnomalyJob, OperationalAnomalyReview
 from app.auth.recovery_models import PasswordRecoveryBudget, PasswordResetToken
 from app.models.domain import (
     Category,
@@ -33,6 +33,7 @@ __all__ = [
     "AnomalyReview",
     "AnomalyRun",
     "OperationalAnomalyJob",
+    "OperationalAnomalyReview",
     "Category",
     "Inbound",
     "MovementProvenance",

@@ -3,7 +3,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, Uuid, func
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -76,3 +86,36 @@ class OperationalAnomalyJob(Base):
     result: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OperationalAnomalyReview(Base):
+    __tablename__ = "operational_anomaly_reviews"
+    __table_args__ = (
+        UniqueConstraint("transaction_id", "version", name="uq_operational_review_version"),
+        UniqueConstraint(
+            "transaction_id", "actor_id", "idempotency_key", name="uq_operational_review_key"
+        ),
+        CheckConstraint("version > 0", name="ck_operational_review_version"),
+        CheckConstraint(
+            "decision IN ('confirmed_business_issue', 'legitimate', 'insufficient_evidence')",
+            name="ck_operational_review_decision",
+        ),
+        CheckConstraint("length(trim(note)) BETWEEN 1 AND 1000", name="ck_operational_review_note"),
+        CheckConstraint(
+            "length(result_digest) = 64 AND length(request_digest) = 64",
+            name="ck_operational_review_digest",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("operational_anomaly_jobs.transaction_id", ondelete="RESTRICT")
+    )
+    version: Mapped[int]
+    decision: Mapped[str] = mapped_column(String(25))
+    note: Mapped[str] = mapped_column(String(1000))
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    result_digest: Mapped[str] = mapped_column(String(64))
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid())
+    request_digest: Mapped[str] = mapped_column(String(64))

@@ -13,6 +13,7 @@ import { PageHeader } from '../../shared/ui/PageHeader'
 import { Pagination } from '../../shared/ui/Pagination'
 import { formatVietnamTime, number, probability } from '../anomalies/alertReadability'
 import type { AlertOutbound } from '../anomalies/types'
+import { OperationalAnomalyReviews } from './OperationalAnomalyReviews'
 import '../../shared/styles/management.css'
 import '../anomalies/anomalies.css'
 
@@ -225,7 +226,10 @@ export function OperationalAnomalyDetailPage() {
         <Scoring row={row} />
         <Button variant="secondary" onClick={retry}>Tải lại kết quả</Button>
       </section>
-      {row.state === 'flagged' && <OperationalVoucherLink id={row.transaction_id} />}
+      {row.state === 'flagged' && <>
+        <OperationalVoucherLink id={row.transaction_id} />
+        <OperationalAnomalyReviews transactionId={row.transaction_id} />
+      </>}
     </> : <ReadStatus kind={state.kind === 'ready' ? 'failed' : state.kind} retry={retry} />}
   </section>
 }
