@@ -113,27 +113,49 @@ def test_browser_matrix_covers_each_catalog_once_and_seed_is_strict():
         ci.validate_seed(seed)
 
 
+FULL_BROWSER_CASES = (
+    "  ✓ 1 admin sees unavailable research in synthetic CI\n"
+    "  ✓ 2 explicit device location previews mocked coordinates and uses private "
+    "first-party lookup only after confirmation\n"
+    "  - 3 queries actual public bounded data and relocates the confirmed-preview pin "
+    "without external traffic\n"
+)
+
+
+def test_synthetic_browser_includes_gps_but_not_live_public_data():
+    output = FULL_BROWSER_CASES + "17 skipped\n36 passed\n"
+    assert ci.browser_coverage(output, "valid", "valid", "all") == {
+        "passed": 36, "skipped": 17, "failed": 0,
+    }
+    with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
+        ci.browser_coverage(output.replace("✓ 2", "- 2"), "valid", "valid", "all")
+    with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
+        ci.browser_coverage(output.replace("- 3", "✓ 3"), "valid", "valid", "all")
+
+
 @pytest.mark.parametrize(
     "summary",
-    ["11 skipped\n35 passed", "17 skipped\n35 passed", "16 skipped\n34 passed"],
+    ["16 skipped\n35 passed", "17 skipped\n35 passed", "16 skipped\n36 passed"],
 )
 def test_synthetic_browser_coverage_rejects_wrong_totals(summary):
-    output = f"  ✓ 1 admin sees unavailable research in synthetic CI\n{summary}\n"
+    output = FULL_BROWSER_CASES + summary + "\n"
     with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
         ci.browser_coverage(output, "valid", "valid", "all")
 
 
 def test_synthetic_browser_coverage_requires_passing_tests_and_the_expected_case():
     with pytest.raises(guarded.GuardError, match="TEST_OUTPUT_INVALID"):
-        ci.browser_coverage("16 skipped\n35 passed\n1 failed\n", "valid", "valid", "all")
+        ci.browser_coverage("17 skipped\n36 passed\n1 failed\n", "valid", "valid", "all")
     with pytest.raises(ci.CIError, match="BROWSER_COVERAGE_INVALID"):
-        ci.browser_coverage("16 skipped\n35 passed\n", "valid", "valid", "all")
+        ci.browser_coverage("17 skipped\n36 passed\n", "valid", "valid", "all")
 
 
-def test_synthetic_browser_environment_does_not_enable_assistant_suite(monkeypatch):
+def test_synthetic_browser_environment_does_not_enable_public_or_assistant_cases(monkeypatch):
     monkeypatch.setenv("E2E_ASSISTANT", "1")
+    monkeypatch.setenv("E2E_B2B_GEOCODE_PUBLIC_ADDRESS", "UNTRUSTED")
     env, _ = ci.browser_environment({"fixture_run_id": ""})
     assert env["E2E_ASSISTANT"] == "0"
+    assert not env["E2E_B2B_GEOCODE_PUBLIC_ADDRESS"]
 
 
 def test_browser_coverage_rejects_missing_conditional_node_or_wrong_counts():
@@ -147,11 +169,10 @@ def test_browser_coverage_rejects_missing_conditional_node_or_wrong_counts():
         )
     for policy, forecast, suite in ci.browser_plan():
         if suite == "all":
-            title, summary = (
-                "admin sees unavailable research in synthetic CI",
-                "16 skipped\n35 passed",
-            )
-        elif suite == "replenishment":
+            ci.browser_coverage(FULL_BROWSER_CASES + "17 skipped\n36 passed\n",
+                                policy, forecast, suite)
+            continue
+        if suite == "replenishment":
             title, summary = "real API shows " + policy + " state", "12 skipped\n2 passed"
         else:
             title = (
@@ -247,3 +268,13 @@ def test_node_split_is_exact_and_windows_skips_fail():
     ci.validate_collected_nodes("\n".join(nodes))
     with pytest.raises(ci.CIError):
         ci.validate_collected_nodes("\n".join(nodes[:2]))
+
+
+def test_public_failure_reason_never_exposes_arbitrary_exception_details():
+    assert ci.public_failure_reason(ci.CIError("BROWSER_COVERAGE_INVALID")) == (
+        "BROWSER_COVERAGE_INVALID"
+    )
+    assert ci.public_failure_reason(guarded.GuardError("TEST_OUTPUT_INVALID")) == (
+        "TEST_OUTPUT_INVALID"
+    )
+    assert ci.public_failure_reason(ci.CIError("Bearer synthetic-token")) is None

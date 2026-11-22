@@ -231,6 +231,7 @@ def browser_environment(fixture):
             "CI_JWT_SECRET": secrets.token_urlsafe(48),
             "E2E_BASE_URL": "http://127.0.0.1:58082",
             "E2E_ASSISTANT": "0",
+            "E2E_B2B_GEOCODE_PUBLIC_ADDRESS": "",
             "E2E_REPLENISHMENT_PROFILE": "synthetic-only",
             "E2E_REPLENISHMENT_RUN_ID": fixture["fixture_run_id"],
             "E2E_REPLENISHMENT_RESEARCH_RUN_ID": "",
@@ -287,10 +288,18 @@ def browser_compose(envfile):
 def browser_coverage(output, policy, forecast, suite):
     counts = guarded.e2e_test_counts(output)
     if suite == "all":
-        # Five assistant cases require the separate assistant stack.
-        expected, title = (35, 16), "admin sees unavailable research in synthetic CI"
+        # Synthetic GPS uses Chromium's simulated location; public OSM data does not run here.
+        expected = (36, 17)
+        required = (
+            ("✓", "admin sees unavailable research in synthetic CI"),
+            ("✓", "explicit device location previews mocked coordinates and uses private "
+                  "first-party lookup only after confirmation"),
+            ("-", "queries actual public bounded data and relocates the confirmed-preview pin "
+                  "without external traffic"),
+        )
     elif suite == "replenishment":
-        expected, title = (2, 12), "real API shows " + policy + " state"
+        expected = (2, 12)
+        required = (("✓", "real API shows " + policy + " state"),)
     else:
         expected = (2, 8)
         title = (
@@ -298,10 +307,14 @@ def browser_coverage(output, policy, forecast, suite):
             if forecast == "ratio"
             else "real server reports " + forecast + " fixture state"
         )
+        required = (("✓", title),)
     if (counts["passed"], counts["skipped"], counts["failed"]) != (*expected, 0):
         raise CIError("BROWSER_COVERAGE_INVALID")
     clean = re.sub(r"\x1b\[[0-9;]*m", "", output)
-    if not re.search(r"(?m)^\s*✓[^\n]*" + re.escape(title), clean):
+    if any(
+        not re.search(r"(?m)^\s*" + re.escape(marker) + r"[^\n]*" + re.escape(title), clean)
+        for marker, title in required
+    ):
         raise CIError("BROWSER_COVERAGE_INVALID")
     return counts
 
@@ -649,9 +662,23 @@ def main():
     {"backend": run_backend, "windows": run_windows, "e2e": run_browser}[sys.argv[1]]()
 
 
+def public_failure_reason(failure):
+    # Never emit arbitrary exception messages, URLs, or subprocess arguments.
+    public_reasons = {
+        "BROWSER_CHILD_FAILED", "BROWSER_COVERAGE_INVALID", "BROWSER_NOT_READY",
+        "COMPOSE_INVALID", "DATABASE_INVALID", "DOCKER_CONTEXT_INVALID",
+        "ENVIRONMENT_INVALID", "FIXTURE_INVALID", "OUTPUT_CONFLICT", "RESOURCE_COLLISION",
+        "RESOURCE_INVALID", "SEED_INVALID", "TEST_OUTPUT_INVALID",
+    }
+    code = failure.args[0] if len(failure.args) == 1 else None
+    return code if isinstance(code, str) and code in public_reasons else None
+
+
 if __name__ == "__main__":
     try:
         main()
-    except (CIError, guarded.GuardError, subprocess.CalledProcessError):
-        print("Quality CI guard or child failed", file=sys.stderr)
+    except (CIError, guarded.GuardError, subprocess.CalledProcessError) as failure:
+        reason = public_failure_reason(failure)
+        message = "Quality CI guard or child failed" + (f": {reason}" if reason else "")
+        print(message, file=sys.stderr)
         sys.exit(1)
