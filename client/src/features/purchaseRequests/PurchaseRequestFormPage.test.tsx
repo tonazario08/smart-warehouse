@@ -1,15 +1,36 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import * as L from 'leaflet'
 import { deferredResponse, jsonResponse, purchase, purchaseHandler, purchaseNearest, purchaseProduct, renderPurchaseRequestRoute } from '../../test/renderPurchaseRequestRoute'
 
+beforeEach(() => {
+  // Leaflet uses SVG here; the browser test exercises installed Canvas and touch behavior.
+  Object.defineProperty(L.Browser, 'svg', { configurable: true, value: true })
+  const width = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')!.get!
+  const height = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')!.get!
+  vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+    return this.classList.contains('purchase-delivery-leaflet') ? 640 : width.call(this)
+  })
+  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+    return this.classList.contains('purchase-delivery-leaflet') ? 360 : height.call(this)
+  })
+})
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
+const syntheticLocation = { address: 'Địa chỉ mô phỏng', latitude: 10.5, longitude: 106.5 }
+async function confirmManual(latitude = '10.5', longitude = '106.5') {
+  fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: '  ' + syntheticLocation.address + '  ' } })
+  fireEvent.change(screen.getByLabelText('Vĩ độ điểm nhận'), { target: { value: latitude } })
+  fireEvent.change(screen.getByLabelText('Kinh độ điểm nhận'), { target: { value: longitude } })
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận điểm giao' }))
+}
 async function fill() {
   await screen.findByRole('option', { name: /B2B-003/ })
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kho hàng' }), '1')
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '3')
   await userEvent.type(screen.getByLabelText('Số lượng'), '3')
   await userEvent.type(screen.getByLabelText('Ghi chú'), '  Giao trong tuần  ')
+  await confirmManual()
 }
 async function review() { await userEvent.click(screen.getByRole('button', { name: 'Xem lại yêu cầu' })); return screen.getByRole('dialog') }
 it('shows only active products and readonly current actor; allocates no key until a valid confirmation', async () => {
@@ -18,7 +39,7 @@ it('shows only active products and readonly current actor; allocates no key unti
   await fill()
   expect(screen.queryByRole('option', { name: /INACTIVE/ })).not.toBeInTheDocument()
   expect(screen.getByLabelText('Tài khoản yêu cầu')).toHaveAttribute('readonly')
-  expect(screen.getByRole('status')).toHaveTextContent('không giữ chỗ')
+  expect(screen.getByText(/Gửi yêu cầu và duyệt không giữ chỗ/)).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Hủy' })).toHaveAttribute('href', '/purchase-requests')
   const trigger = screen.getByRole('button', { name: 'Xem lại yêu cầu' })
   const dialog = await review()
@@ -55,7 +76,7 @@ it('locks pending context and submits exactly one accepted body despite double c
   expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled()
   const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
   expect(posts).toHaveLength(1)
-  expect(JSON.parse(String(posts[0][1]?.body))).toEqual({ warehouse_id: 1, product_id: 3, quantity: 3, note: 'Giao trong tuần' })
+  expect(JSON.parse(String(posts[0][1]?.body))).toEqual({ warehouse_id: 1, product_id: 3, quantity: 3, note: 'Giao trong tuần', delivery_location: syntheticLocation })
   await act(async () => pending.resolve(jsonResponse(purchase, 201)))
   await waitFor(() => expect(active.state.location.pathname).toBe('/purchase-requests/8'))
 })
@@ -121,8 +142,7 @@ async function chooseProductAndPoint(quantity = '3', latitude = '10.5', longitud
   await screen.findByRole('option', { name: /B2B-003/ })
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '3')
   await userEvent.type(screen.getByLabelText('Số lượng'), quantity)
-  await userEvent.type(screen.getByLabelText('Vĩ độ điểm nhận'), latitude)
-  await userEvent.type(screen.getByLabelText('Kinh độ điểm nhận'), longitude)
+  await confirmManual(latitude, longitude)
 }
 async function findNearest() {
   await userEvent.click(screen.getByRole('button', { name: 'Tìm kho gần có đủ tồn' }))
@@ -138,7 +158,7 @@ it.each(['1e2', '1.0', '2147483648'])('does not search for quantity %s rejected 
   expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/nearest-warehouses'))).toBe(false)
 })
 
-it('shows nearest warehouses in API order with distance, stock, method and the exact query', async () => {
+it('shows nearest warehouses in API order with distance, stock, Haversine and the exact private body', async () => {
   const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new')
   await chooseProductAndPoint()
   await findNearest()
@@ -149,11 +169,12 @@ it('shows nearest warehouses in API order with distance, stock, method and the e
   expect(items[0]).toHaveTextContent('còn 12 cái')
   expect(items[1]).toHaveTextContent('Kho yêu cầu (KHO-A)')
   expect(nearestPanel().getByText(/đường chim bay/)).toHaveTextContent(/haversine/)
-  const call = fetchMock.mock.calls.map(([input]) => String(input)).find(url => url.includes('/nearest-warehouses'))
+  const call = fetchMock.mock.calls.find(([input]) => String(input).includes('/nearest-warehouses'))
   expect(call).toBeDefined()
-  const query = new URL(call!).searchParams
-  expect(Object.fromEntries(query)).toEqual({ product_id: '3', quantity: '3', latitude: '10.5', longitude: '106.5' })
-  expect(new Headers(fetchMock.mock.calls.find(([input]) => String(input).includes('/nearest-warehouses'))?.[1]?.headers).get('Authorization')).toBe('Bearer client-purchase-token')
+  expect(new URL(String(call![0])).search).toBe('')
+  expect(call![1]?.method).toBe('POST')
+  expect(JSON.parse(String(call![1]?.body))).toEqual({ product_id: 3, quantity: 3, latitude: 10.5, longitude: 106.5 })
+  expect(new Headers(call![1]?.headers).get('Authorization')).toBe('Bearer client-purchase-token')
 })
 it('never reorders an empty result and keeps manual warehouse selection', async () => {
   renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.includes('/nearest-warehouses') ? jsonResponse({ ...purchaseNearest, warehouses: [] }) : purchaseHandler(url))
@@ -164,7 +185,7 @@ it('never reorders an empty result and keeps manual warehouse selection', async 
   expect(screen.getByRole('combobox', { name: 'Kho hàng' })).toHaveValue('1')
 })
 it('fills the warehouse select from a suggestion and submits through the existing flow', async () => {
-  const { fetchMock, active } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', (url, init) => init?.method === 'POST' ? jsonResponse(purchase, 201) : purchaseHandler(url))
+  const { fetchMock, active } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', (url, init) => init?.method === 'POST' && url.endsWith('/purchase-requests') ? jsonResponse(purchase, 201) : purchaseHandler(url))
   await chooseProductAndPoint()
   await findNearest()
   await nearestPanel().findByRole('list')
@@ -173,8 +194,8 @@ it('fills the warehouse select from a suggestion and submits through the existin
   await userEvent.click(screen.getByRole('button', { name: 'Xem lại yêu cầu' }))
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Gửi yêu cầu mua hàng' }))
   await waitFor(() => expect(active.state.location.pathname).toBe('/purchase-requests/8'))
-  const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
-  expect(JSON.parse(String(post?.[1]?.body))).toEqual({ warehouse_id: 2, product_id: 3, quantity: 3, note: null })
+  const post = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/purchase-requests') && init?.method === 'POST')
+  expect(JSON.parse(String(post?.[1]?.body))).toEqual({ warehouse_id: 2, product_id: 3, quantity: 3, note: null, delivery_location: syntheticLocation })
 })
 it.each(['product', 'quantity', 'latitude'] as const)('clears stale suggestions when %s changes, dropping the auto-filled warehouse', async field => {
   renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => new URL(url).pathname.endsWith('/products') ? jsonResponse({ items: [purchaseProduct, { ...purchaseProduct, id: 4, sku: 'B2B-004' }], total: 2, page: 1, page_size: 100 }) : purchaseHandler(url))
@@ -236,4 +257,222 @@ it.each([['', '106.5'], ['10.5', ''], ['91', '106.5'], ['10.5', '181'], ['abc', 
   await findNearest()
   expect(nearestPanel().getByText('Nhập vĩ độ (-90 đến 90) và kinh độ (-180 đến 180) hợp lệ.')).toBeInTheDocument()
   expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/nearest-warehouses'))).toBe(false)
+})
+
+it('renders independent explicit controls for device permission and point confirmation', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new')
+  expect(await screen.findByRole('button', { name: 'Dùng vị trí hiện tại' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Xác nhận điểm giao' })).toBeEnabled()
+})
+
+const publicMatch = { label: '135 Nam Kỳ Khởi Nghĩa, TP. Hồ Chí Minh', latitude: 10.7770348, longitude: 106.695488, precision: 'house_number' }
+const mapFixture = {
+  state: 'available', bounds: { west: 106.64, south: 10.72, east: 106.76, north: 10.82 },
+  roads: [{ name: 'Đường công cộng thử nghiệm', points: [[106.65, 10.75], [106.66, 10.76]] }],
+  places: [{ name: 'Địa danh thử nghiệm', kind: 'landmark', point: [106.7, 10.77] }], areas: [],
+  attribution: '© OpenStreetMap contributors', license_url: 'https://www.openstreetmap.org/copyright',
+}
+
+it('previews one verified match without confirming or using staff GIS; exact address is posted only on demand', async () => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => {
+    if (url.endsWith('/geocode-delivery-address')) return jsonResponse({ status: 'matches', candidates: [publicMatch] })
+    if (url.endsWith('/delivery-map')) return jsonResponse(mapFixture)
+    return purchaseHandler(url)
+  })
+  await screen.findByRole('option', { name: /B2B-003/ })
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kho hàng' }), '1')
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sản phẩm' }), '3')
+  await userEvent.type(screen.getByLabelText('Số lượng'), '3')
+  const address = screen.getByLabelText('Địa chỉ giao hàng')
+  fireEvent.change(address, { target: { value: '135 nam ky khoi nghia' } })
+  expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/geocode-delivery-address'))).toBe(false)
+  await userEvent.click(screen.getByRole('button', { name: 'Tìm địa chỉ' }))
+  expect(await screen.findByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent('10.7770348, 106.695488')
+  const map = await screen.findByRole('application', { name: 'Bản đồ chọn ghim giao hàng' })
+  expect(map).toHaveAttribute('data-delivery-map-renderer', 'leaflet')
+  expect(map.querySelector('.leaflet-overlay-pane path')).toBeInTheDocument()
+  expect(address).toHaveValue('135 nam ky khoi nghia')
+  const search = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/geocode-delivery-address'))!
+  expect(new URL(String(search[0])).search).toBe('')
+  expect(search[1]).toMatchObject({ method: 'POST', cache: 'no-store' })
+  expect(JSON.parse(String(search[1]?.body))).toEqual({ address: '135 nam ky khoi nghia' })
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/gis/'))).toBe(false)
+  await findNearest()
+  expect(screen.getByText('Xác nhận điểm giao trước khi tìm kho gần.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Xem lại yêu cầu' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Xác nhận điểm giao' }))
+  expect(await review()).toHaveTextContent('135 nam ky khoi nghia')
+  expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  expect(localStorage.length).toBe(1)
+})
+
+it('requests device location only by button, ignores a late callback and previews accuracy before confirmation', async () => {
+  let callback!: PositionCallback
+  const locate = vi.fn((next: PositionCallback) => { callback = next })
+  const geolocation = Object.getOwnPropertyDescriptor(navigator, 'geolocation')
+  Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: locate } })
+  try {
+    renderPurchaseRequestRoute('/purchase-requests/new')
+    const button = await screen.findByRole('button', { name: 'Dùng vị trí hiện tại' })
+    expect(locate).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: 'Địa chỉ không có trong mẫu' } })
+    await userEvent.click(button)
+    expect(locate).toHaveBeenCalledTimes(1)
+    expect(locate.mock.calls[0]).toHaveLength(3)
+    await userEvent.click(screen.getByRole('button', { name: 'Xóa điểm giao' }))
+    const position = { coords: { latitude: 10.77, longitude: 106.7, accuracy: 16.2 }, timestamp: 0 } as GeolocationPosition
+    await act(async () => callback(position))
+    expect(screen.queryByLabelText('Ghim điểm giao đang chọn')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: 'Địa chỉ mới' } })
+    await userEvent.click(button)
+    await act(async () => callback(position))
+    expect(screen.getByText(/Độ chính xác ước tính: ±17 m/)).toBeInTheDocument()
+    expect(screen.queryByText(/Đã xác nhận điểm giao:/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Xác nhận điểm giao' }))
+    expect(screen.getByText('Đã xác nhận điểm giao: Địa chỉ mới')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: 'Địa chỉ sửa' } })
+    expect(screen.queryByLabelText('Ghim điểm giao đang chọn')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đã xác nhận điểm giao:/)).not.toBeInTheDocument()
+  } finally {
+    if (geolocation) Object.defineProperty(navigator, 'geolocation', geolocation)
+    else Reflect.deleteProperty(navigator, 'geolocation')
+  }
+})
+
+it('keeps manual fallback when device position permission is denied', async () => {
+  const geolocation = Object.getOwnPropertyDescriptor(navigator, 'geolocation')
+  Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+    getCurrentPosition: vi.fn((_success: PositionCallback, failure: PositionErrorCallback) => failure({ code: 1 } as GeolocationPositionError)),
+  } })
+  try {
+    renderPurchaseRequestRoute('/purchase-requests/new')
+    await userEvent.click(await screen.findByRole('button', { name: 'Dùng vị trí hiện tại' }))
+    expect(screen.getByText(/Bạn chưa cho phép dùng vị trí/)).toBeInTheDocument()
+    await confirmManual()
+    expect(screen.getByText('Đã xác nhận điểm giao: Địa chỉ mô phỏng')).toBeInTheDocument()
+  } finally {
+    if (geolocation) Object.defineProperty(navigator, 'geolocation', geolocation)
+    else Reflect.deleteProperty(navigator, 'geolocation')
+  }
+})
+
+it('offers an explicit internal address lookup without sending a request on typing', async () => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new')
+  const address = await screen.findByLabelText('Địa chỉ giao hàng')
+  fireEvent.change(address, { target: { value: 'địa chỉ kiểm thử' } })
+  expect(screen.getByRole('button', { name: 'Tìm địa chỉ' })).toBeEnabled()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/geocode-delivery-address'))).toBe(false)
+})
+
+it('requires a choice for ambiguous matches and marks approximate pins without replacing the typed address', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/geocode-delivery-address')
+    ? jsonResponse({ status: 'matches', candidates: [publicMatch, { ...publicMatch, label: 'Đường công cộng mẫu', precision: 'approximate', latitude: 10.775 }] })
+    : purchaseHandler(url))
+  const address = await screen.findByLabelText('Địa chỉ giao hàng')
+  await userEvent.type(address, 'đường mơ hồ')
+  await userEvent.keyboard('{Enter}')
+  const list = await screen.findByRole('list', { name: 'Địa chỉ gợi ý' })
+  expect(screen.queryByLabelText('Ghim điểm giao đang chọn')).not.toBeInTheDocument()
+  const approximate = within(list).getByRole('button', { name: /Đường công cộng mẫu · Xấp xỉ/ })
+  approximate.focus()
+  await userEvent.keyboard('{Enter}')
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent('10.775, 106.695488')
+  expect(address).toHaveValue('đường mơ hồ')
+  expect(approximate).toHaveAttribute('aria-pressed', 'true')
+  const confirm = screen.getByRole('button', { name: 'Xác nhận điểm giao' })
+  expect(confirm).toBeDisabled()
+  const acknowledgment = screen.getByRole('checkbox', { name: /chỉ là điểm tham khảo trên đường/ })
+  await userEvent.click(acknowledgment)
+  expect(confirm).toBeEnabled()
+  await userEvent.click(within(list).getByRole('button', { name: /135 Nam Kỳ/ }))
+  await userEvent.click(approximate)
+  expect(screen.getByRole('checkbox', { name: /chỉ là điểm tham khảo trên đường/ })).not.toBeChecked()
+  expect(confirm).toBeDisabled()
+  await userEvent.click(screen.getByRole('checkbox', { name: /chỉ là điểm tham khảo trên đường/ }))
+  await userEvent.click(confirm)
+  expect(screen.getByText('Đã xác nhận điểm giao: đường mơ hồ')).toBeInTheDocument()
+})
+
+it('ignores a late geocode response after a later manual coordinate paste', async () => {
+  const pending = deferredResponse()
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/geocode-delivery-address')
+    ? pending.promise : purchaseHandler(url))
+  const address = await screen.findByLabelText('Địa chỉ giao hàng')
+  fireEvent.change(address, { target: { value: 'Địa chỉ do khách nhập' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Tìm địa chỉ' }))
+  await userEvent.type(screen.getByLabelText('Dán tọa độ (vĩ độ, kinh độ)'), '10.78, 106.7')
+  await userEvent.click(screen.getByRole('button', { name: 'Dùng tọa độ đã dán' }))
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent('10.78, 106.7')
+  expect(fetchMock.mock.calls.find(([url]) => String(url).endsWith('/geocode-delivery-address'))?.[1]?.signal?.aborted).toBe(true)
+  await act(async () => pending.resolve(jsonResponse({ status: 'matches', candidates: [publicMatch] })))
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent('10.78, 106.7')
+  expect(address).toHaveValue('Địa chỉ do khách nhập')
+  expect(screen.queryByText(/Đã xác nhận điểm giao/)).not.toBeInTheDocument()
+})
+
+it.each(['no_match', 'unavailable'])('does not manufacture a pin on %s and lets keyboard adjust the local map', async status => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/geocode-delivery-address')
+    ? jsonResponse({ status, candidates: [] }) : url.endsWith('/delivery-map') ? jsonResponse(mapFixture) : purchaseHandler(url))
+  const map = await screen.findByRole('application', { name: 'Bản đồ chọn ghim giao hàng' })
+  const address = screen.getByLabelText('Địa chỉ giao hàng')
+  fireEvent.change(address, { target: { value: 'Không có địa chỉ' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Tìm địa chỉ' }))
+  expect(await screen.findByText(status === 'no_match' ? /Không tìm thấy địa chỉ/ : /Chưa có dữ liệu tra địa chỉ/)).toBeInTheDocument()
+  expect(map.querySelector('.purchase-delivery-leaflet-pin')).toBeNull()
+  map.focus()
+  await userEvent.keyboard('{ArrowUp}')
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent(/Ghim 10\.77/)
+  expect(address).toHaveValue('Không có địa chỉ')
+})
+
+it('changes the viewport by zoom or keyboard pan without changing a confirmed address or pin', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/delivery-map') ? jsonResponse(mapFixture) : purchaseHandler(url))
+  const map = await screen.findByRole('application', { name: 'Bản đồ chọn ghim giao hàng' })
+  await confirmManual('10.77', '106.7')
+  const address = screen.getByLabelText('Địa chỉ giao hàng')
+  expect(map.querySelector('.purchase-delivery-leaflet-pin')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Về ghim' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Phóng to' }))
+  map.focus()
+  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}')
+  await userEvent.click(screen.getByRole('button', { name: 'Về vùng phủ' }))
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).toHaveTextContent('10.77, 106.7')
+  expect(screen.getByText('Đã xác nhận điểm giao: Địa chỉ mô phỏng')).toBeInTheDocument()
+  map.focus()
+  await userEvent.keyboard('{ArrowUp}')
+  expect(screen.getByLabelText('Ghim điểm giao đang chọn')).not.toHaveTextContent('10.77, 106.7')
+  expect(address).toHaveValue('  Địa chỉ mô phỏng  ')
+  expect(screen.queryByText(/Đã xác nhận điểm giao/)).not.toBeInTheDocument()
+})
+
+it('blocks a single approximate preview until acknowledged or deliberately relocated', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/geocode-delivery-address')
+    ? jsonResponse({ status: 'matches', candidates: [{ ...publicMatch, precision: 'approximate' }] }) : purchaseHandler(url))
+  const address = await screen.findByLabelText('Địa chỉ giao hàng')
+  fireEvent.change(address, { target: { value: 'Đường mẫu' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Tìm địa chỉ' }))
+  await screen.findByLabelText('Ghim điểm giao đang chọn')
+  const confirm = screen.getByRole('button', { name: 'Xác nhận điểm giao' })
+  expect(confirm).toBeDisabled()
+  const paste = screen.getByLabelText('Dán tọa độ (vĩ độ, kinh độ)')
+  fireEvent.change(paste, { target: { value: '10.7770348, 106.695488' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Dùng tọa độ đã dán' }))
+  expect(confirm).toBeDisabled()
+  fireEvent.change(paste, { target: { value: '10.78, 106.7' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Dùng tọa độ đã dán' }))
+  expect(confirm).toBeEnabled()
+  expect(screen.queryByRole('checkbox', { name: /chỉ là điểm tham khảo trên đường/ })).not.toBeInTheDocument()
+  expect(address).toHaveValue('Đường mẫu')
+})
+
+it('does not present the old unlabeled sparse response as a public Leaflet map', async () => {
+  renderPurchaseRequestRoute('/purchase-requests/new', 'client', url => url.endsWith('/delivery-map') ? jsonResponse({
+    state: 'available', bounds: [106.64, 10.72, 106.76, 10.82], segments: [[[106.65, 10.75], [106.66, 10.76]]],
+    attribution: mapFixture.attribution, license_url: mapFixture.license_url,
+  }) : purchaseHandler(url))
+  expect(await screen.findByText(/Chưa có bản đồ nền OSM có nhãn/)).toBeVisible()
+  expect(screen.queryByRole('application', { name: 'Bản đồ chọn ghim giao hàng' })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Dán tọa độ (vĩ độ, kinh độ)')).toBeEnabled()
 })

@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     operational_anomaly_coverage_path: Path | None = None
     operational_anomaly_coverage_sha256: str | None = None
     operational_anomaly_allow_synthetic_test: bool = False
+    b2b_address_index_path: Path | None = None
+    b2b_address_index_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    b2b_delivery_map_path: Path | None = None
+    b2b_delivery_map_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     gis_catalog_root: Path | None = None
     gis_snapshot_id: str | None = None
     gis_allow_fixture: bool = False

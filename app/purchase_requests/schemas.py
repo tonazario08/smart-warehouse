@@ -1,6 +1,7 @@
 """Strict customer-request inputs and explicit, non-secret response projections."""
 
 import re
+import unicodedata
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -23,11 +24,37 @@ class StrictBoundary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DeliveryLocation(StrictBoundary):
+    address: str = Field(strict=True, min_length=1, max_length=300)
+    latitude: float = Field(strict=True, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(strict=True, ge=-180, le=180, allow_inf_nan=False)
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def normalize_address(cls, value: object) -> object:
+        if isinstance(value, str):
+            result = unicodedata.normalize("NFC", value.strip())
+            if any(unicodedata.category(char) in {"Cc", "Cs"} for char in result):
+                raise ValueError("Invalid address characters.")
+            return result
+        return value
+
+    @field_validator("latitude", "longitude")
+    @classmethod
+    def normalize_zero(cls, value: float) -> float:
+        return 0.0 if value == 0 else value
+
+
+class DeliveryLocationRead(StrictBoundary):
+    delivery_location: DeliveryLocation | None
+
+
 class PurchaseRequestCreate(StrictBoundary):
     warehouse_id: PositiveInteger
     product_id: PositiveInteger
     quantity: PositiveInteger
     note: str | None = Field(default=None, strict=True, max_length=2000)
+    delivery_location: DeliveryLocation | None = None
 
     @field_validator("note", mode="before")
     @classmethod
@@ -102,6 +129,13 @@ class PurchaseRequestResponse(StrictBoundary):
     note: str | None
     decision: PurchaseRequestDecisionResponse | None
     fulfillment: PurchaseRequestFulfillmentResponse | None
+
+
+class NearestWarehouseBody(StrictBoundary):
+    product_id: PositiveInteger
+    quantity: PositiveInteger
+    latitude: float = Field(strict=True, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(strict=True, ge=-180, le=180, allow_inf_nan=False)
 
 
 class NearestWarehouseQuery(StrictBoundary):

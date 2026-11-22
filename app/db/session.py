@@ -12,7 +12,7 @@ from app.core.config import Settings, get_settings
 @lru_cache
 def get_engine(database_url: str):
     """Return the cached synchronous engine for a validated database URL."""
-    return create_engine(database_url)
+    return create_engine(database_url, hide_parameters=True)
 
 
 def get_session(

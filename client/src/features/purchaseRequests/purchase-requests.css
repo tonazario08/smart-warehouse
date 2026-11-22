@@ -31,3 +31,102 @@
   .purchase-requests-page .purchase-filters, .purchase-requests-page .purchase-facts { grid-template-columns: 1fr; }
   .purchase-requests-page .purchase-actions .ui-button { flex: 1 1 auto; }
 }
+
+.purchase-delivery-picker {
+  display: grid;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.purchase-delivery-picker > button {
+  justify-self: start;
+}
+
+.purchase-delivery-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.purchase-delivery-samples button {
+  text-align: start;
+  white-space: normal;
+}
+
+.purchase-delivery-pin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.purchase-delivery-pin > span {
+  color: var(--color-primary);
+}
+
+.purchase-delivery-road-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.purchase-delivery-road-ack > input {
+  flex: none;
+  margin-block-start: 2px;
+}
+
+.purchase-delivery-leaflet-frame {
+  display: grid;
+  width: 100%;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.purchase-delivery-leaflet {
+  width: 100%;
+  min-height: 300px;
+  height: clamp(300px, 46vw, 470px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  isolation: isolate;
+  background: #edf1ed;
+}
+
+.purchase-delivery-leaflet:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.purchase-delivery-leaflet-label > span {
+  display: block;
+  width: max-content;
+  max-width: 210px;
+  transform: translate(-50%, -55%);
+  padding: 0 3px;
+  color: #283746;
+  font: 600 12px/1.2 system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 2px white, 0 0 4px white, 0 1px 2px white;
+  pointer-events: none;
+}
+
+.purchase-delivery-leaflet-pin::before {
+  content: "";
+  display: block;
+  width: 23px;
+  height: 23px;
+  border: 2px solid white;
+  border-radius: 50% 50% 50% 4px;
+  background: var(--color-primary);
+  transform: rotate(-45deg);
+  box-shadow: 0 1px 4px #283746;
+}

@@ -16,6 +16,7 @@ from app.gis.catalog import SnapshotError, check_age, verify_snapshot
 from app.gis.repository import MAX_WAREHOUSES, GISRepository
 from app.gis.routing import Coordinate, Geometry, RoutingIndex, SearchBudget, Snap
 from app.gis.schemas import Bounds, Snapshot, distance_mm, in_bounds
+from app.gis.street_layer import Segment, sample_streets
 from app.inventory.schemas import MAX_STOCK_QUANTITY
 from app.models import Product, User, Warehouse
 from app.models.domain import utc_now
@@ -32,7 +33,7 @@ STOCK_FIXTURE_LABEL = "Kho và tồn kiểm thử"
 OSM_LICENSE_URL = "https://www.openstreetmap.org/copyright"
 
 type SnapshotState = Literal["available", "unconfigured", "invalid", "stale"]
-type PlaceKind = Literal["coordinate", "warehouse", "purchase_request"]
+type PlaceKind = Literal["coordinate", "warehouse", "purchase_request", "purchase_request_delivery"]
 type CoordinateIssue = Literal["missing_coordinates", "invalid_coordinates"]
 type PositiveInt = Annotated[int, Field(strict=True, ge=1, le=MAX_STOCK_QUANTITY)]
 
@@ -85,7 +86,15 @@ class TransferRouteInput(_Input):
     transfer_id: PositiveInt
 
 
-type RouteInput = Annotated[WarehouseRouteInput | TransferRouteInput, Field(discriminator="kind")]
+class PurchaseDeliveryRouteInput(_Input):
+    kind: Literal["purchase_request_delivery"]
+    request_id: PositiveInt
+
+
+type RouteInput = Annotated[
+    WarehouseRouteInput | TransferRouteInput | PurchaseDeliveryRouteInput,
+    Field(discriminator="kind"),
+]
 
 
 class StockData(BaseModel):
@@ -125,6 +134,15 @@ class SnapshotMetadata(BaseModel):
 class SnapshotStatus(StockData):
     state: SnapshotState
     snapshot: SnapshotMetadata | None
+
+
+class StreetLayer(BaseModel):
+    state: Literal["available", "unavailable"]
+    snapshot_id: str | None = None
+    bounds: Bounds | None = None
+    segments: tuple[Segment, ...] = ()
+    attribution: str | None = None
+    license_url: str | None = None
 
 
 class ProductRead(BaseModel):
@@ -261,6 +279,7 @@ class SnapshotCatalog:
         self._lock = Lock()
         self._index: RoutingIndex | None = None
         self._metadata: SnapshotMetadata | None = None
+        self._street_segments: tuple[Segment, ...] | None = None
 
     def read(self) -> _Roads:
         if self._root is None and self._snapshot_id is None:
@@ -286,6 +305,29 @@ class SnapshotCatalog:
                     return _Roads("stale", self._metadata)
                 return _Roads("invalid")
             return _Roads("available", self._metadata, self._index)
+
+    def street_layer(self) -> StreetLayer:
+        roads = self.read()
+        if (
+            roads.state != "available"
+            or roads.snapshot is None
+            or roads.snapshot.dataset_class != "public_osm"
+            or roads.index is None
+        ):
+            return StreetLayer(state="unavailable")
+        with self._lock:
+            if self._street_segments is None:
+                self._street_segments = sample_streets(roads.index.snapshot)
+            if not self._street_segments:
+                return StreetLayer(state="unavailable")
+            return StreetLayer(
+                state="available",
+                snapshot_id=roads.snapshot.snapshot_id,
+                bounds=roads.snapshot.bounds,
+                attribution=roads.snapshot.attribution,
+                license_url=roads.snapshot.license_url,
+                segments=self._street_segments,
+            )
 
     def stock_data(self) -> dict:
         return {
@@ -334,6 +376,9 @@ class GISService:
         self.repository = repository
         self.catalog = catalog
         self.settings = settings
+
+    def street_layer(self) -> StreetLayer:
+        return self.catalog.street_layer()
 
     def status(self) -> SnapshotStatus:
         roads = self.catalog.read()
@@ -489,6 +534,20 @@ class GISService:
             origin = self._warehouse_place(lookup(transfer.source_warehouse_id))
             target = self._warehouse_place(lookup(transfer.destination_warehouse_id))
             context = TransferContext(transfer_id=transfer.id)
+        elif isinstance(body, PurchaseDeliveryRouteInput):
+            requests = PurchaseRequestService(PurchaseRequestRepository(self.repository.session))
+            purchase, delivery = requests.delivery_detail(actor, body.request_id)
+            location = delivery.delivery_location
+            if location is None:
+                raise DomainError(
+                    404, "GIS_DELIVERY_LOCATION_NOT_FOUND", "Delivery point not found."
+                )
+            target = _ResolvedPlace(Place(
+                kind="purchase_request_delivery",
+                coordinate=Coordinates(latitude=location.latitude, longitude=location.longitude),
+                request_id=purchase.id,
+            ))
+            origin = self._warehouse_place(lookup(purchase.warehouse_id))
         else:
             purchase = self._purchase(actor, body.destination)
             target = self._destination(body.destination, purchase, lookup)

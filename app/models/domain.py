@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -456,6 +457,15 @@ class PurchaseRequestWorkflow(Base):
             "AND quantity_before <= 2147483647)",
             name="ck_pr_workflow_balances",
         ),
+        CheckConstraint(
+            "(delivery_address IS NULL AND delivery_latitude IS NULL AND "
+            "delivery_longitude IS NULL) OR "
+            "(delivery_address IS NOT NULL AND delivery_latitude IS NOT NULL AND "
+            "delivery_longitude IS NOT NULL AND length(trim(delivery_address)) BETWEEN 1 AND 300 "
+            "AND delivery_latitude BETWEEN -90 AND 90 "
+            "AND delivery_longitude BETWEEN -180 AND 180)",
+            name="ck_pr_workflow_delivery_location",
+        ),
     )
 
     purchase_request_id: Mapped[int] = mapped_column(
@@ -467,6 +477,9 @@ class PurchaseRequestWorkflow(Base):
     idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
+    delivery_address: Mapped[str | None] = mapped_column(String(300))
+    delivery_latitude: Mapped[float | None] = mapped_column(Float(53))
+    delivery_longitude: Mapped[float | None] = mapped_column(Float(53))
     decision_kind: Mapped[str | None] = mapped_column(String(8))
     decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

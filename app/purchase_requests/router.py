@@ -14,8 +14,12 @@ from app.core.errors import DomainError, ErrorResponse
 from app.core.pagination import Page, PageParams
 from app.db.session import get_session
 from app.models import User
+from app.purchase_requests.delivery_geocode import GeocodeAddressBody, GeocodeResult
+from app.purchase_requests.delivery_map import DeliveryMap
 from app.purchase_requests.repository import PurchaseRequestRepository
 from app.purchase_requests.schemas import (
+    DeliveryLocationRead,
+    NearestWarehouseBody,
     NearestWarehouseQuery,
     NearestWarehouseResponse,
     PurchaseRequestAction,
@@ -105,6 +109,24 @@ def write_result(operation):
                 "detail": {"code": error.code, "message": error.message, "fields": error.fields}
             },
         )
+
+
+@router.post("/geocode-delivery-address", response_model=GeocodeResult)
+def geocode_delivery_address(
+    request: Request, response: Response, body: GeocodeAddressBody, actor: CreateActor,
+) -> GeocodeResult:
+    if request.query_params:
+        invalid("query", "parameters")
+    response.headers["Cache-Control"] = "no-store"
+    return request.app.state.delivery_geocoder.find(body.address)
+
+
+@router.get("/delivery-map", response_model=DeliveryMap)
+def delivery_map(request: Request, response: Response, actor: CreateActor) -> DeliveryMap:
+    if request.query_params:
+        invalid("query", "parameters")
+    response.headers["Cache-Control"] = "no-store"
+    return request.app.state.delivery_map_catalog.read()
 
 
 @router.post(
@@ -211,6 +233,26 @@ def nearest_warehouses(
 ):
     single_query_params(request)
     return service(session).nearest_warehouses(actor, query)
+
+
+@router.post("/nearest-warehouses", response_model=NearestWarehouseResponse)
+def private_nearest_warehouses(
+    request: Request, query: NearestWarehouseBody, actor: CreateActor, session: Database,
+    response: Response,
+):
+    if request.query_params:
+        invalid("query", "request")
+    response.headers["Cache-Control"] = "no-store"
+    return service(session).nearest_warehouses(actor, query)
+
+
+@router.get("/{request_id}/delivery-location", response_model=DeliveryLocationRead)
+def get_delivery_location(request_id: str, actor: ReadActor, session: Database, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    _, delivery = service(session).delivery_detail(
+        actor, positive_integer(request_id, "path", "request_id")
+    )
+    return delivery
 
 
 @router.get(

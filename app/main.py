@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -23,6 +24,8 @@ from app.gis.service import SnapshotCatalog
 from app.inventory.router import router as inventory_router
 from app.master_data.router import router as master_data_router
 from app.order_analytics.router import router as order_analytics_router
+from app.purchase_requests.delivery_geocode import DeliveryGeocoder
+from app.purchase_requests.delivery_map import DeliveryMapCatalog
 from app.purchase_requests.router import router as purchase_request_router
 from app.replenishment.router import router as replenishment_router
 from app.transfers.router import router as transfer_router
@@ -37,6 +40,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.dependency_overrides[get_settings] = lambda: settings
     application.state.assistant_rate_limiter = RateLimiter()
     application.state.gis_catalog = SnapshotCatalog(settings)
+    application.state.delivery_geocoder = DeliveryGeocoder(
+        settings.b2b_address_index_path if settings.b2b_address_index_sha256 else None,
+        settings.b2b_address_index_sha256,
+    )
+    application.state.delivery_map_catalog = DeliveryMapCatalog(
+        settings.b2b_delivery_map_path, settings.b2b_delivery_map_sha256,
+    )
+
+    @application.middleware("http")
+    async def protect_delivery_lookup_response(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path in (
+            f"{settings.api_v1_prefix}/purchase-requests/geocode-delivery-address",
+            f"{settings.api_v1_prefix}/purchase-requests/delivery-map",
+        ):
+            if response.status_code == 422:
+                # A malformed object can use an arbitrary private string as a field
+                # name, so the general validation field-path representation is unsafe.
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": {"code": "REQUEST_VALIDATION_ERROR",
+                                        "message": "Request validation failed.", "fields": {}}},
+                    headers={"Cache-Control": "no-store"},
+                )
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

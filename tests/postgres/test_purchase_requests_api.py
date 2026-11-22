@@ -297,12 +297,49 @@ def test_pending_create_replay_conflict_other_actor_and_inactive_policy(
 
 
 def test_openapi_purchase_request_contract(postgres_client):
+    openapi = postgres_client.get("/openapi.json").json()
     paths = {
-        path: methods
-        for path, methods in postgres_client.get("/openapi.json").json()["paths"].items()
-        if path.startswith(BASE)
+        path: methods for path, methods in openapi["paths"].items() if path.startswith(BASE)
     }
-    assert len(paths) == 7 and sum(len(methods) for methods in paths.values()) == 8
+    assert {path.removeprefix(BASE): set(methods) for path, methods in paths.items()} == {
+        "": {"get", "post"},
+        "/by-key/{key}": {"get"},
+        "/nearest-warehouses": {"get", "post"},
+        "/{request_id}": {"get"},
+        "/{request_id}/delivery-location": {"get"},
+        "/{request_id}/approve": {"post"},
+        "/{request_id}/reject": {"post"},
+        "/{request_id}/fulfill": {"post"},
+        "/geocode-delivery-address": {"post"},
+        "/delivery-map": {"get"},
+    }
+    geocode = paths[BASE + "/geocode-delivery-address"]["post"]
+    delivery_map = paths[BASE + "/delivery-map"]["get"]
+    assert geocode["security"] == delivery_map["security"] == [{"HTTPBearer": []}]
+    assert "parameters" not in geocode and "parameters" not in delivery_map
+    assert "requestBody" not in delivery_map
+
+    schemas = openapi["components"]["schemas"]
+    geocode_body = geocode["requestBody"]
+    assert geocode_body["required"] is True
+    assert geocode_body["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/GeocodeAddressBody"
+    )
+    assert schemas["GeocodeAddressBody"]["required"] == ["address"]
+    assert schemas["GeocodeAddressBody"]["additionalProperties"] is False
+    assert set(schemas["GeocodeAddressBody"]["properties"]) == {"address"}
+    assert set(schemas["GeocodeResult"]["properties"]) == {"status", "candidates"}
+    assert set(schemas["DeliveryMap"]["properties"]) == {
+        "state", "bounds", "roads", "places", "areas", "attribution", "license_url",
+    }
+    geocode_guest = postgres_client.post(
+        BASE + "/geocode-delivery-address", json={"address": "Địa chỉ công cộng thử"}
+    )
+    map_guest = postgres_client.get(BASE + "/delivery-map")
+    for denied in (geocode_guest, map_guest):
+        assert denied.status_code == 401
+        assert denied.headers["Cache-Control"] == "no-store"
+
     operation = paths[BASE]["post"]
     header = next(p for p in operation["parameters"] if p["name"] == "Idempotency-Key")
     assert header["required"] is True and header["schema"]["format"] == "uuid"

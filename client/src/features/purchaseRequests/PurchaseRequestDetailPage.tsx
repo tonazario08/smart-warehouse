@@ -12,6 +12,7 @@ import { FeedbackMessage } from '../../shared/ui/FeedbackMessage'
 import { Input } from '../../shared/ui/Input'
 import { PageHeader } from '../../shared/ui/PageHeader'
 import { approvePurchaseRequest, fulfillPurchaseRequest, getPurchaseRequest, purchaseRequestError, rejectPurchaseRequest } from './api'
+import { PurchaseDeliveryDetails } from './PurchaseDeliveryDetails'
 import { validateRejectionReason } from './schemas'
 import type { PurchaseRequest } from './types'
 import { statusLabels } from './types'
@@ -119,6 +120,7 @@ export function PurchaseRequestDetailPage() {
           <div><dt>Ghi chú</dt><dd>{current.note ?? (current.workflow_managed ? 'Không có' : 'Chưa có thông tin được ghi nhận')}</dd></div>
         </dl>
       </section>
+      {token && <PurchaseDeliveryDetails key={scope} token={token} requestId={current.id} />}
       <section className="purchase-panel"><h2>Quyết định</h2>{current.decision ? <dl className="purchase-facts"><div><dt>Người quyết định</dt><dd>Tài khoản #{current.decision.actor_id}</dd></div><div><dt>Thời điểm quyết định</dt><dd>{formatDateTime(current.decision.decided_at)}</dd></div>{current.decision.rejection_reason && <div><dt>Lý do từ chối</dt><dd>{current.decision.rejection_reason}</dd></div>}</dl> : <p>{current.workflow_managed ? 'Chưa có quyết định' : 'Chưa có thông tin quyết định được ghi nhận'}</p>}<p>Tạo và duyệt yêu cầu không giữ chỗ hoặc trừ tồn kho.</p></section>
       {current.fulfillment ? <section className="purchase-panel"><h2>Tồn kho tại thời điểm xuất</h2><p>Đây là lịch sử đã ghi nhận, không phải tồn kho hiện tại.</p><dl className="purchase-facts"><div><dt>Trước khi xuất</dt><dd>{formatQuantity(current.fulfillment.quantity_before, product?.unit)}</dd></div><div><dt>Sau khi xuất</dt><dd>{formatQuantity(current.fulfillment.quantity_after, product?.unit)}</dd></div><div><dt>Người xuất hàng</dt><dd>Tài khoản #{current.fulfillment.actor_id}</dd></div><div><dt>Thời điểm xuất</dt><dd>{formatDateTime(current.fulfillment.fulfilled_at)}</dd></div></dl><p>Phiếu xuất #{current.fulfillment.outbound_id} · Giao dịch #{current.fulfillment.transaction_id}</p></section> : <section className="purchase-panel"><h2>Xuất hàng</h2><p>Chưa có thông tin xuất hàng được ghi nhận</p></section>}
       {current.workflow_managed && current.status === 'pending' && can(user?.role, 'purchase_request:review') && <section className="purchase-panel"><h2>Xem xét yêu cầu</h2><Input label="Lý do từ chối" hint="Bắt buộc khi từ chối, tối đa 1000 ký tự" value={reason} disabled={busy || review !== null} onChange={event => setReason(event.target.value)} /><div className="purchase-actions"><Button disabled={busy || review !== null} onClick={() => begin('approve')}>Duyệt yêu cầu</Button><Button variant="danger" disabled={busy || review !== null} onClick={() => begin('reject')}>Từ chối yêu cầu</Button></div></section>}

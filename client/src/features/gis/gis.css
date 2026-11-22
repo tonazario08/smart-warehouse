@@ -371,3 +371,163 @@
     padding-block: var(--space-2);
   }
 }
+
+.gis-picker {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  min-width: 0;
+}
+
+.gis-map--picker {
+  cursor: crosshair;
+}
+
+.gis-map__bounds {
+  fill: var(--color-surface);
+  stroke: var(--color-text-muted);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.gis-map__streets {
+  fill: none;
+  stroke: var(--color-text-muted);
+  opacity: 0.42;
+  stroke-width: 0.85px;
+  vector-effect: non-scaling-stroke;
+}
+
+.gis-source {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), max-content));
+  align-items: center;
+  padding-block: var(--space-1);
+}
+
+.gis-source__summary,
+.gis-source-details {
+  font-size: 13px;
+}
+
+.gis-source-details > summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.gis-source-details[open] > dl {
+  margin-top: var(--space-3);
+}
+
+.gis-map-actions,
+.gis-map-legend {
+  display: flex;
+  gap: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+}
+
+.gis-map-legend > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.gis-symbol {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  flex: none;
+  background: var(--color-primary);
+}
+
+.gis-symbol--destination { transform: rotate(45deg); }
+.gis-symbol--enough { background: #147b55; }
+.gis-symbol--short { background: #b83b33; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.gis-symbol--route { width: 18px; height: 3px; border-radius: 2px; }
+
+.gis-map__stock-enough,
+.gis-map__stock-short {
+  stroke: var(--color-surface);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.gis-map__stock-enough { fill: #147b55; }
+.gis-map__stock-short { fill: #b83b33; }
+.gis-option-maps { font-weight: 600; }
+
+@media (min-width: 1100px) {
+  .gis-page--stock { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .gis-page--stock > :not(.gis-controls, .gis-route-layout) { grid-column: 1 / -1; }
+  .gis-page--stock > .gis-route-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.gis-landmark-picker,
+.gis-manual-coordinates {
+  width: 100%;
+  min-width: 0;
+}
+
+.gis-landmark-picker,
+.gis-landmark-confirmation {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.gis-landmark-suggestions {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.gis-landmark-suggestions button {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  min-height: 44px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gis-landmark-confirmation {
+  border-left: 3px solid var(--color-primary);
+  padding-left: var(--space-3);
+  font-size: 13px;
+}
+
+.gis-manual-coordinates > summary {
+  cursor: pointer;
+  color: var(--color-primary-hover);
+  font-size: 13px;
+  width: fit-content;
+}
+
+.gis-manual-coordinates[open] > div {
+  margin-top: var(--space-3);
+}
+
+.gis-map-warehouse-label text,
+.gis-map-target-label {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--color-text-primary);
+  stroke: var(--color-surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  pointer-events: none;
+}
+
+.gis-map-target-label { fill: var(--color-primary-hover); }
+.gis-map-label-narrow { display: none; }
+
+@media (max-width: 600px) {
+  .gis-map-label-wide { display: none; }
+  .gis-map-label-narrow { display: inline; }
+  .gis-map-warehouse-label text,
+  .gis-map-target-label { font-size: 20px; }
+}

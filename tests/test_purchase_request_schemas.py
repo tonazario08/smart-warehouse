@@ -31,7 +31,10 @@ def test_create_input_is_normalized_and_accepts_integer_boundaries():
     assert PurchaseRequestCreate(**VALID, note="  tiếng Việt  ").note == "tiếng Việt"
     for quantity in (1, 2147483647):
         assert PurchaseRequestCreate(**{**VALID, "quantity": quantity}).quantity == quantity
-    assert PurchaseRequestCreate(**VALID).model_dump() == {**VALID, "note": None}
+    legacy = PurchaseRequestCreate(**VALID)
+    assert legacy.model_dump() == {**VALID, "note": None, "delivery_location": None}
+    assert legacy.model_dump(mode="json", exclude_unset=True) == VALID
+    assert "delivery_location" not in legacy.model_fields_set
 
 
 @pytest.mark.parametrize(

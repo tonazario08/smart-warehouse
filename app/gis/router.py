@@ -1,10 +1,10 @@
-"""Five authorized, read-only GIS endpoints."""
+"""Authorized, read-only GIS endpoints."""
 
 import re
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.auth.dependencies import Permission, require_permission
@@ -19,6 +19,7 @@ from app.gis.service import (
     RouteInput,
     RouteRead,
     SnapshotStatus,
+    StreetLayer,
     WarehouseOptions,
     WarehouseOptionsInput,
 )
@@ -89,6 +90,13 @@ def status(request: Request, actor: ReadActor, service: Service) -> SnapshotStat
     return service.status()
 
 
+@router.get("/street-layer", response_model=StreetLayer)
+def street_layer(request: Request, actor: ReadActor, service: Service, response: Response):
+    _reject_ambiguous_query(request, empty=True)
+    response.headers["Cache-Control"] = "no-store"
+    return service.street_layer()
+
+
 @router.post("/warehouse-options", response_model=WarehouseOptions)
 def warehouse_options(
     request: Request, body: WarehouseOptionsInput, actor: RouteActor, service: Service
@@ -99,9 +107,11 @@ def warehouse_options(
 
 @router.post("/route", response_model=RouteRead)
 def route(
-    request: Request, body: Annotated[RouteInput, Body()], actor: RouteActor, service: Service
+    request: Request, body: Annotated[RouteInput, Body()], actor: RouteActor, service: Service,
+    response: Response,
 ) -> RouteRead:
     _reject_ambiguous_query(request, empty=True)
+    response.headers["Cache-Control"] = "no-store"
     return service.route(actor, body)
 
 

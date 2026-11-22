@@ -59,6 +59,7 @@ def gis_client(unit_settings):
 
 @pytest.mark.parametrize("method,path,body", [
     ("GET", "/status", None),
+    ("GET", "/street-layer", None),
     ("POST", "/warehouse-options", {"product_id": 1, "quantity": 1, "destination": DESTINATION}),
     ("POST", "/route", {"kind": "transfer", "transfer_id": 1}),
     ("GET", "/heatmap?product_id=1&start_date=2026-11-01&end_date=2026-11-03", None),
@@ -377,3 +378,79 @@ def test_cached_future_preparation_time_is_invalid_after_clock_regresses(
         result = client.get(BASE + "/status", headers=headers["admin"]).json()
         assert result["state"] == "invalid"
         assert result["snapshot"] is None
+
+
+def test_street_layer_does_not_use_synthetic_roads(unit_settings, tmp_path, monkeypatch):
+    from app.gis import service
+
+    snapshot_id, _ = write_fixture(tmp_path)
+    settings = unit_settings.model_copy(update={
+        "gis_catalog_root": tmp_path,
+        "gis_snapshot_id": snapshot_id,
+        "gis_allow_fixture": True,
+    })
+    monkeypatch.setattr(service, "utc_now", lambda: NOW)
+    with sqlite_api(settings) as (client, headers, _):
+        assert client.get(BASE + "/status", headers=headers["admin"]).json()["state"] == "available"
+        response = client.get(BASE + "/street-layer", headers=headers["warehouse"])
+        assert response.status_code == 200
+        assert response.json() == {
+            "state": "unavailable",
+            "snapshot_id": None,
+            "bounds": None,
+            "segments": [],
+            "attribution": None,
+            "license_url": None,
+        }
+        assert client.get(
+            BASE + "/street-layer?filename=private", headers=headers["warehouse"]
+        ).status_code == 422
+
+
+def test_only_fresh_verified_public_snapshot_has_street_layer(unit_settings, tmp_path, monkeypatch):
+    from app.gis import service
+    from app.gis.schemas import PUBLIC_ATTRIBUTION, PUBLIC_BOUNDS, PUBLIC_LICENSE, Node, edge_weight
+
+    # Small test graph for the verifier's public metadata shape, not field OSM evidence.
+    a = Node(1, 106.65, 10.76)
+    b = Node(2, 106.651, 10.761)
+    weight = edge_weight(a, b)
+    graph = {"nodes": [list(a), list(b)], "edges": [[1, 10, 1, 2, weight]], "restrictions": []}
+    snapshot_id, _ = write_fixture(tmp_path, graph=graph, changes={
+        "dataset_class": "public_osm",
+        "bounds": list(PUBLIC_BOUNDS),
+        "source_url": "https://download.geofabrik.de/asia/vietnam-261105.osm.pbf",
+        "source_sha256": "a" * 64,
+        "license": PUBLIC_LICENSE,
+        "attribution": PUBLIC_ATTRIBUTION,
+        "stats": dict(MANIFEST["stats"], nodes=2, edges=1, restrictions=0),
+    })
+    settings = unit_settings.model_copy(update={
+        "gis_catalog_root": tmp_path, "gis_snapshot_id": snapshot_id,
+    })
+    current = NOW
+    monkeypatch.setattr(service, "utc_now", lambda: current)
+    calls = 0
+    sample = service.sample_streets
+
+    def count(*args):
+        nonlocal calls
+        calls += 1
+        return sample(*args)
+
+    monkeypatch.setattr(service, "sample_streets", count)
+    with sqlite_api(settings) as (client, headers, _):
+        for role in ("admin", "warehouse"):
+            result = client.get(BASE + "/street-layer", headers=headers[role])
+            assert result.status_code == 200
+            assert result.headers["cache-control"] == "no-store"
+            assert result.json() == {
+                "state": "available", "snapshot_id": snapshot_id, "bounds": list(PUBLIC_BOUNDS),
+                "segments": [[[a.longitude, a.latitude], [b.longitude, b.latitude]]],
+                "attribution": PUBLIC_ATTRIBUTION,
+                "license_url": "https://www.openstreetmap.org/copyright",
+            }
+        current += timedelta(days=31)
+        stale = client.get(BASE + "/street-layer", headers=headers["warehouse"]).json()
+        assert stale["segments"] == []
+    assert calls == 1

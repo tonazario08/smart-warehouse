@@ -26,6 +26,9 @@ WORKFLOW_COLUMNS = {
     "idempotency_key",
     "request_fingerprint",
     "note",
+    "delivery_address",
+    "delivery_latitude",
+    "delivery_longitude",
     "decision_kind",
     "decided_by_id",
     "decided_at",
@@ -38,6 +41,7 @@ WORKFLOW_COLUMNS = {
     "quantity_after",
 }
 CHECKS = {
+    "ck_pr_workflow_delivery_location",
     "ck_pr_workflow_fingerprint",
     "ck_pr_workflow_note",
     "ck_pr_workflow_decision",

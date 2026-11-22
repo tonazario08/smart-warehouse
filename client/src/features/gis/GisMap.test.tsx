@@ -52,3 +52,15 @@ it('uses the same heat bands in markers and legend and omits coordinates that ar
   expect(screen.getByText('1 đến 3 hộp')).toBeInTheDocument()
   expect(screen.getByText('7 đến 9 hộp')).toBeInTheDocument()
 })
+
+it('inverts a bounded map inside a letterboxed mobile viewport without accepting the margins', async () => {
+  const { boundedProjection, positionFromViewport } = await import('./GisMap')
+  const projection = boundedProjection([106.64, 10.72, 106.76, 10.82])
+  expect(projection).not.toBeNull()
+  if (!projection) return
+  expect(positionFromViewport(0, 64, 320, 320, projection)).toBeNull()
+  expect(positionFromViewport(160, 79, 320, 320, projection)).toBeNull()
+  expect(positionFromViewport(160, 160, 320, 320, projection)).toEqual([106.7, 10.77])
+  const screenPoint = projection.place([106.73, 10.74])
+  expect(positionFromViewport(screenPoint[0] / 2, 80 + screenPoint[1] / 2, 320, 320, projection)).toEqual([106.73, 10.74])
+})

@@ -10,6 +10,7 @@ interface PurchaseRequest {
   decision: null | { kind: string; actor_id: number; decided_at: string; rejection_reason: string | null };
   fulfillment: null | { outbound_id: number; transaction_id: number; actor_id: number; fulfilled_at: string; quantity_before: number; quantity_after: number };
 }
+const delivery = { address: '135 Nam Kỳ Khởi Nghĩa, TP. Hồ Chí Minh', latitude: 10.7770348, longitude: 106.695488 }
 type Fixture = Awaited<ReturnType<typeof createPurchaseRequestFixture>>
 interface Page<T> { items: T[]; total: number }
 
@@ -35,6 +36,10 @@ async function fillCreate(page: BrowserPage, fixture: Fixture, quantity: string)
   await page.getByRole('combobox', { name: 'Sản phẩm', exact: true }).selectOption(String(fixture.product.id))
   await page.getByRole('spinbutton', { name: 'Số lượng', exact: true }).fill(quantity)
   await page.getByRole('textbox', { name: 'Ghi chú', exact: true }).fill('  Yêu cầu kiểm thử M4  ')
+  await page.getByRole('textbox', { name: 'Địa chỉ giao hàng', exact: true }).fill(delivery.address)
+  await page.getByRole('textbox', { name: 'Vĩ độ điểm nhận', exact: true }).fill(String(delivery.latitude))
+  await page.getByRole('textbox', { name: 'Kinh độ điểm nhận', exact: true }).fill(String(delivery.longitude))
+  await page.getByRole('button', { name: 'Xác nhận điểm giao', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: /không giữ chỗ/i })).toBeVisible()
   await page.getByRole('button', { name: 'Xem lại yêu cầu', exact: true }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
@@ -69,6 +74,10 @@ test('client creates and tracks an owned request; staff approve and fulfill exac
   expect(created.row.status).toBe('pending')
   expect(created.row.requested_by_id).toBe(fixture.clients[0].id)
   expect(created.row.note).toBe('Yêu cầu kiểm thử M4')
+  expect(created.input).toMatchObject({ delivery_location: delivery })
+  expect(created.row).not.toHaveProperty('delivery_location')
+  await expect(page.getByText(delivery.address, { exact: true })).toBeVisible()
+  expect(await realApi(page, '/purchase-requests/' + created.row.id + '/delivery-location')).toEqual({ delivery_location: delivery })
   const clientToken = await storedToken(page)
   await page.reload()
   await expect(page.getByText('Chờ duyệt', { exact: true })).toBeVisible()
@@ -76,6 +85,7 @@ test('client creates and tracks an owned request; staff approve and fulfill exac
   await signOut(page); await signIn(page, fixture.clients[1])
   const tokenB = await storedToken(page)
   await apiAs(page, tokenB, '/purchase-requests/' + created.row.id, 'GET', undefined, 404)
+  await apiAs(page, tokenB, '/purchase-requests/' + created.row.id + '/delivery-location', 'GET', undefined, 404)
   await apiAs(page, tokenB, '/purchase-requests/by-key/' + created.key, 'GET', undefined, 404)
   const ownB = await realApi<Page<PurchaseRequest>>(page, '/purchase-requests?product_id=' + fixture.product.id)
   expect(ownB.total).toBe(0)
@@ -102,6 +112,21 @@ test('client creates and tracks an owned request; staff approve and fulfill exac
   expect(transactions.items.filter(item => item.transaction_type === 'outbound')).toMatchObject([{ id: row.fulfillment!.transaction_id, outbound_id: row.fulfillment!.outbound_id }])
   const purpose = await realApi<Page<{ transaction_id: number; purpose: string; transfer_id: null }>>(page, '/movement-provenance?transaction_id=' + row.fulfillment!.transaction_id)
   expect(purpose.items).toEqual([{ transaction_id: row.fulfillment!.transaction_id, purpose: 'purchase_request_fulfillment', transfer_id: null }])
+  await page.goto('/gis')
+  await page.getByRole('button', { name: 'Địa chỉ giao của đơn B2B', exact: true }).click()
+  await page.getByRole('spinbutton', { name: 'ID đơn B2B', exact: true }).fill(String(row.id))
+  const pendingRoute = apiResponse(page, '/gis/route', 'POST')
+  await page.getByRole('button', { name: 'Xem tuyến giao B2B', exact: true }).click()
+  const route = await pendingRoute
+  expect(route.status()).toBe(200)
+  expect(route.request().postDataJSON()).toEqual({ kind: 'purchase_request_delivery', request_id: row.id })
+  expect(await route.json()).toMatchObject({
+    origin: { warehouse: { warehouse_id: row.warehouse_id } },
+    destination: { kind: 'purchase_request_delivery', request_id: row.id,
+      coordinate: { latitude: delivery.latitude, longitude: delivery.longitude } },
+  })
+  await expect(page.getByText(/Tuyến nội bộ từ kho được gán trên đơn/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /Google Maps/ })).toHaveCount(0)
 })
 
 test('admin rejection preserves reason and stock; incompatible repeats and forbidden roles have no effects', async ({ page }) => {
@@ -217,4 +242,83 @@ test('legal long content fits mobile detail and keeps list values readable insid
   expect(mobileTable.scroll).toBeGreaterThan(mobileTable.client)
   expect(mobileTable.left).toBeGreaterThan(0)
   expect(mobileTable.documentWidth).toBeLessThanOrEqual(mobileTable.viewport + 1)
+})
+
+test('explicit device location previews mocked coordinates and uses private first-party lookup only after confirmation', async ({ page }) => {
+  const fixture = await prepare(page)
+  await signOut(page); await signIn(page, fixture.clients[0])
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.context().grantPermissions(['geolocation'])
+  await page.context().setGeolocation({ latitude: delivery.latitude, longitude: delivery.longitude, accuracy: 14 })
+  const outbound: string[] = []
+  const lookups: string[] = []
+  page.on('request', request => {
+    const url = new URL(request.url())
+    if (url.origin !== new URL(page.url()).origin) outbound.push(url.origin)
+    if (url.pathname.endsWith('/nearest-warehouses')) lookups.push(request.method())
+  })
+  await page.goto('/purchase-requests/new')
+  const address = page.getByRole('textbox', { name: 'Địa chỉ giao hàng', exact: true })
+  await address.fill('Địa chỉ giả lập, dùng vị trí thiết bị kiểm thử')
+  await page.getByRole('combobox', { name: 'Sản phẩm', exact: true }).selectOption(String(fixture.product.id))
+  await page.getByRole('spinbutton', { name: 'Số lượng', exact: true }).fill('3')
+  await page.getByRole('button', { name: 'Dùng vị trí hiện tại', exact: true }).click()
+  await expect(page.getByText(/Độ chính xác ước tính: ±14 m/)).toBeVisible()
+  await page.getByRole('button', { name: 'Tìm kho gần có đủ tồn', exact: true }).click()
+  expect(lookups).toEqual([])
+  await page.getByRole('button', { name: 'Xác nhận điểm giao', exact: true }).click()
+  const pending = apiResponse(page, '/purchase-requests/nearest-warehouses', 'POST')
+  await page.getByRole('button', { name: 'Tìm kho gần có đủ tồn', exact: true }).click()
+  const response = await pending
+  expect(response.status()).toBe(200)
+  expect(new URL(response.url()).search).toBe('')
+  expect(response.request().postDataJSON()).toEqual({
+    product_id: fixture.product.id, quantity: 3, latitude: delivery.latitude, longitude: delivery.longitude,
+  })
+  expect(outbound).toEqual([])
+})
+
+test('queries actual public bounded data and relocates the confirmed-preview pin without external traffic', async ({ page }) => {
+  const knownAddress = process.env.E2E_B2B_GEOCODE_PUBLIC_ADDRESS
+  test.skip(!knownAddress, 'Provide a verified public address from the installed approved OSM index.')
+  const fixture = await prepare(page)
+  await signOut(page); await signIn(page, fixture.clients[0])
+  await page.setViewportSize({ width: 390, height: 844 })
+  const outbound: string[] = []
+  const searches: string[] = []
+  page.on('request', request => {
+    const url = new URL(request.url())
+    if (url.origin !== new URL(page.url()).origin) outbound.push(url.origin)
+    if (url.pathname.endsWith('/geocode-delivery-address')) searches.push(request.method())
+  })
+  await page.goto('/purchase-requests/new')
+  const address = page.getByRole('textbox', { name: 'Địa chỉ giao hàng', exact: true })
+  await address.fill(knownAddress!)
+  expect(searches).toEqual([])
+  const pending = apiResponse(page, '/purchase-requests/geocode-delivery-address', 'POST')
+  await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click()
+  const result = await pending
+  expect(result.status()).toBe(200)
+  expect(new URL(result.url()).search).toBe('')
+  expect(result.request().postDataJSON()).toEqual({ address: knownAddress!.trim() })
+  const payload = await result.json() as { status: string; candidates: { label: string }[] }
+  expect(payload.status).toBe('matches')
+  expect(payload.candidates.length).toBeGreaterThan(0)
+  if (payload.candidates.length > 1) await page.getByRole('list', { name: 'Địa chỉ gợi ý', exact: true }).getByRole('button').first().click()
+  const pin = page.getByLabel('Ghim điểm giao đang chọn')
+  await expect(pin).toBeVisible()
+  await expect(page.getByText(/Đã xác nhận điểm giao:/)).toHaveCount(0)
+  const map = page.getByRole('application', { name: 'Bản đồ chọn ghim giao hàng', exact: true })
+  await expect(map.locator('.leaflet-overlay-pane canvas')).toBeAttached()
+  await expect(map.locator('.purchase-delivery-leaflet-label').first()).toBeAttached()
+  const startingPin = await pin.textContent()
+  await page.getByRole('button', { name: 'Về ghim', exact: true }).click()
+  await map.press('Shift+ArrowRight')
+  await expect(pin).toHaveText(startingPin!)
+  await map.press('ArrowUp')
+  await expect(pin).not.toHaveText(startingPin!)
+  await expect(address).toHaveValue(knownAddress!)
+  await page.getByRole('button', { name: 'Xác nhận điểm giao', exact: true }).click()
+  await expect(page.getByText(/Đã xác nhận điểm giao:/)).toBeVisible()
+  expect(outbound).toEqual([])
 })

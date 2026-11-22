@@ -13,13 +13,16 @@ import { Input } from '../../shared/ui/Input'
 import { PageHeader } from '../../shared/ui/PageHeader'
 import { Select } from '../../shared/ui/Select'
 import {
-  getGisChoices, getGisHeatmap, getGisPolicy, getGisRoute, getGisStatus,
+  getGisChoices, getGisHeatmap, getGisPolicy, getGisRoute, getGisStatus, getGisStreetLayer,
   getWarehouseOptions, gisError, gisReason,
 } from './api'
-import { HeatmapMap, RouteMap } from './GisMap'
+import { DestinationPicker, HeatmapMap, RouteMap, boundedProjection, matchedStreetLayer } from './GisMap'
+import { LandmarkPicker } from './LandmarkPicker'
+import { publicLandmarks } from './publicLandmarks'
+import type { PublicLandmark } from './publicLandmarks'
 import type {
   Coordinate, Destination, Exclusion, Heatmap, Place, RouteRead,
-  SnapshotMetadata, WarehouseOptions, WarehouseRead,
+  SnapshotMetadata, StreetLayer, WarehouseOptions, WarehouseRead,
 } from './types'
 import '../../shared/styles/management.css'
 import './gis.css'
@@ -126,8 +129,6 @@ function vietnamDate(offset: number) {
 function SnapshotInfo({ snapshot }: { snapshot: SnapshotMetadata }) {
   const [west, south, east, north] = snapshot.bounds
   return <dl className="gis-source__facts">
-    <div><dt>Nguồn đường</dt><dd>{snapshot.dataset_class === 'public_osm'
-      ? 'Đường công cộng OpenStreetMap' : 'Mạng đường kiểm thử'}</dd></div>
     <div><dt>Thời điểm bản chụp</dt><dd>{utcStamp(snapshot.snapshot_at)}</dd></div>
     <div><dt>Vùng phủ WGS84</dt><dd>{west}, {south} đến {east}, {north}</dd></div>
     <div><dt>Phiên bản bản chụp</dt><dd><code>{snapshot.snapshot_id}</code></dd></div>
@@ -137,29 +138,36 @@ function SnapshotInfo({ snapshot }: { snapshot: SnapshotMetadata }) {
   </dl>
 }
 
-function RouteEvidence({ route }: { route: RouteRead }) {
-  const origin = route.origin.coordinate
-  const destination = route.destination.coordinate
-  const mapsParams = origin && destination ? new URLSearchParams({
-    api: '1',
-    origin: `${origin.latitude},${origin.longitude}`,
-    destination: `${destination.latitude},${destination.longitude}`,
-    travelmode: 'driving',
-    dir_action: 'navigate',
-  }) : null
+function googleMapsHref(origin: { latitude: number | null; longitude: number | null } | null, destination: Coordinate | null) {
+  const valid = (point: typeof origin): point is Coordinate => !!point
+    && point.latitude !== null && Number.isFinite(point.latitude) && Math.abs(point.latitude) <= 90
+    && point.longitude !== null && Number.isFinite(point.longitude) && Math.abs(point.longitude) <= 180
+  if (!valid(origin) || !valid(destination)) return null
+  const params = new URLSearchParams({
+    api: '1', origin: `${origin.latitude},${origin.longitude}`, destination: `${destination.latitude},${destination.longitude}`,
+    travelmode: 'driving', dir_action: 'navigate',
+  })
+  return `https://www.google.com/maps/dir/?${params}`
+}
+
+function RouteEvidence({ route, streetLayer, privateDelivery }: { route: RouteRead; streetLayer: StreetLayer | null; privateDelivery: boolean }) {
+  const mapsHref = !privateDelivery && route.destination.kind !== 'purchase_request_delivery' && route.geometry && !route.reason ? googleMapsHref(route.origin.coordinate, route.destination.coordinate) : null
 
   return <>
     {route.transfer && <FeedbackMessage>
       Chuyển kho tức thời. Sơ đồ là tuyến tham khảo cho phiếu {route.transfer.transfer_id}.
     </FeedbackMessage>}
+    {privateDelivery && <FeedbackMessage>
+      Tuyến nội bộ từ kho được gán trên đơn tới ghim giao hàng đã xác nhận. Không chia sẻ điểm giao ra dịch vụ bản đồ ngoài.
+    </FeedbackMessage>}
     {route.reason && <FeedbackMessage variant="warning">{gisReason(route.reason)}</FeedbackMessage>}
     <figure className="gis-figure">
-      <RouteMap route={route} />
+      <RouteMap route={route} streetLayer={streetLayer} />
       <figcaption>
         {route.geometry && <span className="gis-route-key">
-          <strong>Tuyến ô tô tham khảo</strong>
+          <strong>Tuyến ô tô tham khảo</strong><span>A* tính trên mạng đường đã chọn.</span>
           {route.geometry.type === 'LineString' ? <span>Nét liền là đường đi</span> : <span>Hai điểm cùng nút đường</span>}
-          {(route.origin_snap?.connector || route.destination_snap?.connector) && <span>Nét đứt là đoạn nối đến đường</span>}
+          {(route.origin_snap?.connector || route.destination_snap?.connector) && <span>Nét đứt là đoạn nối đến đường (không tính vào chiều dài tuyến)</span>}
         </span>}
         {route.snapshot?.attribution && (route.snapshot.license_url
           ? <a href={route.snapshot.license_url} target="_blank" rel="noreferrer">{route.snapshot.attribution}</a>
@@ -175,11 +183,11 @@ function RouteEvidence({ route }: { route: RouteRead }) {
       {route.destination_snap && <div><dt>Đoạn nối tại điểm đến</dt><dd>{distance(route.destination_snap.distance_mm)}</dd></div>}
       {route.snapshot && <div><dt>Phiên bản tuyến</dt><dd><code>{route.snapshot.snapshot_id}</code></dd></div>}
     </dl>
-    {mapsParams && <p className="gis-muted">
-      <a href={`https://www.google.com/maps/dir/?${mapsParams}`} referrerPolicy="no-referrer">
+    {mapsHref && <p className="gis-muted">
+      <a href={mapsHref} referrerPolicy="no-referrer">
         Mở chỉ đường trong Google Maps
       </a>
-      {' · Google Maps tính đường từ hai tọa độ.'}
+      {' · Khi mở, Google Maps nhận hai tọa độ và tính tuyến riêng.'}
     </p>}
   </>
 }
@@ -192,9 +200,13 @@ function WarehouseResults({ result, selected, select }: {
     <p className="gis-muted">Tồn ghi nhận lúc {utcStamp(result.stock_as_of)}. Số liệu dùng để tham khảo khi chọn kho.</p>
     {result.ranking_state === 'budget_exceeded' && <FeedbackMessage variant="warning">{gisReason('budget_exceeded')}</FeedbackMessage>}
     {result.ranked.length > 0 ? <ol className="gis-warehouse-list" aria-label="Xếp hạng kho theo chiều dài đường">
-      {result.ranked.map(row => <li key={row.warehouse.warehouse_id}>
+      {result.ranked.map(row => {
+        const href = result.snapshot_state === 'available' && result.ranking_state === 'available' && Number.isFinite(row.distance_mm) && row.distance_mm >= 0
+          && result.snapshot?.snapshot_id === row.snapshot_id
+          ? googleMapsHref(row.warehouse, result.destination.coordinate) : null
+        return <li key={row.warehouse.warehouse_id}>
         <div>{warehouseName(row.warehouse)}
-          <span>Tồn {formatQuantity(row.available_quantity, unit)}</span>
+          <span>Đủ tồn · {formatQuantity(row.available_quantity, unit)}</span>
         </div>
         <div><strong>{distance(row.distance_mm)}</strong>
           <Button
@@ -203,19 +215,22 @@ function WarehouseResults({ result, selected, select }: {
             aria-pressed={selected === row.warehouse.warehouse_id}
             onClick={() => select(row.warehouse.warehouse_id)}
           >Xem tuyến</Button>
+          {href && <a className="gis-option-maps" href={href} referrerPolicy="no-referrer"
+            aria-label={`Google Maps từ ${row.warehouse.name}`}>Google Maps</a>}
         </div>
-      </li>)}
+      </li>})}
     </ol> : <EmptyState
       title="Chưa có kho đủ tồn với tuyến đường"
       description="Xem khoảng cách địa lý hoặc lý do loại ở bên dưới."
     />}
+    {result.ranked.length > 0 && <p className="gis-muted">Khi mở, Google Maps nhận hai tọa độ và tính tuyến riêng.</p>}
     {result.geographic_only.length > 0 && <section className="gis-results-group" aria-label="Khoảng cách địa lý">
       <h3>Khoảng cách địa lý</h3>
       <p className="gis-muted">Khoảng cách thẳng giữa hai tọa độ.</p>
       <ul className="gis-warehouse-list">
         {result.geographic_only.map(row => <li key={row.warehouse.warehouse_id}>
           <div>{warehouseName(row.warehouse)}<small>{gisReason(row.reason)}</small></div>
-          <div><strong>{distance(row.distance_mm)}</strong><span>Tồn {formatQuantity(row.available_quantity, unit)}</span></div>
+          <div><strong>{distance(row.distance_mm)}</strong><span>Đủ tồn · {formatQuantity(row.available_quantity, unit)}</span></div>
         </li>)}
       </ul>
     </section>}
@@ -269,6 +284,7 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
   const scope = useMemo(() => ({}), [token])
   const status = useGisAction(token, scope, getGisStatus)
   const choices = useGisAction(token, scope, getGisChoices)
+  const streets = useGisAction(token, scope, getGisStreetLayer)
   const options = useGisAction(token, scope, getWarehouseOptions)
   const route = useGisAction(token, scope, getGisRoute)
   const heatmap = useGisAction(token, scope, getGisHeatmap)
@@ -277,15 +293,35 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
   const loadChoices = choices.run
   useEffect(() => { loadStatus(undefined); loadChoices(undefined) }, [loadStatus, loadChoices])
 
-  const [mode, setMode] = useState<'stock' | 'transfer'>('stock')
+  const availableSnapshot = status.data?.state === 'available' ? status.data.snapshot : null
+  const publicSnapshotId = mayRoute && availableSnapshot?.dataset_class === 'public_osm' ? availableSnapshot.snapshot_id : null
+  const loadStreets = streets.run
+  const clearStreets = streets.clear
+  useEffect(() => {
+    if (publicSnapshotId) loadStreets(publicSnapshotId)
+    else clearStreets()
+  }, [publicSnapshotId, loadStreets, clearStreets])
+  const streetLayer = useMemo(() => streets.current?.input === publicSnapshotId
+    ? matchedStreetLayer(streets.data, availableSnapshot) : null, [streets.current?.input, streets.data, publicSnapshotId, availableSnapshot])
+
+  const [mode, setMode] = useState<'stock' | 'transfer' | 'delivery'>('stock')
   const [product, setProduct] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [destinationKind, setDestinationKind] = useState<Destination['kind']>('coordinate')
+  const candidates = useMemo(() => {
+    const coverage = streetLayer?.bounds && boundedProjection(streetLayer.bounds)
+    return coverage ? publicLandmarks.filter(point => coverage.contains([point.longitude, point.latitude])) : []
+  }, [streetLayer])
+  const [landmark, setLandmark] = useState<PublicLandmark | null>(null)
+  const [placeQuery, setPlaceQuery] = useState('')
+  const activeLandmark = landmark && candidates.some(point => point.id === landmark.id) ? landmark : null
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
   const [destinationWarehouse, setDestinationWarehouse] = useState('')
   const [purchaseId, setPurchaseId] = useState('')
   const [transferId, setTransferId] = useState('')
+  const [deliveryRequestId, setDeliveryRequestId] = useState('')
+  const [zoom, setZoom] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
   const [startDate, setStartDate] = useState(() => vietnamDate(-7))
   const [endDate, setEndDate] = useState(() => vietnamDate(0))
@@ -294,17 +330,51 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
   const [heatError, setHeatError] = useState('')
   const [policyError, setPolicyError] = useState('')
 
-  function clearRoute() {
+  const clearRouteResult = route.clear
+  const clearPolicyResult = policy.clear
+  const clearOptionsResult = options.clear
+  const clearRoute = useCallback(() => {
+    setZoom(false)
     setSelected(null)
     setPolicyError('')
-    route.clear()
-    policy.clear()
+    clearRouteResult()
+    clearPolicyResult()
+  }, [clearPolicyResult, clearRouteResult])
+
+  const clearOptions = useCallback(() => {
+    setFormError('')
+    clearOptionsResult()
+    clearRoute()
+  }, [clearOptionsResult, clearRoute])
+
+  const clearPoint = useCallback(() => {
+    setLandmark(null)
+    setPlaceQuery('')
+    setLatitude('')
+    setLongitude('')
+    clearOptions()
+  }, [clearOptions])
+
+  useEffect(() => {
+    if (landmark && !activeLandmark) clearPoint()
+  }, [activeLandmark, clearPoint, landmark])
+
+  function forgetName() {
+    setLandmark(null)
+    setPlaceQuery('')
   }
 
-  function clearOptions() {
-    setFormError('')
-    options.clear()
-    clearRoute()
+  function searchLandmarks(query: string) {
+    if (latitude || longitude || options.current) clearPoint()
+    setPlaceQuery(query)
+  }
+
+  function selectLandmark(point: PublicLandmark) {
+    setLandmark(point)
+    setPlaceQuery(point.name)
+    setLatitude(String(point.latitude))
+    setLongitude(String(point.longitude))
+    clearOptions()
   }
 
   function readDestination(): Destination | null {
@@ -316,7 +386,7 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
       const id = positiveInteger(purchaseId)
       return id === null ? null : { kind: 'purchase_request', request_id: id }
     }
-    if (!latitude.trim() || !longitude.trim()) return null
+    if ((landmark && !activeLandmark) || !latitude.trim() || !longitude.trim()) return null
     const lat = Number(latitude), lon = Number(longitude)
     return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
       ? { kind: 'coordinate', latitude: lat, longitude: lon } : null
@@ -338,6 +408,7 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
 
   function selectWarehouse(warehouse_id: number) {
     if (options.current?.phase !== 'success') return
+    setZoom(false)
     setSelected(warehouse_id)
     setPolicyError('')
     policy.clear()
@@ -353,6 +424,14 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
     }
     setFormError('')
     route.run({ kind: 'transfer', transfer_id: id })
+  }
+
+  function submitDelivery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const requestId = positiveInteger(deliveryRequestId)
+    if (!requestId) { setFormError('Nhập ID đơn B2B là số nguyên dương hợp lệ.'); return }
+    setFormError('')
+    route.run({ kind: 'purchase_request_delivery', request_id: requestId })
   }
 
   function submitHeatmap(event: FormEvent<HTMLFormElement>) {
@@ -379,10 +458,17 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
     policy.run({ product_id, warehouse_id: selected, run_id: id })
   }
 
+  const manualDestination = destinationKind === 'coordinate' ? readDestination() : null
+  const currentOptions = options.data
+  const mapTarget = currentOptions?.destination.coordinate ?? (manualDestination?.kind === 'coordinate' ? manualDestination : null)
+  const mismatchedDelivery = mode === 'delivery' && route.current?.phase === 'success'
+    && (route.current.input.kind !== 'purchase_request_delivery'
+      || route.current.data.destination.kind !== 'purchase_request_delivery'
+      || route.current.data.destination.request_id !== route.current.input.request_id)
   const stockLabel = status.data?.stock_fixture_label ?? options.data?.stock_fixture_label
     ?? route.data?.stock_fixture_label ?? heatmap.data?.stock_fixture_label
   const selectedProduct = choices.data?.products.find(item => String(item.id) === product)
-  return <section className="gis-page management-workspace">
+  return <section className={`gis-page management-workspace${mayRoute && mode === 'stock' ? ' gis-page--stock' : ''}`}>
     <PageHeader title="Bản đồ kho" description="Tìm kho đủ tồn, xem đường đi và đối chiếu lượng xuất theo vị trí kho." />
     <section className="gis-source" aria-label="Dữ liệu đường và tồn kho">
       {status.error ? <Problem message={status.error.message} label="Thử lại dữ liệu đường"
@@ -390,7 +476,9 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
         : !status.data ? <FeedbackMessage>Đang tải dữ liệu đường…</FeedbackMessage>
         : <>
           {status.data.state !== 'available' && <FeedbackMessage variant="warning">{gisReason(`snapshot_${status.data.state}`)}</FeedbackMessage>}
-          {status.data.snapshot && <SnapshotInfo snapshot={status.data.snapshot} />}
+          {status.data.snapshot && <p className="gis-source__summary">
+            {status.data.snapshot.dataset_class === 'public_osm' ? 'Đường công cộng OpenStreetMap' : 'Mạng đường mô phỏng'} · {status.data.snapshot.snapshot_at.slice(0, 10)} UTC
+          </p>}
         </>}
       {stockLabel && <span className="gis-fixture-label">{stockLabel}</span>}
     </section>
@@ -402,7 +490,9 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
           <Button size="small" variant={mode === 'stock' ? 'primary' : 'secondary'} aria-pressed={mode === 'stock'}
             onClick={() => { if (mode !== 'stock') { setMode('stock'); clearOptions() } }}>Tìm theo tồn kho</Button>
           <Button size="small" variant={mode === 'transfer' ? 'primary' : 'secondary'} aria-pressed={mode === 'transfer'}
-            onClick={() => { if (mode !== 'transfer') { setMode('transfer'); clearOptions() } }}>Tra phiếu chuyển kho</Button>
+            onClick={() => { if (mode !== 'transfer') { setMode('transfer'); clearPoint() } }}>Tra phiếu chuyển kho</Button>
+          <Button size="small" variant={mode === 'delivery' ? 'primary' : 'secondary'} aria-pressed={mode === 'delivery'}
+            onClick={() => { if (mode !== 'delivery') { setMode('delivery'); clearPoint() } }}>Địa chỉ giao của đơn B2B</Button>
         </div>}
       </div>
       {choices.error ? <Problem message={choices.error.message} label="Thử lại danh sách sản phẩm và kho"
@@ -418,20 +508,50 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
           <Input label="Số lượng cần" type="number" min="1" max={MAX_QUANTITY} step="1" value={quantity} required
             onChange={event => { setQuantity(event.target.value); clearOptions() }} />
           <Select label="Loại điểm đến" placeholder="Chọn loại điểm đến" value={destinationKind} options={destinationModes} required
-            onChange={event => { setDestinationKind(event.target.value as Destination['kind']); clearOptions() }} />
-          {destinationKind === 'coordinate' && <>
-            <Input label="Vĩ độ" type="number" step="any" min="-90" max="90" value={latitude} required
-              onChange={event => { setLatitude(event.target.value); clearOptions() }} />
-            <Input label="Kinh độ" type="number" step="any" min="-180" max="180" value={longitude} required
-              onChange={event => { setLongitude(event.target.value); clearOptions() }} />
-          </>}
+            onChange={event => { setDestinationKind(event.target.value as Destination['kind']); clearPoint() }} />
           {destinationKind === 'warehouse' && <Select label="Kho đích" value={destinationWarehouse} required
             options={choices.data?.warehouses.map(warehouse => ({ value: warehouse.id, label: warehouse.code + ' · ' + warehouse.name })) ?? []}
             onChange={event => { setDestinationWarehouse(event.target.value); clearOptions() }} />}
           {destinationKind === 'purchase_request' && <Input label="ID yêu cầu mua hàng" type="number" min="1" max={MAX_QUANTITY}
             step="1" value={purchaseId} required onChange={event => { setPurchaseId(event.target.value); clearOptions() }} />}
         </div>
+        {destinationKind === 'coordinate' && <>
+          <LandmarkPicker candidates={candidates} query={placeQuery} landmark={activeLandmark} onSearch={searchLandmarks} onSelect={selectLandmark} />
+          <details className="gis-manual-coordinates">
+            <summary>Nhập tọa độ thủ công</summary>
+            <div className="gis-fields">
+              <Input label="Vĩ độ" type="number" step="any" min="-90" max="90" value={latitude}
+                onChange={event => { forgetName(); setLatitude(event.target.value); clearOptions() }} />
+              <Input label="Kinh độ" type="number" step="any" min="-180" max="180" value={longitude}
+                onChange={event => { forgetName(); setLongitude(event.target.value); clearOptions() }} />
+            </div>
+          </details>
+        </>}
         <Button type="submit" disabled={options.loading || !choices.data?.products.length}>Tìm kho đủ tồn</Button>
+        {currentOptions && <p className="gis-muted gis-results-jump">
+          <span role="status">{currentOptions.ranked.length} kho đủ tồn có tuyến</span> · <a href="#gis-stock-results">Xem kết quả kho</a>
+        </p>}
+        {(destinationKind === 'coordinate' || currentOptions) && <DestinationPicker
+          snapshot={availableSnapshot} layer={streetLayer}
+          warehouses={choices.data?.warehouses.map(warehouse => ({
+            warehouse_id: warehouse.id, code: warehouse.code, name: warehouse.name,
+            latitude: warehouse.latitude, longitude: warehouse.longitude,
+          })) ?? []}
+          selected={mapTarget} targetLabel={activeLandmark?.name} options={currentOptions} route={route.data}
+          zoom={zoom} setZoom={setZoom}
+          hasDraft={Boolean(placeQuery || latitude || longitude || options.current)}
+          onPick={destinationKind === 'coordinate' ? point => {
+            forgetName()
+            setLatitude(String(point.latitude))
+            setLongitude(String(point.longitude))
+            clearOptions()
+          } : undefined}
+          onClear={destinationKind === 'coordinate' ? clearPoint : undefined}
+        />}
+      </form> : mode === 'delivery' ? <form className="gis-form" onSubmit={submitDelivery}>
+        <Input label="ID đơn B2B" type="number" min="1" max={MAX_QUANTITY} step="1" value={deliveryRequestId} required
+          onChange={event => { setDeliveryRequestId(event.target.value); setFormError(''); clearRoute() }} />
+        <Button type="submit" disabled={route.loading}>Xem tuyến giao B2B</Button>
       </form> : <form className="gis-form" onSubmit={submitTransfer}>
         <Input label="ID phiếu chuyển kho" type="number" min="1" max={MAX_QUANTITY} step="1" value={transferId} required
           onChange={event => { setTransferId(event.target.value); setFormError(''); clearRoute() }} />
@@ -441,9 +561,10 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
     </section>
 
     {mayRoute && <div className="gis-route-layout">
-      <section className="management-panel gis-panel" aria-label="Kết quả kho">
+      <section className="management-panel gis-panel" aria-label="Kết quả kho" id="gis-stock-results">
         <h2>Kết quả kho</h2>
-        {mode === 'transfer' ? <EmptyState title="Đang tra theo phiếu chuyển kho" description="Thông tin tuyến nằm ở khung bên cạnh." />
+        {mode === 'delivery' ? <EmptyState title="Đang tra điểm giao theo đơn B2B" description="Không xếp hạng lại kho. Tuyến đi từ kho đã được gán trên đơn." />
+          : mode === 'transfer' ? <EmptyState title="Đang tra theo phiếu chuyển kho" description="Thông tin tuyến nằm ở khung bên cạnh." />
           : options.loading ? <FeedbackMessage>Đang tìm kho đủ tồn…</FeedbackMessage>
           : options.error ? <Problem message={options.error.message} label="Thử lại tìm kho"
             retry={options.error.retryable ? () => options.run(options.error!.input) : undefined} />
@@ -453,12 +574,13 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
 
       <section className="management-panel gis-panel gis-route-viewport" aria-label="Tuyến đường">
         <h2>Tuyến đường</h2>
-        <p className="visually-hidden" role="status">{route.data?.geometry ? 'Đã hiển thị tuyến đường.' : ''}</p>
+        <p className="visually-hidden" role="status">{route.data?.geometry && !mismatchedDelivery ? 'Đã hiển thị tuyến đường.' : ''}</p>
         {route.loading ? <FeedbackMessage>Đang tính tuyến đường…</FeedbackMessage>
           : route.error ? <Problem message={route.error.message} label="Thử lại tính tuyến"
             retry={route.error.retryable ? () => route.run(route.error!.input) : undefined} />
-          : route.data ? <RouteEvidence route={route.data} />
-          : <EmptyState title="Chưa chọn tuyến" description="Chọn một kho có tuyến hoặc tra ID phiếu chuyển kho." />}
+          : mismatchedDelivery ? <FeedbackMessage variant="warning">Không xác minh được tuyến cho điểm giao của đơn B2B này.</FeedbackMessage>
+          : route.data ? <RouteEvidence route={route.data} streetLayer={streetLayer} privateDelivery={mode === 'delivery'} />
+          : <EmptyState title="Chưa chọn tuyến" description="Chọn kho, nhập ID đơn B2B hoặc tra ID phiếu chuyển kho." />}
         {selected !== null && <details className="gis-policy">
           <summary>Tham khảo bổ sung hàng</summary>
           <form className="gis-form" onSubmit={submitPolicy}>
@@ -479,6 +601,11 @@ function GISWorkspace({ token, mayRoute }: { token: string; mayRoute: boolean })
         </details>}
       </section>
     </div>}
+
+    {status.data?.snapshot && <details className="gis-source-details">
+      <summary>Chi tiết bản chụp đường</summary>
+      <SnapshotInfo snapshot={status.data.snapshot} />
+    </details>}
 
     <section className="management-panel gis-panel" aria-labelledby="gis-heat-title">
       <div className="gis-section-heading">

@@ -10,6 +10,7 @@ export type OptionsInput = { product_id: number; quantity: number; destination: 
 export type RouteInput =
   | { kind: 'warehouse_to_target'; warehouse_id: number; destination: Destination }
   | { kind: 'transfer'; transfer_id: number }
+  | { kind: 'purchase_request_delivery'; request_id: number }
 export type HeatmapInput = { product_id: number; start_date: string; end_date: string }
 export type PolicyInput = { run_id: string; product_id: number; warehouse_id: number }
 
@@ -31,6 +32,14 @@ export type SnapshotMetadata = {
   attribution: string
   license_url: string | null
 }
+export type StreetLayer = {
+  state: 'available' | 'unavailable'
+  snapshot_id: string | null
+  bounds: SnapshotMetadata['bounds'] | null
+  segments: [Position, Position][]
+  attribution: string | null
+  license_url: string | null
+}
 export type GisStatus = StockData & { state: SnapshotState; snapshot: SnapshotMetadata | null }
 export type ProductRead = { product_id: number; sku: string; name: string; unit: string }
 export type WarehouseRead = {
@@ -41,7 +50,7 @@ export type WarehouseRead = {
   longitude: number | null
 }
 export type Place = {
-  kind: Destination['kind']
+  kind: Destination['kind'] | 'purchase_request_delivery'
   coordinate: Coordinate | null
   warehouse: WarehouseRead | null
   request_id: number | null

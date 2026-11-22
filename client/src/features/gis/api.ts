@@ -1,11 +1,15 @@
 import { ApiError, api, request } from '../../api'
 import type {
   GisChoices, GisStatus, Heatmap, HeatmapInput, OptionsInput, PolicyContext, PolicyInput,
-  RouteInput, RouteRead, WarehouseOptions,
+  RouteInput, RouteRead, StreetLayer, WarehouseOptions,
 } from './types'
 
 export function getGisStatus(token: string, _input: undefined, signal: AbortSignal) {
   return request<GisStatus>('/gis/status', { signal }, token)
+}
+
+export function getGisStreetLayer(token: string, _snapshotId: string, signal: AbortSignal) {
+  return request<StreetLayer>('/gis/street-layer', { signal }, token)
 }
 
 export async function getGisChoices(token: string, _input: undefined, _signal: AbortSignal): Promise<GisChoices> {
@@ -20,7 +24,9 @@ export function getWarehouseOptions(token: string, input: OptionsInput, signal: 
 }
 
 export function getGisRoute(token: string, input: RouteInput, signal: AbortSignal) {
-  return request<RouteRead>('/gis/route', { method: 'POST', body: JSON.stringify(input), signal }, token)
+  return request<RouteRead>('/gis/route', { method: 'POST', body: JSON.stringify(input), signal,
+    ...(input.kind === 'purchase_request_delivery' ? { cache: 'no-store' } : {}),
+  }, token)
 }
 
 export function getGisHeatmap(token: string, input: HeatmapInput, signal: AbortSignal) {
@@ -38,6 +44,7 @@ export function getGisPolicy(token: string, input: PolicyInput, signal: AbortSig
 }
 
 const errorMessages: Record<string, string> = {
+  GIS_DELIVERY_LOCATION_NOT_FOUND: 'Đơn chưa có địa chỉ và ghim giao hàng được xác nhận hoặc bạn không thể xem đơn này.',
   GIS_PRODUCT_NOT_FOUND: 'Không tìm thấy sản phẩm đang hoạt động.',
   GIS_WAREHOUSE_NOT_FOUND: 'Không tìm thấy kho hàng.',
   GIS_WAREHOUSE_LIMIT: 'Có quá 100 kho để xếp hạng trong một lần tra cứu.',

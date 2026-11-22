@@ -87,3 +87,99 @@ def test_production_baseline_rejects_normalization_collisions_before_mutation(
         assert emails == ["Client@Example.com", " client@example.com "]
     finally:
         engine.dispose()
+
+
+def test_sqlite_delivery_migration_preserves_workflow_and_refuses_loss(tmp_path: Path) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    url = f"sqlite:///{(tmp_path / 'delivery.db').as_posix()}"
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "20261122_0011")
+    engine = create_engine(url)
+    def column_definitions():
+        return [
+            (column["name"], str(column["type"]), column["nullable"], column["default"])
+            for column in inspect(engine).get_columns("purchase_request_workflows")
+        ]
+
+    old_columns = column_definitions()
+    old_checks = {check["name"] for check in inspect(engine).get_check_constraints(
+        "purchase_request_workflows"
+    )}
+    identity = ("000000000000000000000000000000a1", "a" * 64, "pre-0012 note")
+    select_identity = text(
+        "SELECT idempotency_key, request_fingerprint, note FROM purchase_request_workflows"
+    )
+    try:
+        with engine.begin() as connection:
+            for statement in (
+                "INSERT INTO users (email, password_hash, role) "
+                "VALUES ('sqlite-workflow@example.test', 'fixture', 'client')",
+                "INSERT INTO categories (name) VALUES ('Fasteners')",
+                "INSERT INTO products (sku, name, category_id, unit) "
+                "VALUES ('BOLT-001', 'Bolt', 1, 'piece')",
+                "INSERT INTO warehouses (code, name, address) "
+                "VALUES ('HCM-01', 'Fixture', 'Synthetic test address')",
+                "INSERT INTO purchase_requests "
+                "(request_number, warehouse_id, product_id, quantity, status, requested_by_id) "
+                "VALUES ('PR-FIXTURE', 1, 1, 1, 'pending', 1)",
+            ):
+                connection.execute(text(statement))
+            connection.execute(
+                text(
+                    "INSERT INTO purchase_request_workflows (purchase_request_id, created_by_id, "
+                    "idempotency_key, request_fingerprint, note) "
+                    "VALUES (1, 1, :key, :fingerprint, :note)"
+                ),
+                dict(zip(("key", "fingerprint", "note"), identity, strict=True)),
+            )
+        command.upgrade(cfg, "head")
+        with engine.connect() as connection:
+            assert connection.execute(select_identity).one() == identity
+            assert connection.execute(text(
+                "SELECT delivery_address, delivery_latitude, delivery_longitude "
+                "FROM purchase_request_workflows"
+            )).one() == (None, None, None)
+        with pytest.raises(IntegrityError, match="ck_pr_workflow_delivery_location"):
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "UPDATE purchase_request_workflows SET delivery_address = 'Partial'"
+                ))
+        with engine.begin() as connection:
+            connection.execute(text(
+                "UPDATE purchase_request_workflows SET delivery_address = 'Synthetic point', "
+                "delivery_latitude = 10.77, delivery_longitude = 106.70"
+            ))
+        with pytest.raises(RuntimeError, match="Cannot downgrade with persisted"):
+            command.downgrade(cfg, "20261122_0011")
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "20261122_0012"
+            )
+            assert connection.execute(select_identity).one() == identity
+            assert connection.execute(text(
+                "SELECT delivery_address, delivery_latitude, delivery_longitude "
+                "FROM purchase_request_workflows"
+            )).one() == ("Synthetic point", 10.77, 106.70)
+
+        # Only this disposable test clears the snapshot to exercise the allowed branch.
+        with engine.begin() as connection:
+            connection.execute(text(
+                "UPDATE purchase_request_workflows SET delivery_address = NULL, "
+                "delivery_latitude = NULL, delivery_longitude = NULL"
+            ))
+        command.downgrade(cfg, "20261122_0011")
+        assert column_definitions() == old_columns
+        assert {
+            check["name"] for check in inspect(engine).get_check_constraints(
+                "purchase_request_workflows"
+            )
+        } == old_checks
+        with engine.connect() as connection:
+            assert connection.execute(select_identity).one() == identity
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "20261122_0011"
+            )
+    finally:
+        engine.dispose()

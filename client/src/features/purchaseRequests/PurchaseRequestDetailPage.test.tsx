@@ -192,3 +192,36 @@ it('constrains the detail grid and wraps a legal unbroken request number using t
     expect(getComputedStyle(heading).minWidth).toBe('0px')
   } finally { style.remove() }
 })
+
+it('loads the confirmed delivery separately without URL coordinates or browser caching', async () => {
+  const location = { address: 'Vị trí giao mô phỏng', latitude: 10.77, longitude: 106.7 }
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/8', 'client', url =>
+    url.endsWith('/8/delivery-location') ? jsonResponse({ delivery_location: location }) : purchaseHandler(url))
+  expect(await screen.findByText(location.address)).toBeInTheDocument()
+  expect(screen.getByText('10.77, 106.7')).toBeInTheDocument()
+  const delivery = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/8/delivery-location'))
+  expect(delivery?.[1]?.cache).toBe('no-store')
+  expect(screen.queryByRole('link', { name: /Google Maps/ })).not.toBeInTheDocument()
+})
+
+it('does not send a delivery lookup when the purchase request itself is denied', async () => {
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/8', 'client', url =>
+    url.endsWith('/purchase-requests/8') ? jsonResponse({ detail: { code: 'PURCHASE_REQUEST_NOT_FOUND' } }, 404) : purchaseHandler(url))
+  expect(await screen.findByText('Không tìm thấy yêu cầu mua hàng.')).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/delivery-location'))).toBe(false)
+})
+
+it('discards an old private delivery response after switching sessions', async () => {
+  const late = deferredResponse()
+  const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests/8', 'client', (url, init) => {
+    const replacement = new Headers(init?.headers).get('Authorization') === 'Bearer replacement-purchase-token'
+    if (url.endsWith('/purchase-requests/8/delivery-location')) return replacement ? jsonResponse({}, 404) : late.promise
+    if (url.endsWith('/purchase-requests/8') && replacement) return jsonResponse({ detail: { code: 'PURCHASE_REQUEST_NOT_FOUND' } }, 404)
+    return purchaseHandler(url)
+  })
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/8/delivery-location'))).toBe(true))
+  await userEvent.click(screen.getByRole('button', { name: 'Đổi phiên kiểm thử' }))
+  expect(await screen.findByText('Không tìm thấy yêu cầu mua hàng.')).toBeInTheDocument()
+  await act(async () => late.resolve(jsonResponse({ delivery_location: { address: 'Không được hiện lại', latitude: 10.77, longitude: 106.7 } })))
+  expect(screen.queryByText('Không được hiện lại')).not.toBeInTheDocument()
+})

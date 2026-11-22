@@ -1,6 +1,9 @@
 export type PurchaseRequestStatus = 'pending' | 'approved' | 'rejected' | 'fulfilled'
 export const statusLabels: Record<PurchaseRequestStatus, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối', fulfilled: 'Đã xuất hàng' }
-export interface PurchaseRequestInput { warehouse_id: number; product_id: number; quantity: number; note: string | null }
+export type DeliveryGeocodeCandidate = { label: string; latitude: number; longitude: number; precision: 'house_number' | 'approximate' }
+export type DeliveryGeocodeResult = { status: 'matches' | 'no_match' | 'unavailable'; candidates: DeliveryGeocodeCandidate[] }
+export interface DeliveryLocation { address: string; latitude: number; longitude: number }
+export interface PurchaseRequestInput { warehouse_id: number; product_id: number; quantity: number; note: string | null; delivery_location?: DeliveryLocation }
 export interface PurchaseRequestDraft { warehouse: string; product: string; quantity: string; note: string }
 export interface NearestWarehouseInput { product_id: number; quantity: number; latitude: number; longitude: number }
 export interface NearestWarehouse { warehouse_id: number; code: string; name: string; available_quantity: number; distance_km: number }

@@ -11,12 +11,13 @@ import { Input } from '../../shared/ui/Input'
 import { PageHeader } from '../../shared/ui/PageHeader'
 import { Select } from '../../shared/ui/Select'
 import { createPurchaseRequest, getNearestWarehouses, getPurchaseRequestByKey, purchaseRequestError } from './api'
+import { DeliveryLocationPicker, blankDeliveryDraft, readDeliveryPoint } from './DeliveryLocationPicker'
+import type { DeliveryLocationDraft } from './DeliveryLocationPicker'
 import { isPositivePurchaseInteger, validatePurchaseRequest } from './schemas'
-import type { NearestWarehouseResult, PurchaseRequestDraft, PurchaseRequestInput } from './types'
+import type { DeliveryLocation, NearestWarehouseResult, PurchaseRequestDraft, PurchaseRequestInput } from './types'
 import './purchase-requests.css'
 
 const blank: PurchaseRequestDraft = { warehouse: '', product: '', quantity: '', note: '' }
-const blankPoint = { latitude: '', longitude: '' }
 const distance = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: value < 1 ? 3 : 2 }).format(value) + ' km'
 type Attempt = { key: string; input: PurchaseRequestInput; scope: string; token: string }
 export function PurchaseRequestFormPage() {
@@ -29,7 +30,8 @@ export function PurchaseRequestFormPage() {
   const [attempt, setAttempt] = useState<Attempt | null>(null), attemptRef = useRef<Attempt | null>(null)
   const [pending, setPending] = useState(false), lock = useRef(false)
   const [uncertain, setUncertain] = useState(false), [recoveryMessage, setRecoveryMessage] = useState('')
-  const [point, setPoint] = useState(blankPoint)
+  const [deliveryDraft, setDeliveryDraft] = useState(blankDeliveryDraft)
+  const [delivery, setDelivery] = useState<DeliveryLocation | null>(null)
   const [near, setNear] = useState<{ key: string; data: NearestWarehouseResult } | null>(null)
   const [nearError, setNearError] = useState(''), [nearLoading, setNearLoading] = useState(false), [autoWarehouse, setAutoWarehouse] = useState<string | null>(null)
   const nearSequence = useRef(0)
@@ -38,7 +40,7 @@ export function PurchaseRequestFormPage() {
   useEffect(() => {
     setDraft(blank); setReview(null); setAttempt(null); attemptRef.current = null; setPending(false); lock.current = false
     setUncertain(false); setError(''); setRecoveryMessage('')
-    setPoint(blankPoint); setNear(null); setNearError(''); setNearLoading(false); setAutoWarehouse(null)
+    setDeliveryDraft(blankDeliveryDraft); setDelivery(null); setNear(null); setNearError(''); setNearLoading(false); setAutoWarehouse(null)
     nearSequence.current += 1
   }, [scope])
   useEffect(() => {
@@ -59,7 +61,8 @@ export function PurchaseRequestFormPage() {
     const validation = validatePurchaseRequest(draft)
     if (!validation.input) { setError(validation.error ?? 'Dữ liệu chưa hợp lệ.'); return }
     if (!products.some(row => row.id === validation.input!.product_id) || !warehouses.some(row => row.id === validation.input!.warehouse_id)) { setError('Chọn kho và sản phẩm đang hoạt động trong danh sách.'); return }
-    setError(''); setReview(validation.input)
+    if (!delivery) { setError('Xác nhận địa chỉ và điểm giao trước khi xem lại yêu cầu.'); return }
+    setError(''); setReview({ ...validation.input, delivery_location: { ...delivery } })
   }
   async function send(value: Attempt) {
     if (!stillCurrent(value) || lock.current) return
@@ -100,9 +103,11 @@ export function PurchaseRequestFormPage() {
     nearSequence.current += 1
     setNear(null); setNearError(''); setNearLoading(false)
   }
-  function changePoint(field: 'latitude' | 'longitude', value: string) {
+  function changeDelivery(value: DeliveryLocationDraft) {
     if (busy || review) return
-    setPoint(current => ({ ...current, [field]: value }))
+    setDeliveryDraft(value)
+    setDelivery(null)
+    setError('')
     clearNear()
     setDraft(current => ({ ...current, ...(autoWarehouse !== null && current.warehouse === autoWarehouse ? { warehouse: '' } : {}) }))
     setAutoWarehouse(null)
@@ -112,11 +117,11 @@ export function PurchaseRequestFormPage() {
     const productId = Number(draft.product), quantity = Number(draft.quantity)
     if (!products.some(row => row.id === productId)) { setNear(null); setNearError('Chọn sản phẩm đang hoạt động trước khi tìm kho gần.'); return }
     if (!isPositivePurchaseInteger(draft.quantity)) { setNear(null); setNearError('Nhập số lượng hợp lệ trước khi tìm kho gần.'); return }
-    const latitude = Number(point.latitude), longitude = Number(point.longitude)
-    if (!point.latitude.trim() || !point.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude)
-      || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    if (!readDeliveryPoint(deliveryDraft)) {
       setNear(null); setNearError('Nhập vĩ độ (-90 đến 90) và kinh độ (-180 đến 180) hợp lệ.'); return
     }
+    if (!delivery) { setNear(null); setNearError('Xác nhận điểm giao trước khi tìm kho gần.'); return }
+    const { latitude, longitude } = delivery
     const sequence = ++nearSequence.current
     setNearLoading(true); setNear(null); setNearError('')
     try {
@@ -166,10 +171,8 @@ export function PurchaseRequestFormPage() {
         <div className="purchase-nearest">
           <h3>Kho gần điểm nhận</h3>
           <p className="purchase-nearest-method">Xếp theo khoảng cách đường chim bay (công thức haversine, bán kính Trái Đất 6 371 km), gần nhất trước. Chỉ gồm kho có đủ tồn cho số lượng đã chọn.</p>
-          <div className="ui-form-grid">
-            <Input label="Vĩ độ điểm nhận" inputMode="decimal" value={point.latitude} onChange={event => changePoint('latitude', event.target.value)} />
-            <Input label="Kinh độ điểm nhận" inputMode="decimal" value={point.longitude} onChange={event => changePoint('longitude', event.target.value)} />
-          </div>
+          <DeliveryLocationPicker key={scope} token={token} draft={deliveryDraft} confirmed={delivery} disabled={busy || review !== null}
+            onEdit={changeDelivery} onConfirm={value => { setDelivery(value); setNearError(''); setError('') }} />
           <Button type="button" variant="secondary" disabled={busy || review !== null || nearLoading || !draft.product || !draft.quantity} onClick={() => void findNearest()}>Tìm kho gần có đủ tồn</Button>
           <div className="purchase-nearest-results" aria-live="polite">
             {nearLoading && <FeedbackMessage>Đang tìm kho gần có đủ tồn...</FeedbackMessage>}
@@ -189,7 +192,9 @@ export function PurchaseRequestFormPage() {
     </form>}
     {uncertain && <section className="purchase-panel purchase-recovery" aria-live="polite"><h2>Chưa xác định kết quả</h2><p>Yêu cầu có thể đã được ghi nhận. Tra cứu hoặc gửi lại đúng yêu cầu, không tạo yêu cầu mới. Khóa và nội dung chỉ được giữ khi biểu mẫu còn mở; tải lại hoặc rời trang sẽ mất dữ liệu khôi phục này.</p>{recoveryMessage && <p>{recoveryMessage}</p>}<div className="purchase-actions"><Button variant="secondary" disabled={pending} onClick={() => void lookup()}>Tra cứu kết quả</Button><Button disabled={pending} onClick={() => { if (attemptRef.current) void send(attemptRef.current) }}>Thử lại cùng yêu cầu</Button></div>{pending && <p>Đang xử lý cùng yêu cầu...</p>}</section>}
     <ConfirmDialog open={review !== null} busy={pending} title="Xác nhận yêu cầu mua hàng" confirmLabel="Gửi yêu cầu mua hàng" description="Gửi để xem xét, không giữ chỗ hoặc trừ tồn kho." onCancel={() => { if (!lock.current) setReview(null) }} onConfirm={confirm}>
-      {review && <div className="purchase-confirmation-copy"><p>{warehouses.find(row => row.id === review.warehouse_id)?.name ?? 'Kho #' + review.warehouse_id}</p><p>{product?.sku} · {product?.name}</p><p>Số lượng: {formatQuantity(review.quantity, product?.unit)}</p><p>{review.note ?? 'Không có ghi chú'}</p></div>}
+      {review && <div className="purchase-confirmation-copy"><p>{warehouses.find(row => row.id === review.warehouse_id)?.name ?? 'Kho #' + review.warehouse_id}</p><p>{product?.sku} · {product?.name}</p><p>Số lượng: {formatQuantity(review.quantity, product?.unit)}</p><p>{review.note ?? 'Không có ghi chú'}</p>
+        {review.delivery_location && <p><strong>Địa chỉ giao hàng: </strong>{review.delivery_location.address}
+          <br />Ghim: {review.delivery_location.latitude}, {review.delivery_location.longitude}</p>}</div>}
     </ConfirmDialog>
   </section>
 }

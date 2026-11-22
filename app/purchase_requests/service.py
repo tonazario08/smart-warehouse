@@ -29,6 +29,9 @@ from app.models import (
 from app.models.domain import utc_now
 from app.purchase_requests.repository import PurchaseRequestRecord, PurchaseRequestRepository
 from app.purchase_requests.schemas import (
+    DeliveryLocation,
+    DeliveryLocationRead,
+    NearestWarehouseBody,
     NearestWarehouseQuery,
     NearestWarehouseRead,
     NearestWarehouseResponse,
@@ -40,11 +43,28 @@ from app.purchase_requests.schemas import (
 
 
 def fingerprint(body: PurchaseRequestCreate) -> str:
+    # Preserve exact legacy fingerprint input, including the existing null note.
+    values = body.model_dump()
+    if body.delivery_location is None:
+        values.pop("delivery_location")
     return sha256(
-        json.dumps(
-            body.model_dump(), sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode()
+        json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
+
+
+def stored_delivery(workflow: PurchaseRequestWorkflow | None) -> DeliveryLocation | None:
+    if workflow is None:
+        return None
+    values = (workflow.delivery_address, workflow.delivery_latitude, workflow.delivery_longitude)
+    if all(value is None for value in values):
+        return None
+    try:
+        snapshot = DeliveryLocation(address=values[0], latitude=values[1], longitude=values[2])
+    except ValidationError:
+        conflict()
+    if (snapshot.address, snapshot.latitude, snapshot.longitude) != values:
+        conflict()
+    return snapshot
 
 
 def conflict() -> NoReturn:
@@ -100,6 +120,7 @@ class PurchaseRequestService:
                     product_id=row.product_id,
                     quantity=row.quantity,
                     note=workflow.note,
+                    delivery_location=stored_delivery(workflow),
                 )
             except ValidationError:
                 conflict()
@@ -195,6 +216,12 @@ class PurchaseRequestService:
         self._authorize(actor, Permission.PURCHASE_REQUEST_READ)
         return self._project(self.repository.get_owned(request_id, owner_id=self._owner(actor)))
 
+    def delivery_detail(self, actor: User, request_id: int):
+        self._authorize(actor, Permission.PURCHASE_REQUEST_READ)
+        record = self.repository.get_owned(request_id, owner_id=self._owner(actor))
+        order = self._project(record)
+        return order, DeliveryLocationRead(delivery_location=stored_delivery(record[1]))
+
     def get_by_key(self, actor: User, key: UUID) -> PurchaseRequestResponse:
         self._authorize(actor, Permission.PURCHASE_REQUEST_READ)
         return self._project(self.repository.find_by_key(actor.id, key))
@@ -211,7 +238,7 @@ class PurchaseRequestService:
         return [self._project(row) for row in rows], total
 
     def nearest_warehouses(
-        self, actor: User, query: NearestWarehouseQuery
+        self, actor: User, query: NearestWarehouseQuery | NearestWarehouseBody
     ) -> NearestWarehouseResponse:
         """Rank active stock-bearing warehouses by great-circle distance for the B2B flow."""
         self._authorize(actor, Permission.PURCHASE_REQUEST_CREATE)
@@ -333,18 +360,22 @@ class PurchaseRequestService:
                 return result, True
             self._admit(body)
             row = PurchaseRequest(
-                **body.model_dump(exclude={"note"}),
+                **body.model_dump(exclude={"note", "delivery_location"}),
                 request_number="PR-" + uuid4().hex,
                 requested_by_id=actor_id,
             )
             self.repository.session.add(row)
             self.repository.flush()
+            delivery = body.delivery_location
             workflow = PurchaseRequestWorkflow(
                 purchase_request_id=row.id,
                 created_by_id=actor_id,
                 idempotency_key=key,
                 request_fingerprint=digest,
                 note=body.note,
+                delivery_address=delivery.address if delivery else None,
+                delivery_latitude=delivery.latitude if delivery else None,
+                delivery_longitude=delivery.longitude if delivery else None,
             )
             self.repository.session.add(workflow)
             self.repository.flush()

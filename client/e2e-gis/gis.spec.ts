@@ -6,7 +6,7 @@ import {
   apiResponse, e2eCredentials, signIn, signOut, storedToken, tokenKey,
   type Credentials,
 } from '../e2e/helpers'
-import type { GisStatus, Heatmap, RouteRead, WarehouseOptions } from '../src/features/gis/types'
+import type { GisStatus, Heatmap, RouteRead, StreetLayer, WarehouseOptions } from '../src/features/gis/types'
 
 const scenario = process.env.E2E_GIS_SCENARIO
 const expectedSnapshot = process.env.E2E_GIS_SNAPSHOT_ID
@@ -71,7 +71,11 @@ async function openGIS(page: Page, credentials: Credentials) {
   expect(body.snapshot?.weight_unit).toBe('mm')
   expect(body.stock_data_class).toBe('synthetic_fixture')
   await expect(page.getByText(stockLabel, { exact: true })).toBeVisible()
-  await expect(page.getByText('Vùng phủ WGS84', { exact: true })).toBeVisible()
+  const facts = page.locator('.gis-source-details')
+  await expect(facts).not.toHaveAttribute('open', '')
+  await facts.locator('summary').click()
+  await expect(facts.getByText('Vùng phủ WGS84', { exact: true })).toBeVisible()
+  await facts.locator('summary').click()
   return body
 }
 
@@ -85,6 +89,8 @@ async function pickSKU(page: Page) {
 }
 
 async function fillCoordinate(page: Page) {
+  const manual = page.locator('.gis-manual-coordinates')
+  if ((await manual.getAttribute('open')) === null) await manual.locator('summary').click()
   await page.getByLabel('Vĩ độ', { exact: true }).fill(String(target.latitude))
   await page.getByLabel('Kinh độ', { exact: true }).fill(String(target.longitude))
 }
@@ -167,6 +173,8 @@ test('real roles, protected reload and server denial for unauthorized requests',
   await readAPI(page, '/gis/status', { auth: 'missing', expected: 401 })
   await readAPI(page, '/gis/status', { auth: 'invalid', expected: 401 })
   await readAPI(page, '/gis/status', { expected: 403 })
+  await readAPI(page, '/gis/street-layer', { auth: 'missing', expected: 401 })
+  await readAPI(page, '/gis/street-layer', { expected: 403 })
   await readAPI(page, '/gis/route', {
     expected: 403, body: { kind: 'transfer', transfer_id: 2147483647 },
   })
@@ -177,6 +185,29 @@ test('real roles, protected reload and server denial for unauthorized requests',
 test('stock-feasible route, keyboard, period totals and two responsive views', async ({ page }, info) => {
   const status = await openGIS(page, e2eCredentials.admin)
   const productId = await pickSKU(page)
+  const layer = await readAPI<StreetLayer>(page, '/gis/street-layer')
+  const hasStreets = scenario === 'public'
+  expect(layer.state).toBe(hasStreets ? 'available' : 'unavailable')
+  if (hasStreets) {
+    expect(layer.snapshot_id).toBe(expectedSnapshot)
+    expect(layer.segments.length).toBeGreaterThan(0)
+    expect(layer.segments.length).toBeLessThanOrEqual(2400)
+  } else {
+    expect(layer.segments).toHaveLength(0)
+  }
+  const picker = page.getByRole('img', { name: hasStreets
+    ? 'Chọn điểm đến trên nền đường OpenStreetMap' : 'Chọn điểm đến trên sơ đồ tọa độ' })
+  await expect(picker).toBeVisible()
+  await expect(picker.locator('.gis-map__streets')).toHaveCount(hasStreets ? 1 : 0)
+  const button = page.getByRole('button', { name: 'Tìm kho đủ tồn', exact: true })
+  if (info.project.name === 'mobile') await picker.tap()
+  else await picker.click()
+  const [west, south, east, north] = status.snapshot!.bounds
+  expect(Number(await page.getByLabel('Vĩ độ').inputValue())).toBeCloseTo((south + north) / 2, 3)
+  expect(Number(await page.getByLabel('Kinh độ').inputValue())).toBeCloseTo((west + east) / 2, 3)
+  await expect(picker.locator('.gis-map__destination')).toHaveCount(1)
+  await expect(page.getByText('Chưa có kết quả kho', { exact: true })).toBeVisible()
+  await expect(button).toBeEnabled()
   await fillCoordinate(page)
   await page.evaluate(() => {
     const observer = new MutationObserver(records => {
@@ -198,6 +229,14 @@ test('stock-feasible route, keyboard, period totals and two responsive views', a
   expect(options.excluded.some(row => row.warehouse.name === names.unlocated && row.reason === 'missing_coordinates')).toBe(true)
   const source = options.ranked.find(row => row.warehouse.name === names.source)
   expect(Boolean(source)).toBe(true)
+  const legend = page.getByRole('list', { name: 'Chú giải bản đồ kho' })
+  await expect(legend.getByText('Kho thiếu tồn')).toBeVisible()
+  await expect(picker.locator('.gis-map__stock-short').first()).toBeAttached()
+  const link = page.getByRole('link', { name: 'Google Maps từ ' + names.source, exact: true })
+  await expect(link).toHaveAttribute('referrerpolicy', 'no-referrer')
+  const href = new URL((await link.getAttribute('href'))!)
+  expect(href.origin).toBe('https://www.google.com')
+  expect(href.searchParams.get('destination')).toBe(target.latitude + ',' + target.longitude)
   if (scenario === 'synthetic') {
     const detour = options.ranked.find(row => row.warehouse.name === names.detour)
     expect(Boolean(detour)).toBe(true)
@@ -226,12 +265,18 @@ test('stock-feasible route, keyboard, period totals and two responsive views', a
     expect(route.geometry?.coordinates).toHaveLength(124)
     expect(route.origin_snap?.node_id).toBe(14_118_824_113)
     expect(route.destination_snap?.node_id).toBe(7_501_051_433)
-    const attribution = page.getByRole('link', { name: '© OpenStreetMap contributors' })
+    const attribution = page.getByRole('region', { name: 'Tuyến đường' }).getByRole('link', { name: '© OpenStreetMap contributors' })
     await expect(attribution).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright')
     expect(status.snapshot?.license).toBe('ODbL 1.0')
   }
-  await expect(page.getByRole('img', { name: 'Sơ đồ tuyến đường' })).toBeVisible()
+  await expect(page.getByRole('img', { name: hasStreets ? 'Tuyến trên nền đường OpenStreetMap' : 'Sơ đồ tuyến đường' })).toBeVisible()
   await expect(page.getByText('Tuyến ô tô tham khảo', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Xem gần tuyến', exact: true }).click()
+  await expect(picker).toHaveAttribute('data-map-frame', 'route')
+  await page.getByRole('button', { name: 'Về khung vùng', exact: true }).click()
+  await expect(picker).toHaveAttribute('data-map-frame', 'coverage')
+  await expect(page.getByLabel('Vĩ độ', { exact: true })).toHaveValue(String(target.latitude))
 
   const volume = await heatmap(page, '2026-11-02', '2026-11-03')
   expect(volume.start_utc).toBe('2026-11-01T17:00:00Z')
@@ -254,6 +299,10 @@ test('stock-feasible route, keyboard, period totals and two responsive views', a
   const empty = await heatmap(page, '2026-11-04', '2026-11-05')
   expect([...empty.points, ...empty.unlocated].every(row => row.fulfilled_quantity === 0)).toBe(true)
   await expect(page.getByText('Chưa ghi nhận lượng xuất đáp ứng yêu cầu mua hàng trong kỳ.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Xóa điểm đến', exact: true }).click()
+  await expect(picker.locator('.gis-map__destination')).toHaveCount(0)
+  await expect(page.getByLabel('Vĩ độ', { exact: true })).toHaveValue('')
+  await expect(page.getByRole('link', { name: 'Google Maps từ ' + names.source, exact: true })).toHaveCount(0)
 })
 
 test('purchase and warehouse context, real offline retry and transfer directions', async ({ page }) => {
@@ -305,4 +354,47 @@ test('purchase and warehouse context, real offline retry and transfer directions
     await expect(page.getByText('Không tìm thấy đường đi trong mạng đường đã chọn.', { exact: true })).toBeVisible()
     await expect(page.getByRole('img', { name: 'Sơ đồ tuyến đường' }).locator('polyline')).toHaveCount(0)
   }
+})
+
+test('landmark lookup is local, precise and keyboard or touch selectable', async ({ page }, info) => {
+  const outbound: string[] = []
+  const queries: string[] = []
+  page.on('request', request => {
+    const url = new URL(request.url())
+    if (url.origin !== 'http://127.0.0.1:18082') outbound.push(url.origin)
+    if (url.pathname.endsWith('/warehouse-options')) queries.push(request.method())
+  })
+  await openGIS(page, e2eCredentials.seededWarehouse)
+  await pickSKU(page)
+  const input = page.getByRole('searchbox', { name: 'Tìm địa danh' })
+  if (scenario === 'synthetic') {
+    await expect(input).toHaveCount(0)
+    expect(outbound).toEqual([])
+    return
+  }
+
+  const manual = page.locator('.gis-manual-coordinates')
+  expect(await manual.getAttribute('open')).toBeNull()
+  await input.fill('dinh thong nhat')
+  await input.press('Enter')
+  const choice = page.getByRole('button', { name: 'Dinh Độc Lập', exact: true })
+  if (info.project.name === 'mobile') await choice.tap()
+  else {
+    await input.press('Tab')
+    await expect(choice).toBeFocused()
+    await choice.press('Enter')
+  }
+  await expect(page.getByText('Điểm đến: Dinh Độc Lập', { exact: true })).toBeVisible()
+  const marker = page.locator('.gis-map-target-label')
+  await expect(marker).toHaveText('Dinh Độc Lập')
+  expect(queries).toEqual([])
+  expect(outbound).toEqual([])
+  const result = await lookup(page)
+  expect(result.destination.coordinate).toEqual({ latitude: 10.7770348, longitude: 106.695488 })
+  await expect(page.locator('.gis-map-warehouse-label').first()).toBeAttached()
+  await expect(page.getByRole('button', { name: 'Xem tuyến từ ' + names.source, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Xóa điểm đến', exact: true }).click()
+  await expect(marker).toHaveCount(0)
+  await expect(input).toHaveValue('')
+  expect(outbound).toEqual([])
 })
