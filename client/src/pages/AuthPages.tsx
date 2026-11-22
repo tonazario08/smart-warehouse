@@ -29,7 +29,7 @@ export function LoginPage() {
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
   const destination = !passwordChanged && from?.pathname?.startsWith('/') && !from.pathname.startsWith('//')
     ? from.pathname + (from.search ?? '') + (from.hash ?? '')
-    : '/dashboard'
+    : '/'
 
   if (user) return <Navigate replace to={destination} />
 

@@ -10,8 +10,8 @@ const movement = { id: 9, warehouse_id: 8, product_id: 7, quantity: 2, reference
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const page = (items: unknown[]) => ({ items, total: items.length, page: 1, page_size: 100 })
 let dispose: (() => void) | undefined
-function mount(path: string, role?: 'admin' | 'warehouse' | 'client', overrides?: (url: URL, init?: RequestInit) => Response | undefined | Promise<Response | undefined>) {
-  if (role) localStorage.setItem('smart-warehouse-token', 'route-token')
+function mount(path: string, role?: 'admin' | 'warehouse' | 'client', overrides?: (url: URL, init?: RequestInit) => Response | undefined | Promise<Response | undefined>, existingSession = Boolean(role)) {
+  if (existingSession) localStorage.setItem('smart-warehouse-token', 'route-token')
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input))
     if (url.pathname.endsWith('/auth/login')) return reply({ access_token: 'route-token', user: { id: 1 } })
@@ -39,6 +39,11 @@ function mount(path: string, role?: 'admin' | 'warehouse' | 'client', overrides?
   dispose = () => active.dispose()
   render(<AuthProvider><RouterProvider router={active} /></AuthProvider>)
   return { active, fetchMock }
+}
+async function completeLogin() {
+  fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'operator@example.com' } })
+  fireEvent.change(screen.getByLabelText('Mật khẩu'), { target: { value: 'test-password' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }))
 }
 afterEach(() => { dispose?.(); localStorage.clear(); vi.unstubAllGlobals() })
 
@@ -116,11 +121,30 @@ describe('active Figma routes and data', () => {
     expect(screen.getByRole('columnheader', {name:'Ngưỡng danh mục'})).toBeInTheDocument()
     expect(screen.getByText(/15\/10\/2026/)).toBeInTheDocument()
   })
+  it.each([
+    ['admin', '/dashboard', 'Bảng điều khiển'],
+    ['warehouse', '/inventory', 'Tồn kho'],
+    ['client', '/products', 'Sản phẩm'],
+  ] as const)('lands a fresh %s login on %s without a false access denial', async (role, landing, heading) => {
+    const { active } = mount('/login', role, undefined, false)
+    await completeLogin()
+    await waitFor(() => expect(active.state.location.pathname).toBe(landing))
+    expect(await screen.findByRole('heading', { name: heading })).toBeVisible()
+    expect(active.state.location.state?.accessDenied).not.toBe(true)
+    expect(screen.queryByText('Bạn không có quyền mở trang vừa yêu cầu.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+  it('preserves a real client denial when signing in after opening a forbidden deep link', async () => {
+    const { active, fetchMock } = mount('/dashboard', 'client', undefined, false)
+    await completeLogin()
+    await waitFor(() => expect(active.state.location.pathname).toBe('/products'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn không có quyền mở trang vừa yêu cầu.')
+    expect(await screen.findByRole('heading', { name: 'Sản phẩm' })).toBeVisible()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/dashboard/stats'))).toBe(false)
+  })
   it('returns to the protected Figma form after actual provider login', async () => {
     const { active } = mount('/inbound/new')
-    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'operator@example.com' } })
-    fireEvent.change(screen.getByLabelText('Mật khẩu'), { target: { value: 'test-password' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }))
+    await completeLogin()
     await waitFor(() => expect(active.state.location.pathname).toBe('/inbound/new'))
     expect(await screen.findByRole('heading', { name: 'Tạo phiếu nhập' })).toBeInTheDocument()
   })
