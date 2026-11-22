@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.anomalies.operational_router import router as operational_anomaly_router
 from app.anomalies.router import router as anomaly_router
 from app.assistant.router import RateLimiter
 from app.assistant.router import router as assistant_router
@@ -46,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(assistant_router, prefix=settings.api_v1_prefix)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
     application.include_router(anomaly_router, prefix=settings.api_v1_prefix)
+    application.include_router(operational_anomaly_router, prefix=settings.api_v1_prefix)
     application.include_router(master_data_router, prefix=settings.api_v1_prefix)
     application.include_router(warehouse_router, prefix=settings.api_v1_prefix)
     application.include_router(inventory_router, prefix=settings.api_v1_prefix)

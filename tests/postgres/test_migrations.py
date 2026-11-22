@@ -82,7 +82,7 @@ def test_migrations_build_expected_schema(
                 connection.execute(text("SELECT code FROM warehouses")).scalar_one(),
             )
             auth_version = connection.execute(text("SELECT auth_version FROM users")).scalar_one()
-        assert revision == "20261122_0009"
+        assert revision == "20261122_0010"
         assert auth_version == 0
         assert normalized_values == ("mixed@example.com", "BOLT-001", "HCM-01")
     finally:
@@ -115,6 +115,7 @@ def test_migrations_build_expected_schema(
         "movement_provenance",
         "purchase_request_workflows",
         "order_analytics_jobs",
+        "operational_anomaly_jobs",
         "order_analytics_order_checks",
         "order_analytics_key_states",
     }

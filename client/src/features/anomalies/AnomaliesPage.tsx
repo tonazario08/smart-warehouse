@@ -40,7 +40,8 @@ export function AnomaliesPage() {
   const current = loaded?.key === key ? loaded : null
   const error = failure?.key === key ? failure.text : ''
   return <section className="anomalies-page management-workspace">
-    <PageHeader title="Bất thường" description="Rà soát các bản ghi có đặc trưng khác thường." />
+    <PageHeader title="Bất thường" description="Rà soát các bản ghi có đặc trưng khác thường."
+      actions={<Link to="/anomalies/operational">Kết quả chấm sau xuất B2B</Link>} />
     {token && user && <OrderChecksPanel key={`${user.id}:${user.role}`} token={token} context={`${user.id}:${user.role}`} />}
     <FeedbackMessage variant="warning">Dữ liệu kiểm thử tổng hợp. Hiệu quả trên dữ liệu thực chưa được xác minh.</FeedbackMessage>
     {error ? <><FeedbackMessage variant="error">{error}</FeedbackMessage><Button onClick={() => setRetry(n => n + 1)}>Thử lại</Button></> : !current ? <FeedbackMessage>Đang tải cảnh báo...</FeedbackMessage> : current.status.state === 'unavailable' ? <EmptyState title="Chưa có cảnh báo khả dụng" description="Chưa có kết quả kiểm thử được nhập." /> : <>

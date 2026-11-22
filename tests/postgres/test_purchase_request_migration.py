@@ -22,7 +22,7 @@ from tests.test_purchase_request_models import (
 )
 
 pytestmark = pytest.mark.postgres
-HEAD = "20261122_0009"
+HEAD = "20261122_0010"
 PARENT = "20261017_0003"
 
 

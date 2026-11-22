@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     replenishment_allow_fixture: bool = False
     anomalies_allow_fixture: bool = False
     anomalies_outbound_link_demo_id: UUID4 | None = None
+    operational_anomaly_artifact_path: Path | None = None
+    operational_anomaly_artifact_sha256: str | None = None
+    operational_anomaly_coverage_path: Path | None = None
+    operational_anomaly_coverage_sha256: str | None = None
+    operational_anomaly_allow_synthetic_test: bool = False
     gis_catalog_root: Path | None = None
     gis_snapshot_id: str | None = None
     gis_allow_fixture: bool = False
@@ -105,6 +110,16 @@ class Settings(BaseSettings):
         )
         if database_url.drivername not in allowed_drivers:
             raise ValueError("database URL uses an unsupported synchronous driver")
+
+        if self.operational_anomaly_allow_synthetic_test and (
+            self.app_env != "test"
+            or database_url.drivername != SUPPORTED_RUNTIME_DATABASE_DRIVER
+            or database_url.host not in {"127.0.0.1", "::1"}
+            or database_url.port is None
+            or not (database_url.database or "").endswith("_test")
+            or not (database_url.username or "").endswith("_test")
+        ):
+            raise ValueError("synthetic mode requires a separate PostgreSQL test DB")
 
         secret = self.jwt_secret_key.get_secret_value().strip()
         if self.app_env == "production" and (

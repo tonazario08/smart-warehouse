@@ -34,6 +34,7 @@ import { ReplenishmentRunPage } from '../features/replenishment/ReplenishmentRun
 import { AnomaliesPage } from '../features/anomalies/AnomaliesPage'
 import { AnomalyDetailPage } from '../features/anomalies/AnomalyDetailPage'
 import { AnomalyOutboundPage } from '../features/anomalies/AnomalyOutboundPage'
+import { OperationalAnomaliesPage, OperationalAnomalyDetailPage, OperationalAnomalyOutboundPage } from '../features/operationalAnomalies/OperationalAnomaliesPages'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -50,7 +51,7 @@ export const router = createBrowserRouter([
     { index: true, element: <Navigate replace to="/dashboard" /> },
     { path: '/change-password', element: <ChangePasswordPage /> },
     { path: '/assistant', element: <RouteGuard permission="assistant:read" />, children: [{ index: true, element: <AssistantPage /> }] },
-    { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }, { element: <RouteGuard permission="inventory:history:read" />, children: [{ path: ':alertId/outbound', element: <AnomalyOutboundPage /> }] }] },
+    { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }, { path: 'operational', element: <OperationalAnomaliesPage /> }, { path: 'operational/:transactionId', element: <OperationalAnomalyDetailPage /> }, { element: <RouteGuard permission="inventory:history:read" />, children: [{ path: ':alertId/outbound', element: <AnomalyOutboundPage /> }, { path: 'operational/:transactionId/outbound', element: <OperationalAnomalyOutboundPage /> }] }] },
     { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
     { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },
     { path: '/dashboard', element: <RouteGuard permission="dashboard:read" />, children: [{ index: true, element: <DashboardPage /> }] },

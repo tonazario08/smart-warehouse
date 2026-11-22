@@ -10,6 +10,8 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.anomalies.operational_features import lineage_fingerprint
+from app.anomalies.operational_jobs import enqueue
 from app.auth.dependencies import PERMISSION_ROLES, Permission
 from app.core.errors import DomainError
 from app.core.pagination import PageParams
@@ -312,6 +314,7 @@ class PurchaseRequestService:
             raise DomainError(409, "PRODUCT_NOT_REQUESTABLE", "Product is not requestable.")
         if self.repository.get_warehouse(row.warehouse_id) is None:
             raise DomainError(404, "WAREHOUSE_NOT_FOUND", "Warehouse was not found.")
+        return product
 
     def create(
         self, actor: User, key: UUID, body: PurchaseRequestCreate
@@ -407,7 +410,7 @@ class PurchaseRequestService:
                 return current
             if row.status != "approved":
                 conflict()
-            self._admit(row)
+            product = self._admit(row)
             stock = self.repository.lock_existing_stock(row.warehouse_id, row.product_id)
             if stock is None or stock.quantity < row.quantity:
                 raise DomainError(409, "INSUFFICIENT_STOCK", "Insufficient stock.")
@@ -433,6 +436,31 @@ class PurchaseRequestService:
             workflow.outbound_id, workflow.outbound_transaction_id = outbound.id, transaction.id
             workflow.quantity_before, workflow.quantity_after = before, stock.quantity
             row.status = "fulfilled"
+            enqueue(
+                self.repository.session,
+                transaction_id=transaction.id,
+                outbound_id=outbound.id,
+                purchase_request_id=row.id,
+                warehouse_id=row.warehouse_id,
+                product_id=row.product_id,
+                quantity=row.quantity,
+                unit=product.unit,
+                occurred_at=workflow.fulfilled_at,
+                source_fingerprint=lineage_fingerprint(
+                    transaction_id=transaction.id,
+                    outbound_id=outbound.id,
+                    purchase_request_id=row.id,
+                    warehouse_id=row.warehouse_id,
+                    product_id=row.product_id,
+                    quantity=row.quantity,
+                    unit=product.unit,
+                    occurred_at=workflow.fulfilled_at,
+                    performed_by_id=actor_id,
+                    request_reference=row.request_number,
+                    quantity_before=before,
+                    quantity_after=stock.quantity,
+                ),
+            )
             self.repository.flush()
             return self._project((row, workflow))
 
