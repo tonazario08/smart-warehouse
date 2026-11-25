@@ -15,7 +15,7 @@ from pydantic import (
 )
 
 from app.inventory.schemas import MAX_STOCK_QUANTITY
-from app.models.domain import PurchaseRequestStatus
+from app.models.domain import PurchaseRequestStatus, to_utc
 
 PositiveInteger = Annotated[int, Field(strict=True, ge=1, le=MAX_STOCK_QUANTITY)]
 
@@ -105,6 +105,11 @@ class PurchaseRequestDecisionResponse(StrictBoundary):
     decided_at: AwareDatetime
     rejection_reason: str | None
 
+    @field_validator("decided_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
+
 
 class PurchaseRequestFulfillmentResponse(StrictBoundary):
     outbound_id: int
@@ -113,6 +118,11 @@ class PurchaseRequestFulfillmentResponse(StrictBoundary):
     fulfilled_at: AwareDatetime
     quantity_before: int
     quantity_after: int
+
+    @field_validator("fulfilled_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
 
 
 class PurchaseRequestResponse(StrictBoundary):
@@ -129,6 +139,11 @@ class PurchaseRequestResponse(StrictBoundary):
     note: str | None
     decision: PurchaseRequestDecisionResponse | None
     fulfillment: PurchaseRequestFulfillmentResponse | None
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def normalize_timestamps(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
 
 
 class NearestWarehouseBody(StrictBoundary):

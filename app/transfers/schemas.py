@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.inventory.schemas import MAX_STOCK_QUANTITY
+from app.models.domain import to_utc
 
 PositiveInteger = Annotated[int, Field(strict=True, ge=1, le=MAX_STOCK_QUANTITY)]
 MovementPurpose = Literal[
@@ -82,6 +83,11 @@ class TransferResponse(TransferCreate):
     id: int
     created_by_id: int
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
     outbound_id: int
     inbound_id: int
     outbound_transaction_id: int

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.anomalies.service import _fresh_actor
 from app.core.config import Settings
 from app.core.errors import DomainError
 from app.models import User
+from app.models.domain import to_utc
 
 ReviewDecision = Literal["confirmed_business_issue", "legitimate", "insufficient_evidence"]
 
@@ -37,6 +38,11 @@ class ReviewView(BaseModel):
     note: str
     actor_id: int
     reviewed_at: datetime
+
+    @field_validator("reviewed_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
 
 
 class ReviewPage(BaseModel):

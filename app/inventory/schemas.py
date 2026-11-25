@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import TransactionType
+from app.models.domain import to_utc
 
 MAX_STOCK_QUANTITY = 2_147_483_647
 
@@ -66,6 +67,11 @@ class InventoryMovementReadResponse(InventoryMovementCreate):
     created_by_id: int
     created_at: datetime
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
+
 
 class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
@@ -80,6 +86,11 @@ class TransactionResponse(BaseModel):
     created_by_id: int
     created_at: datetime
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value
+
 
 class StockResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
@@ -89,3 +100,8 @@ class StockResponse(BaseModel):
     product_id: int
     quantity: int
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def normalize_timestamp(cls, value: object) -> object:
+        return to_utc(value) if isinstance(value, datetime) else value

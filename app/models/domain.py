@@ -30,6 +30,19 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def to_utc(value: datetime) -> datetime:
+    """Normalize an aware datetime to UTC so API responses serialize with a `Z` suffix.
+
+    Timestamptz values created in-process use UTC, but values loaded from
+    PostgreSQL carry the database session timezone (psycopg attaches it), so
+    the same instant serialized as `+07:00` on replay/reads and `Z` on create.
+    Naive values are left untouched.
+    """
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(UTC)
+    return value
+
+
 class UserRole(StrEnum):
     ADMIN = "admin"
     WAREHOUSE = "warehouse"
