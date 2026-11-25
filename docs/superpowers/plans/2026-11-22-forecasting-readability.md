@@ -1,0 +1,8 @@
+# improve-forecasting-readability — Dễ đọc màn Dự báo
+
+Task duy nhất: `docs/tasks/improve-forecasting-readability.md`. Toàn duyệt thử riêng 2026-11-22. Tái dùng dữ liệu đọc và phân quyền của M6, giữ pilot M6→M7, Research/Vận hành và lượng chờ giao tách biệt.
+
+- Biểu đồ đường trước bảng, không bỏ bảng phân trang. Dùng dữ liệu của trang và bộ lọc hiện hành, ghi rõ phạm vi trang/ngày và lựa chọn đang hiện. Không gọi toàn catalog. Với 7 ngày, chỉ vẽ một bước dự báo cho một chuỗi/đơn vị nhất quán, không gộp cùng ngày đích qua nhiều ngày gốc; có thể chọn bước có dữ liệu hoặc thể hiện rõ giới hạn. Trục ngày đích; thực tế liền, dự báo đứt, chú giải. Actual null tạo khoảng trống/không có đường thực tế; actual 0 là điểm thật. Không tự tạo dữ liệu hoặc lấy tập khác đang tải.
+- Dashboard danh sách/chi tiết rút đầu mã 12–16 ký tự, title full, nút sao chép chính xác cả chuỗi có phản hồi, liên kết vẫn giữ toàn run ID. Sản phẩm/kho ghi nhãn riêng, bỏ tên/mã lặp trong từng trường, giữ hai thực thể dù tên giống. Chỉ một khối thông tin kết quả và một hộp giới hạn có số lượng, mở bằng bàn phím.
+- Giải thích dễ hiểu persistence, WAPE và số điểm/MAE; WAPE 0% từ fixture phải nhắc không suy ra dữ liệu thật. Chỉ giải thích do chuỗi hằng nếu có bằng chứng tin cậy (artifact fixture cố định đã thử, không suy từ vài điểm trang). Không thay công thức/cận/đơn vị chỉ số. Không đưa ra đảm bảo chính xác.
+- Kiểm thực tế thiếu, 0, trùng ngày/khác lead, dữ liệu chậm khi đổi case, trang và phiên, copy full, không lặp, hạn chế phạm vi mặc định đóng, keyboard/mobile; đường dẫn/role/API/query và bộ CI không đổi. Không cài biểu đồ nặng; SVG/CSS hiện có. Độc lập browser Windows với dữ liệu giả lập sẵn, không đổi model/data/API/main.

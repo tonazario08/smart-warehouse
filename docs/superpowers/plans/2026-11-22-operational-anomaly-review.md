@@ -1,0 +1,11 @@
+# Kế hoạch record-operational-anomaly-review
+
+Task: `docs/tasks/record-operational-anomaly-review.md`. Trạng thái: APPROVED cho bản sao cô lập. Chỉ bắt đầu khi người dùng chọn đúng task, duyệt plan độc lập và task `score-fulfilled-b2b-anomalies` đã DONE. Checkout riêng từ commit đã xác minh; kiểm head trước khi đặt revision.
+
+1. RED trên PostgreSQL dùng một lần: câu GET/PATCH cho giao dịch flagged hợp lệ hiện chưa có. Bổ sung tình huống phủ định (normal/no-model, fixture ẩn, malformed/drift, role, CAS và replay).
+2. Tạo lịch sử riêng không dùng bảng M9: ID giao dịch FK đến operational job RESTRICT; version nguyên dương và unique theo giao dịch, key unique theo giao dịch + reviewer; actor FK, giờ server UTC, enum, ghi chú trim 1–1000 ký tự, digest của nội dung chuẩn hóa và dấu vân tay kết quả đã chấm. Lưu định danh release và fingerprint hiện có trong kết quả, không phát lộ giá trị thô hoặc đường dẫn.
+3. `GET /api/v1/operational-anomalies/{transaction_id}/reviews` dùng ANOMALY_READ; `PATCH .../{transaction_id}/review` dùng ANOMALY_REVIEW và ANOMALY_READ. Dùng service riêng, kiểm role trước lookup; cùng gate hiện có cho synthetic test. Yêu cầu version hiện tại (0 lần đầu), UUID Idempotency-Key, trạng thái và ghi chú. Khóa job theo giao dịch, kiểm kết quả flagged và lineage chính xác, replay cùng actor/key/nội dung trước CAS, xung đột 409; bản nguồn không khả dụng không hiện đánh giá. GET không ghi, phân trang lịch sử mới trước. Không trả user email hoặc nội dung business link vượt quyền.
+4. UI trên đúng trang chi tiết flagged, banner synthetic hiện có được giữ. Cột trạng thái và lịch sử ghi rõ “Đánh giá của nhân viên”, không thay tiêu đề/điểm/giải thích mô hình. Không mở form khi API không xác minh. 409 tải lại lịch sử/version; không tự gửi lại ghi chú. Đưa data giả vào test runner có guard, không config main.
+5. Nghiệm thu AC-1–6: test race hai writer khác actor/key, stable replay, tamper lineage, synthetic tắt, direct URLs bị chặn, không đổi lịch sử fixture/stock/purchase request. Migration chạy DB riêng; smoke thật ghi → reload → thấy actor/time/version; ghi nhận kết quả và review độc lập. Không tuyên bố precision/recall thật.
+
+Giới hạn: “Ghi nhận vấn đề nghiệp vụ” chỉ là nhận định có ghi chú, không tự phán đoán vi phạm, không thay vận hành. Shadow mode và quản trị mô hình là task riêng.

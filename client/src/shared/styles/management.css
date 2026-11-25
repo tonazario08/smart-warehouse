@@ -1,0 +1,31 @@
+.management-workspace{display:grid;gap:20px;min-width:0;color:var(--color-text-primary)}
+.management-workspace .management-panel{min-width:0;border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;background:var(--color-surface);box-shadow:var(--shadow-sm)}
+.management-workspace .management-form{display:grid;gap:16px}
+.management-workspace .management-form h2{margin:0;font-size:18px;font-weight:600}
+.management-workspace .management-form>p{margin:0;color:var(--color-text-muted);font-size:13px;line-height:1.6}
+.management-workspace .management-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px;align-items:start}
+.management-workspace .management-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.management-workspace .management-filters{display:flex;flex-wrap:wrap;align-items:end;gap:16px}
+.management-workspace .management-filters>.ui-field{flex:1 1 180px}
+.management-workspace .ui-data-table{min-width:650px}
+.management-workspace .ui-data-table td{vertical-align:top;overflow-wrap:anywhere}
+.management-workspace .ui-data-table td small{display:block;margin-top:4px;color:var(--color-text-muted)}
+.management-workspace .pagination{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:20px;color:var(--color-text-muted);font-size:13px}
+.management-workspace .pagination button,.management-workspace .inventory-filters button,.management-workspace .async-state button{min-height:38px;padding:8px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-primary);font:inherit;cursor:pointer}
+.management-workspace .pagination button:disabled{opacity:.5;cursor:not-allowed}
+.management-workspace .inventory-filters{display:flex;flex-wrap:wrap;align-items:end;gap:16px}
+.management-workspace .inventory-filters label{display:grid;flex:1 1 180px;gap:8px;min-width:0;color:var(--color-text-primary);font-size:13px;font-weight:500}
+.management-workspace .inventory-filters :is(input,select){box-sizing:border-box;min-height:38px;width:100%;max-width:100%;min-width:0;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:8px 12px;background:var(--color-surface);color:var(--color-text-primary);font:inherit}
+.management-workspace :is(button,input,select):focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.management-workspace .inventory-identity{display:grid;gap:4px}
+.management-workspace .movement-direction{display:inline-flex;border-radius:var(--radius-sm);padding:4px 8px;background:var(--color-primary-soft);color:var(--color-primary);white-space:nowrap}
+.management-workspace .movement-direction-inbound{background:var(--color-success-soft);color:var(--color-success)}
+.management-workspace .movement-direction-outbound{background:var(--color-warning-soft);color:var(--color-warning)}
+.management-workspace .async-state{margin:0;padding:12px 0;color:var(--color-text-muted);font-size:13px;line-height:1.6}
+.management-workspace .async-state-error{color:var(--color-danger)}
+.management-workspace .management-facts{display:grid;gap:8px;margin:0;min-width:140px}
+.management-workspace .management-facts dt{font-size:11px;color:var(--color-text-muted)}
+.management-workspace .management-facts dd{margin:2px 0 0;overflow-wrap:anywhere}
+.management-workspace .ui-confirm-dialog .ui-field{margin-bottom:16px}
+@media(max-width:600px){.management-workspace .management-panel{padding:14px}.management-workspace .ui-page-header{align-items:stretch;flex-direction:column}.management-workspace .ui-page-header__actions{flex-wrap:wrap}.management-workspace .management-actions{align-items:stretch}.management-workspace .pagination{justify-content:flex-start}.management-workspace .inventory-filters label{flex-basis:100%}}
+@media(pointer:coarse){.management-workspace :is(.ui-button,.pagination button,.inventory-filters button,.async-state button){min-height:44px}.management-workspace .inventory-filters :is(input,select){min-height:44px}}

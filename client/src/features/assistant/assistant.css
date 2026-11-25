@@ -1,0 +1,122 @@
+.assistant__layout {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.assistant__layout[data-source-open="true"] {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.assistant__panel {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.assistant__suggestions,
+.assistant__composer,
+.assistant__exchange,
+.assistant__failure {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.assistant__suggestions h2,
+.assistant__source h2 {
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.assistant__suggestions button {
+  text-align: left;
+  white-space: normal;
+}
+
+.assistant__messages {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant__question,
+.assistant__answer {
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  overflow-wrap: anywhere;
+}
+
+.assistant__question {
+  justify-self: end;
+  background: var(--color-primary-soft);
+}
+
+.assistant__answer {
+  background: var(--color-app-background);
+}
+
+.assistant__question p,
+.assistant__answer p {
+  margin: var(--space-2) 0 0;
+  white-space: pre-wrap;
+}
+
+.assistant__citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant__citations button {
+  white-space: normal;
+}
+
+.assistant__composer {
+  margin-top: var(--space-5);
+}
+
+.assistant__input {
+  width: 100%;
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.assistant__source-header {
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.assistant__source-version,
+.assistant__pending {
+  color: var(--color-text-muted);
+}
+
+.assistant__source-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .assistant__layout[data-source-open="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .assistant__panel {
+    padding: var(--space-3);
+  }
+}

@@ -1,0 +1,79 @@
+name: sw-quality-replenishment-ci
+services:
+  db:
+    image: postgres:16-alpine
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+    environment:
+      POSTGRES_DB: sw_m7_replenishment_e2e
+      POSTGRES_USER: sw_m7_replenishment_e2e
+      POSTGRES_PASSWORD: ${CI_DB_PASSWORD:?required}
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build: { context: ., dockerfile: Dockerfile }
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+    environment: { DATABASE_URL: '${CI_DATABASE_URL:?required}' }
+    command: [alembic, upgrade, head]
+    networks: [internal]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+  bootstrap:
+    build: { context: ., dockerfile: Dockerfile }
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+    environment:
+      DATABASE_URL: ${CI_DATABASE_URL:?required}
+      SEED_ADMIN_EMAIL: ${CI_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${CI_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${CI_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${CI_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${CI_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${CI_CLIENT_PASSWORD:?required}
+    command: [python, -m, app.seed]
+    networks: [internal]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+  api:
+    build: { context: ., dockerfile: Dockerfile }
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+    environment:
+      APP_ENV: integration
+      DATABASE_URL: ${CI_DATABASE_URL:?required}
+      JWT_SECRET_KEY: ${CI_JWT_SECRET:?required}
+      SEED_CLIENT_EMAIL: ${CI_CLIENT_EMAIL:?required}
+      FORECAST_CATALOG_ROOT: /forecast-catalog
+      FORECAST_ALLOW_FIXTURE: 'true'
+      REPLENISHMENT_CATALOG_ROOT: /replenishment-catalog
+      REPLENISHMENT_ALLOW_FIXTURE: 'true'
+    volumes:
+      - { type: bind, source: '${CI_FORECAST_CATALOG:?required}', target: /forecast-catalog, read_only: true }
+      - { type: bind, source: '${CI_POLICY_CATALOG:?required}', target: /replenishment-catalog, read_only: true }
+    networks: [internal]
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  web:
+    build: { context: ./client, dockerfile: Dockerfile }
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+    networks: [internal]
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ['127.0.0.1:58082:8080']
+volumes:
+  database:
+    name: sw-quality-replenishment-ci-data
+    labels: { task: verify-m7-merge-ci, role: browser-test }
+networks:
+  internal:
+    name: sw-quality-replenishment-ci-net
+    labels: { task: verify-m7-merge-ci, role: browser-test }

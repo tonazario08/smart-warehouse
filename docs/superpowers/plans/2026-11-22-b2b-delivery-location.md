@@ -1,0 +1,8 @@
+# Kế hoạch capture-b2b-delivery-location
+
+Task: docs/tasks/capture-b2b-delivery-location.md. APPROVED cho bản sao cô lập. Baseline đóng băng ở task. Không dùng dữ liệu thật.
+1. RED: create với delivery_location, GET riêng, POST nearest và route riêng ban đầu chưa hoạt động. Kiểm 2 client, staff, snapshot cũ/race và precision.
+2. Migration 0012 thêm vào workflow ba cột nullable: địa chỉ trim 1–300, vĩ độ/kinh độ hữu hạn và trong biên; DB kiểm nhóm tất cả NULL hoặc tất cả hợp lệ. POST tạo nhận nested delivery_location tùy chọn để clients cũ tương thích; form mới bắt buộc xác nhận. Dữ liệu nằm trong cùng transaction và hash chỉ thêm key nếu có snapshot. Giữ cách chuẩn hóa note cũ.
+3. GET /purchase-requests/{id}/delivery-location dùng owner/staff hiện có và response no-store; chỉ bản thân endpoint trả địa chỉ/điểm. POST /purchase-requests/nearest-warehouses nhận product_id, quantity, latitude, longitude trong body JSON, giữ Haversine GET đã có; no query/body log. Không gửi địa chỉ cho API tìm kho.
+4. GIS /route kind purchase_request_delivery với request_id, server chọn đúng kho được gán và snapshot, không chấp nhận origin override. Destination.kind riêng, dùng tọa độ mà không trả địa chỉ tự do, không có link chia sẻ Google ở chế độ này. Không có snapshot thì hiển thị lỗi/vắng dữ liệu; không dùng kho thay thế. Các mode cũ, stock và route math không đổi.
+5. Client local sample địa danh + chỉ một lần GPS có quyền/manually confirm. Tách địa chỉ văn bản và điểm chính xác nhận riêng, không sử dụng tọa độ chưa xác nhận. Xóa/sửa hủy kết quả trước; no browser persistence. Review snapshot riêng ở chi tiết; client khác bị chặn. Smoke desktop/mobile dùng điểm công cộng/địa chỉ giả lập; không geocoder ngoài.

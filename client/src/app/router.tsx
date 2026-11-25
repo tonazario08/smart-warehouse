@@ -1,0 +1,76 @@
+import { Navigate, Outlet, createBrowserRouter } from 'react-router-dom'
+import { ManagementProvider } from './ManagementProvider'
+import { UsersPage } from '../features/users/UsersPage'
+import { CategoriesPage } from '../features/categories/CategoriesPage'
+import { SuppliersPage } from '../features/suppliers/SuppliersPage'
+import { TransactionsPage } from '../features/transactions/TransactionsPage'
+import { AuditPage } from '../features/audit/AuditPage'
+import { LoginPage } from '../pages/LoginPage'
+import { ChangePasswordPage, ForgotPasswordPage, ResetPasswordPage } from '../pages/AuthPages'
+import { DashboardPage } from '../pages/DashboardPage'
+import { ProductFormPage } from '../pages/ProductFormPage'
+import { ProductsPage } from '../pages/ProductsPage'
+import { InventoryPage } from '../pages/InventoryPage'
+import { StockDetailPage } from '../pages/StockDetailPage'
+import { WarehousesPage } from '../pages/WarehousesPage'
+import { WarehouseDetailPage } from '../pages/WarehouseDetailPage'
+import { WarehouseFormPage } from '../pages/WarehouseFormPage'
+import { MovementFormPage, MovementListPage } from '../pages/MovementPages'
+import { AppShell } from '../shared/layout/AppShell'
+import { useAuth } from './AuthProvider'
+import { RouteGuard } from './RouteGuard'
+import { AssistantPage } from '../features/assistant/AssistantPage'
+import { GISPage } from '../features/gis/GISPage'
+import { TransfersPage } from '../features/transfers/TransfersPage'
+import { TransferFormPage } from '../features/transfers/TransferFormPage'
+import { TransferDetailPage } from '../features/transfers/TransferDetailPage'
+import { PurchaseRequestsPage } from '../features/purchaseRequests/PurchaseRequestsPage'
+import { PurchaseRequestFormPage } from '../features/purchaseRequests/PurchaseRequestFormPage'
+import { PurchaseRequestDetailPage } from '../features/purchaseRequests/PurchaseRequestDetailPage'
+import { ForecastingPage } from '../features/forecasting/ForecastingPage'
+import { ColdStartPage } from '../features/forecasting/ColdStartPage'
+import { ForecastRunPage } from '../features/forecasting/ForecastRunPage'
+import { ReplenishmentPage } from '../features/replenishment/ReplenishmentPage'
+import { ReplenishmentRunPage } from '../features/replenishment/ReplenishmentRunPage'
+import { AnomaliesPage } from '../features/anomalies/AnomaliesPage'
+import { AnomalyDetailPage } from '../features/anomalies/AnomalyDetailPage'
+import { AnomalyOutboundPage } from '../features/anomalies/AnomalyOutboundPage'
+import { OperationalAnomaliesPage, OperationalAnomalyDetailPage, OperationalAnomalyOutboundPage } from '../features/operationalAnomalies/OperationalAnomaliesPages'
+
+function RoleHome() {
+  const { user } = useAuth()
+  return <Navigate replace to={user?.role === 'admin' ? '/dashboard' : user?.role === 'warehouse' ? '/inventory' : '/products'} />
+}
+
+export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
+  { element: <RouteGuard />, children: [{ element: <AppShell />, children: [
+    { element: <ManagementProvider><Outlet /></ManagementProvider>, children: [
+      { path: '/users', element: <RouteGuard permission="user:manage" />, children: [{ index: true, element: <UsersPage /> }] },
+      { path: '/categories', element: <RouteGuard permission="catalog:read" />, children: [{ index: true, element: <CategoriesPage /> }] },
+      { path: '/suppliers', element: <RouteGuard permission="supplier:read" />, children: [{ index: true, element: <SuppliersPage /> }] },
+      { path: '/transactions', element: <RouteGuard permission="inventory:history:read" />, children: [{ index: true, element: <TransactionsPage /> }] },
+      { path: '/audit', element: <RouteGuard permission="audit:read" />, children: [{ index: true, element: <AuditPage /> }] },
+    ] },
+    { index: true, element: <RoleHome /> },
+    { path: '/change-password', element: <ChangePasswordPage /> },
+    { path: '/assistant', element: <RouteGuard permission="assistant:read" />, children: [{ index: true, element: <AssistantPage /> }] },
+    { path: '/anomalies', element: <RouteGuard permission="anomaly:read" />, children: [{ index: true, element: <AnomaliesPage /> }, { path: ':alertId', element: <AnomalyDetailPage /> }, { path: 'operational', element: <OperationalAnomaliesPage /> }, { path: 'operational/:transactionId', element: <OperationalAnomalyDetailPage /> }, { element: <RouteGuard permission="inventory:history:read" />, children: [{ path: ':alertId/outbound', element: <AnomalyOutboundPage /> }, { path: 'operational/:transactionId/outbound', element: <OperationalAnomalyOutboundPage /> }] }] },
+    { path: '/forecasting', element: <RouteGuard permission="forecast:read" />, children: [{ index: true, element: <ForecastingPage /> }, { path: 'cold-start', element: <ColdStartPage /> }, { path: 'runs/:runId', element: <ForecastRunPage /> }] },
+    { path: '/replenishment', element: <RouteGuard permission="replenishment:read" />, children: [{ index: true, element: <ReplenishmentPage /> }, { path: 'runs/:runId', element: <ReplenishmentRunPage /> }] },
+    { path: '/dashboard', element: <RouteGuard permission="dashboard:read" />, children: [{ index: true, element: <DashboardPage /> }] },
+    { path: '/products', element: <ProductsPage /> }, { path: '/products/new', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="create" /> }] }, { path: '/products/:id/edit', element: <RouteGuard permission="product:write" />, children: [{ index: true, element: <ProductFormPage mode="edit" /> }] },
+    { path: '/inventory', element: <InventoryPage /> }, { path: '/inventory/:warehouseId/:productId', element: <StockDetailPage /> },
+    { path: '/warehouses', element: <WarehousesPage /> }, { path: '/warehouses/new', element: <RouteGuard permission="warehouse:write" />, children: [{ index: true, element: <WarehouseFormPage mode="create" /> }] }, { path: '/warehouses/:id', element: <WarehouseDetailPage /> }, { path: '/warehouses/:id/edit', element: <RouteGuard permission="warehouse:write" />, children: [{ index: true, element: <WarehouseFormPage mode="edit" /> }] },
+    { path: '/gis', element: <RouteGuard permission="gis:read" />, children: [{ index: true, element: <GISPage /> }] },
+    { path: '/inbound', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <MovementListPage type="inbound" /> }, { path: 'new', element: <MovementFormPage type="inbound" /> }] },
+    { path: '/outbound', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <MovementListPage type="outbound" /> }, { path: 'new', element: <MovementFormPage type="outbound" /> }] },
+    { path: '/transfers', element: <RouteGuard permission="inventory:history:read" />, children: [{ index: true, element: <TransfersPage /> }, { path: ':id', element: <TransferDetailPage /> }] },
+    { path: '/transfers/new', element: <RouteGuard permission="inventory:write" />, children: [{ index: true, element: <TransferFormPage /> }] },
+    { path: '/purchase-requests', element: <RouteGuard permission="purchase_request:read" />, children: [{ index: true, element: <PurchaseRequestsPage /> }, { path: ':id', element: <PurchaseRequestDetailPage /> }] },
+    { path: '/purchase-requests/new', element: <RouteGuard permission="purchase_request:create" />, children: [{ index: true, element: <PurchaseRequestFormPage /> }] },
+  ] }] },
+  { path: '*', element: <Navigate replace to="/" /> },
+])

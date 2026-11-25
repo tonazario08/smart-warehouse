@@ -1,0 +1,112 @@
+name: sw-full-demo
+
+x-demo-api: &demo-api
+  image: ${FULL_DEMO_API_IMAGE:?set the verified API image ID}
+  pull_policy: never
+  environment: &demo-env
+    APP_ENV: integration
+    DATABASE_URL: postgresql+psycopg://smart_warehouse_full_demo:${FULL_DEMO_DB_PASSWORD:?required}@db:5432/smart_warehouse_full_demo
+    JWT_SECRET_KEY: ${FULL_DEMO_JWT_SECRET:?required}
+  labels: { task: integrate-full-system-demo }
+
+services:
+  db:
+    image: postgres:16-alpine
+    pull_policy: never
+    labels: { task: integrate-full-system-demo }
+    environment:
+      POSTGRES_DB: smart_warehouse_full_demo
+      POSTGRES_USER: smart_warehouse_full_demo
+      POSTGRES_PASSWORD: ${FULL_DEMO_DB_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -U, smart_warehouse_full_demo, -d, smart_warehouse_full_demo]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *demo-api
+    command: [alembic, upgrade, head]
+    depends_on:
+      db: { condition: service_healthy }
+
+  bootstrap:
+    <<: *demo-api
+    environment:
+      <<: *demo-env
+      SEED_ADMIN_EMAIL: ${FULL_DEMO_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${FULL_DEMO_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${FULL_DEMO_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${FULL_DEMO_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${FULL_DEMO_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${FULL_DEMO_CLIENT_PASSWORD:?required}
+    command: [sh, -ec, 'python -m app.seed && python /fixtures/seed_full_system_demo.py']
+    volumes:
+      - ./tests/seed_full_system_demo.py:/fixtures/seed_full_system_demo.py:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    <<: *demo-api
+    environment:
+      <<: *demo-env
+      CORS_ORIGINS: '["http://127.0.0.1:58082"]'
+      FORECAST_CATALOG_ROOT: /demo/forecast
+      FORECAST_ALLOW_FIXTURE: "true"
+      REPLENISHMENT_CATALOG_ROOT: /demo/replenishment
+      REPLENISHMENT_ALLOW_FIXTURE: "true"
+      COLD_START_CATALOG_ROOT: /demo/cold-start
+      COLD_START_ALLOW_FIXTURE: "true"
+      ANOMALIES_ALLOW_FIXTURE: "true"
+      GIS_CATALOG_ROOT: /demo/gis
+      GIS_SNAPSHOT_ID: ${FULL_DEMO_GIS_SNAPSHOT_ID:?required}
+      GIS_ALLOW_FIXTURE: "true"
+      ASSISTANT_ENABLED: "true"
+      ASSISTANT_BASE_URL: http://127.0.0.1:11434/v1
+      ASSISTANT_MODEL: qwen3:4b-instruct
+      ASSISTANT_SEARCH_LIMIT: "2"
+      ASSISTANT_TIMEOUT_SECONDS: "120"
+    volumes:
+      - ${FULL_DEMO_FORECAST_ROOT:?required}:/demo/forecast:ro
+      - ${FULL_DEMO_REPLENISHMENT_ROOT:?required}:/demo/replenishment:ro
+      - ${FULL_DEMO_COLD_START_ROOT:?required}:/demo/cold-start:ro
+      - ${FULL_DEMO_ANOMALY_ROOT:?required}:/demo/anomaly:ro
+      - ${FULL_DEMO_GIS_ROOT:?required}:/demo/gis:ro
+      - ./docs/assistant:/demo/assistant:ro
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama:latest
+    pull_policy: never
+    labels: { task: integrate-full-system-demo }
+    environment:
+      OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_MODELS: /model-cache/models
+    volumes:
+      - assistant-model-cache:/model-cache:ro
+    network_mode: service:api
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    image: ${FULL_DEMO_WEB_IMAGE:?set the verified web image ID}
+    pull_policy: never
+    labels: { task: integrate-full-system-demo }
+    ports:
+      - "127.0.0.1:58082:8080"
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  database:
+  assistant-model-cache:
+    external: true
+    name: sw-rag-ollama-data

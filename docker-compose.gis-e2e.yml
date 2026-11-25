@@ -1,0 +1,109 @@
+name: sw-m10-gis-e2e
+x-task-labels: &task-labels
+  task: implement-warehouse-gis
+  role: isolated-e2e
+x-backend: &backend
+  image: sw-m10-gis-api:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+    labels: *task-labels
+  labels: *task-labels
+  networks: [internal]
+  environment: &backend-environment
+    APP_ENV: integration
+    DATABASE_URL: "postgresql+psycopg://sw_m10_gis_e2e:${M10_DB_PASSWORD:?required}@db:5432/sw_m10_gis_e2e?application_name=sw-m10-gis-e2e"
+    JWT_SECRET_KEY: ${M10_JWT_SECRET:?required}
+services:
+  db:
+    image: postgres:16-alpine
+    pull_policy: never
+    labels: *task-labels
+    environment:
+      POSTGRES_DB: sw_m10_gis_e2e
+      POSTGRES_USER: sw_m10_gis_e2e
+      POSTGRES_PASSWORD: ${M10_DB_PASSWORD:?required}
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U sw_m10_gis_e2e -d sw_m10_gis_e2e']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+  bootstrap:
+    <<: *backend
+    environment:
+      <<: *backend-environment
+      SEED_ADMIN_EMAIL: ${M10_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${M10_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${M10_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${M10_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${M10_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${M10_CLIENT_PASSWORD:?required}
+    command: [python, -m, app.seed]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+  api:
+    <<: *backend
+    environment:
+      <<: *backend-environment
+      GIS_CATALOG_ROOT: /catalog
+      GIS_SNAPSHOT_ID: ${M10_GIS_SNAPSHOT_ID:?required}
+      GIS_ALLOW_FIXTURE: 'true'
+      M10_GIS_SCENARIO: ${M10_GIS_SCENARIO:?required}
+      M10_GIS_PROJECT: ${COMPOSE_PROJECT_NAME:?required}
+      SEED_ADMIN_EMAIL: ${M10_ADMIN_EMAIL:?required}
+      SEED_WAREHOUSE_EMAIL: ${M10_WAREHOUSE_EMAIL:?required}
+      SEED_CLIENT_EMAIL: ${M10_CLIENT_EMAIL:?required}
+    volumes:
+      - type: bind
+        source: ${M10_GIS_CATALOG_ROOT:?required}
+        target: /catalog
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./tests/prepare_gis_e2e.py
+        target: /fixtures/prepare_gis_e2e.py
+        read_only: true
+        bind: { create_host_path: false }
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  web:
+    image: sw-m10-gis-web:local
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args: { VITE_API_BASE_URL: /api/v1 }
+      labels: *task-labels
+    labels: *task-labels
+    networks:
+      internal: {}
+      ingress:
+        gw_priority: 1
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ['127.0.0.1:18082:8080']
+volumes:
+  database:
+    name: sw-m10-gis-e2e-data
+    labels: *task-labels
+networks:
+  internal:
+    name: sw-m10-gis-e2e-net
+    internal: true
+    labels: *task-labels
+  ingress:
+    name: sw-m10-gis-e2e-ingress
+    labels: *task-labels

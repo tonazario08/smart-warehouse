@@ -1,0 +1,84 @@
+name: sw-m9-anomalies-e2e
+x-backend: &backend
+  image: sw-m9-anomalies-api
+  pull_policy: never
+  labels: { task: implement-anomaly-explanations, role: isolated-e2e }
+  environment: &backend-env
+    APP_ENV: integration
+    DATABASE_URL: ${M9_DATABASE_URL:?required}
+    JWT_SECRET_KEY: ${M9_JWT_SECRET:?required}
+    ANOMALIES_ALLOW_FIXTURE: ${M9_ALLOW_FIXTURE:-true}
+  networks: [internal]
+services:
+  db:
+    image: postgres:16-alpine
+    pull_policy: never
+    labels: { task: implement-anomaly-explanations, role: isolated-e2e }
+    environment:
+      POSTGRES_DB: sw_m9_anomalies_e2e
+      POSTGRES_USER: sw_m9_anomalies_e2e
+      POSTGRES_PASSWORD: ${M9_DB_PASSWORD:?required}
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U sw_m9_anomalies_e2e -d sw_m9_anomalies_e2e']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+  bootstrap:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      SEED_ADMIN_EMAIL: ${M9_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${M9_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${M9_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${M9_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${M9_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${M9_CLIENT_PASSWORD:?required}
+    command: [python, -m, app.seed]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+  api:
+    <<: *backend
+    volumes:
+      - type: bind
+        source: ${M9_CATALOG_ROOT:?required}
+        target: /catalog
+        read_only: true
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  web:
+    image: sw-m9-anomalies-web
+    pull_policy: never
+    labels: { task: implement-anomaly-explanations, role: isolated-e2e }
+    networks:
+      internal: {}
+      ingress:
+        gw_priority: 1
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ['127.0.0.1:58081:8080']
+volumes:
+  database:
+    name: sw-m9-anomalies-e2e-data
+    labels: { task: implement-anomaly-explanations, role: isolated-e2e }
+networks:
+  internal:
+    name: sw-m9-anomalies-e2e-net
+    labels: { task: implement-anomaly-explanations, role: isolated-e2e }
+    internal: true
+  ingress:
+    name: sw-m9-anomalies-e2e-ingress
+    labels: { task: implement-anomaly-explanations, role: isolated-e2e }

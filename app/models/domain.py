@@ -3,18 +3,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    Uuid,
+    func,
 )
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +28,19 @@ from app.db.base import Base
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def to_utc(value: datetime) -> datetime:
+    """Normalize an aware datetime to UTC so API responses serialize with a `Z` suffix.
+
+    Timestamptz values created in-process use UTC, but values loaded from
+    PostgreSQL carry the database session timezone (psycopg attaches it), so
+    the same instant serialized as `+07:00` on replay/reads and `Z` on create.
+    Naive values are left untouched.
+    """
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(UTC)
+    return value
 
 
 class UserRole(StrEnum):
@@ -78,6 +95,10 @@ class User(IdentifierMixin, TimestampMixin, Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auth_version: Mapped[int] = mapped_column(
+        Integer, CheckConstraint("auth_version >= 0", name="ck_users_auth_version"),
+        server_default="0", nullable=False,
+    )
 
 
 class Category(IdentifierMixin, TimestampMixin, Base):
@@ -129,6 +150,15 @@ class Product(IdentifierMixin, TimestampMixin, Base):
 
 class Warehouse(IdentifierMixin, TimestampMixin, Base):
     __tablename__ = "warehouses"
+    __table_args__ = (
+        CheckConstraint("code = upper(trim(code))", name="ck_warehouses_code_normalized"),
+        CheckConstraint(
+            "(latitude IS NULL AND longitude IS NULL) OR "
+            "(latitude IS NOT NULL AND longitude IS NOT NULL AND "
+            "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)",
+            name="ck_warehouses_coordinates_paired_and_ranged",
+        ),
+    )
 
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
@@ -160,6 +190,9 @@ class Inbound(IdentifierMixin, Base):
     __tablename__ = "inbounds"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_inbounds_quantity_positive"),
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_inbounds_actor_key"
+        ),
         Index(
             "ix_inbounds_warehouse_product_created_at", "warehouse_id", "product_id", "created_at"
         ),
@@ -180,12 +213,20 @@ class Inbound(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+    # Actor-scoped idempotency, mirroring StockTransfer. NULL for historical
+    # rows and internal legs created before this task; Postgres treats NULL
+    # keys as distinct, so the unique constraint never blocks legacy data.
+    idempotency_key: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class Outbound(IdentifierMixin, Base):
     __tablename__ = "outbounds"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_outbounds_quantity_positive"),
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_outbounds_actor_key"
+        ),
         Index(
             "ix_outbounds_warehouse_product_created_at", "warehouse_id", "product_id", "created_at"
         ),
@@ -206,12 +247,20 @@ class Outbound(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+    # See Inbound: actor-scoped idempotency, NULL for historical/internal rows.
+    idempotency_key: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class StockTransaction(IdentifierMixin, Base):
     __tablename__ = "transactions"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_transactions_quantity_positive"),
+        CheckConstraint(
+            "(transaction_type = 'inbound' AND inbound_id IS NOT NULL AND outbound_id IS NULL) OR "
+            "(transaction_type = 'outbound' AND outbound_id IS NOT NULL AND inbound_id IS NULL)",
+            name="ck_transactions_exactly_one_movement",
+        ),
         Index(
             "ix_transactions_warehouse_product_type_created_at",
             "warehouse_id",
@@ -248,6 +297,100 @@ class StockTransaction(IdentifierMixin, Base):
     )
 
 
+class StockTransfer(IdentifierMixin, Base):
+    """One immediate transfer with immutable original balance snapshots."""
+
+    __tablename__ = "stock_transfers"
+    __table_args__ = (
+        UniqueConstraint("created_by_id", "idempotency_key", name="uq_transfers_actor_key"),
+        UniqueConstraint("outbound_id", name="uq_transfers_outbound"),
+        UniqueConstraint("inbound_id", name="uq_transfers_inbound"),
+        UniqueConstraint("outbound_transaction_id", name="uq_transfers_outbound_transaction"),
+        UniqueConstraint("inbound_transaction_id", name="uq_transfers_inbound_transaction"),
+        CheckConstraint(
+            "source_warehouse_id <> destination_warehouse_id",
+            name="ck_transfers_distinct_warehouses",
+        ),
+        CheckConstraint(
+            "quantity BETWEEN 1 AND 2147483647", name="ck_transfers_quantity_bounds"
+        ),
+        CheckConstraint(
+            "source_quantity_before BETWEEN 0 AND 2147483647 AND "
+            "source_quantity_after BETWEEN 0 AND 2147483647 AND "
+            "destination_quantity_before BETWEEN 0 AND 2147483647 AND "
+            "destination_quantity_after BETWEEN 0 AND 2147483647",
+            name="ck_transfers_balance_bounds",
+        ),
+        Index("ix_transfers_created_at_id", "created_at", "id"),
+    )
+
+    source_warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+    )
+    destination_warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(120))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_quantity_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_quantity_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    destination_quantity_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    destination_quantity_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    outbound_id: Mapped[int] = mapped_column(
+        ForeignKey("outbounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    inbound_id: Mapped[int] = mapped_column(
+        ForeignKey("inbounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    outbound_transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+    inbound_transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+
+
+class MovementProvenance(Base):
+    """Purpose is provenance, never a sales or demand assertion."""
+
+    __tablename__ = "movement_provenance"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound', "
+            "'transfer_in', 'transfer_out', 'purchase_request_fulfillment')",
+            name="ck_provenance_purpose"
+        ),
+        CheckConstraint(
+            "(purpose IN ('transfer_in', 'transfer_out') AND transfer_id IS NOT NULL) OR "
+            "(purpose IN ('legacy_unknown', 'standard_inbound', 'standard_outbound', "
+            "'purchase_request_fulfillment') "
+            "AND transfer_id IS NULL)", name="ck_provenance_transfer_link"
+        ),
+        Index("ix_provenance_transfer_id", "transfer_id"),
+    )
+
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"), primary_key=True
+    )
+    purpose: Mapped[str] = mapped_column(String(30), nullable=False)
+    transfer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("stock_transfers.id", ondelete="RESTRICT"), nullable=True
+    )
+    transaction: Mapped[StockTransaction] = relationship("StockTransaction")
+
+
 class Region(IdentifierMixin, TimestampMixin, Base):
     __tablename__ = "regions"
 
@@ -259,6 +402,9 @@ class PurchaseRequest(IdentifierMixin, TimestampMixin, Base):
     __tablename__ = "purchase_requests"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_purchase_requests_quantity_positive"),
+        Index("ix_purchase_requests_owner_created_id", "requested_by_id", "created_at", "id"),
+        Index("ix_purchase_requests_created_id", "created_at", "id"),
+        Index("ix_purchase_requests_status_created_id", "status", "created_at", "id"),
     )
 
     request_number: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
@@ -285,6 +431,96 @@ class PurchaseRequest(IdentifierMixin, TimestampMixin, Base):
     )
 
 
+class PurchaseRequestWorkflow(Base):
+    """Durable managed history; base requests without this row remain legacy."""
+
+    __tablename__ = "purchase_request_workflows"
+    __table_args__ = (
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_purchase_request_workflows_actor_key"
+        ),
+        UniqueConstraint("outbound_id", name="uq_purchase_request_workflows_outbound"),
+        UniqueConstraint(
+            "outbound_transaction_id", name="uq_purchase_request_workflows_transaction"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND "
+            "length(replace(replace(replace(replace(replace(replace(replace(replace("
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "request_fingerprint,'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),"
+            "'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f','')) = 0",
+            name="ck_pr_workflow_fingerprint",
+        ),
+        CheckConstraint("note IS NULL OR length(note) <= 2000", name="ck_pr_workflow_note"),
+        CheckConstraint(
+            "(decision_kind IS NULL AND decided_by_id IS NULL AND decided_at IS NULL "
+            "AND rejection_reason IS NULL) OR "
+            "(decision_kind IS NOT NULL AND decision_kind = 'approved' "
+            "AND decided_by_id IS NOT NULL AND decided_at IS NOT NULL "
+            "AND rejection_reason IS NULL) OR "
+            "(decision_kind IS NOT NULL AND decision_kind = 'rejected' "
+            "AND decided_by_id IS NOT NULL AND decided_at IS NOT NULL "
+            "AND rejection_reason IS NOT NULL AND rejection_reason = trim(rejection_reason, "
+            "'\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
+            "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000') "
+            "AND length(rejection_reason) BETWEEN 1 AND 1000 "
+            ")",
+            name="ck_pr_workflow_decision",
+        ),
+        CheckConstraint(
+            "(fulfilled_by_id IS NULL AND fulfilled_at IS NULL AND outbound_id IS NULL "
+            "AND outbound_transaction_id IS NULL "
+            "AND quantity_before IS NULL AND quantity_after IS NULL) OR "
+            "(fulfilled_by_id IS NOT NULL AND fulfilled_at IS NOT NULL AND outbound_id IS NOT NULL "
+            "AND outbound_transaction_id IS NOT NULL AND quantity_before IS NOT NULL "
+            "AND quantity_after IS NOT NULL AND decision_kind IS NOT NULL "
+            "AND decision_kind = 'approved')",
+            name="ck_pr_workflow_fulfillment",
+        ),
+        CheckConstraint(
+            "(quantity_before IS NULL AND quantity_after IS NULL) OR "
+            "(quantity_before IS NOT NULL AND quantity_after IS NOT NULL "
+            "AND quantity_after >= 0 AND quantity_after < quantity_before "
+            "AND quantity_before <= 2147483647)",
+            name="ck_pr_workflow_balances",
+        ),
+        CheckConstraint(
+            "(delivery_address IS NULL AND delivery_latitude IS NULL AND "
+            "delivery_longitude IS NULL) OR "
+            "(delivery_address IS NOT NULL AND delivery_latitude IS NOT NULL AND "
+            "delivery_longitude IS NOT NULL AND length(trim(delivery_address)) BETWEEN 1 AND 300 "
+            "AND delivery_latitude BETWEEN -90 AND 90 "
+            "AND delivery_longitude BETWEEN -180 AND 180)",
+            name="ck_pr_workflow_delivery_location",
+        ),
+    )
+
+    purchase_request_id: Mapped[int] = mapped_column(
+        ForeignKey("purchase_requests.id", ondelete="RESTRICT"), primary_key=True
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    delivery_address: Mapped[str | None] = mapped_column(String(300))
+    delivery_latitude: Mapped[float | None] = mapped_column(Float(53))
+    delivery_longitude: Mapped[float | None] = mapped_column(Float(53))
+    decision_kind: Mapped[str | None] = mapped_column(String(8))
+    decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    fulfilled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outbound_id: Mapped[int | None] = mapped_column(ForeignKey("outbounds.id", ondelete="RESTRICT"))
+    outbound_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT")
+    )
+    quantity_before: Mapped[int | None] = mapped_column(Integer)
+    quantity_after: Mapped[int | None] = mapped_column(Integer)
+
+
 class RouteLog(IdentifierMixin, Base):
     __tablename__ = "route_logs"
 
@@ -297,3 +533,8 @@ class RouteLog(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+Index("uq_users_email_lower", func.lower(User.email), unique=True)
+Index("uq_products_sku_upper", func.upper(Product.sku), unique=True)
+Index("uq_warehouses_code_upper", func.upper(Warehouse.code), unique=True)

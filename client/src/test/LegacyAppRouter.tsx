@@ -1,0 +1,124 @@
+// TEST ONLY: historical feature capability harness. Never import from the application entry.
+import type { ReactNode } from 'react'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { AppShell } from '../app/AppShell'
+import { landingPathForRole, navigationForRole, navigationItems } from '../app/navigation'
+import { useAuth } from '../features/auth/useAuth'
+import { AuthLoading, RequireAuth } from '../features/auth/RequireAuth'
+import { RequireRole } from '../features/auth/RequireRole'
+import { LoginPage } from '../features/auth/LoginPage'
+import { RegisterPage } from '../features/auth/RegisterPage'
+import { DashboardPage } from '../features/dashboard/DashboardPage'
+import { UsersPage } from '../features/users/UsersPage'
+import { AuditPage } from '../features/audit/AuditPage'
+import { CategoriesPage } from '../features/categories/CategoriesPage'
+import { SuppliersPage } from '../features/suppliers/SuppliersPage'
+import { ProductsPage } from '../features/products/ProductsPage'
+import { WarehousesPage } from '../features/warehouses/WarehousesPage'
+import { InboundPage } from '../features/inventory/InboundPage'
+import { OutboundPage } from '../features/inventory/OutboundPage'
+import { StockPage } from '../features/inventory/StockPage'
+import { TransactionsPage } from '../features/transactions/TransactionsPage'
+
+const featureRoutes = navigationItems.filter((item) => !['/dashboard', '/users', '/audit', '/categories', '/suppliers', '/products', '/warehouses', '/stock', '/inbounds', '/outbounds', '/transactions'].includes(item.href)).map((item) => ({
+  path: item.href,
+  label: item.label,
+  roles: item.roles,
+}))
+
+function AnonymousOnly({ children }: { children: ReactNode }) {
+  const { status, user } = useAuth()
+  const location = useLocation()
+  if (status === 'loading') return <AuthLoading />
+  if (user) {
+    const state = location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null
+    const path = state?.from?.pathname
+    const destination = path?.startsWith('/') && !path.startsWith('//')
+      ? `${path}${state?.from?.search ?? ''}${state?.from?.hash ?? ''}`
+      : landingPathForRole(user.role)
+    return <Navigate to={destination} replace />
+  }
+  return children
+}
+
+function ProtectedShell() {
+  const auth = useAuth()
+  const location = useLocation()
+  if (!auth.user) return <AuthLoading />
+
+  return (
+    <AppShell
+      title="Smart Warehouse"
+      activePath={location.pathname}
+      navigationItems={navigationForRole(auth.user.role)}
+      utility={
+        <>
+          <span className="current-account">{auth.user.email}<span className="role-chip">{auth.user.role}</span></span>
+          <button className="quiet" type="button" onClick={auth.logout}>Sign out</button>
+        </>
+      }
+    >
+      <Outlet />
+    </AppShell>
+  )
+}
+
+function HomeRedirect() {
+  const { user } = useAuth()
+  return <Navigate to={user ? landingPathForRole(user.role) : '/login'} replace />
+}
+
+function FeaturePlaceholder({ label }: { label: string }) {
+  return (
+    <section className="route-placeholder" aria-labelledby="feature-heading">
+      <p className="kicker">Phase 1 workspace</p>
+      <h2 id="feature-heading">{label}</h2>
+      <p>This screen will be completed in a later Phase 1 workstream.</p>
+    </section>
+  )
+}
+
+function ForbiddenPage() {
+  return (
+    <section className="route-placeholder" aria-labelledby="permission-heading">
+      <p className="kicker">Access control</p>
+      <h2 id="permission-heading">Permission required</h2>
+      <p>You do not have permission to view this section.</p>
+    </section>
+  )
+}
+
+export function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/login" element={<AnonymousOnly><LoginPage /></AnonymousOnly>} />
+      <Route path="/register" element={<AnonymousOnly><RegisterPage /></AnonymousOnly>} />
+      <Route element={<RequireAuth />}>
+        <Route element={<ProtectedShell />}>
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/forbidden" element={<ForbiddenPage />} />
+          <Route path="/dashboard" element={<RequireRole allow={['admin']}><DashboardPage /></RequireRole>} />
+          <Route path="/users" element={<RequireRole allow={['admin']}><UsersPage /></RequireRole>} />
+          <Route path="/audit" element={<RequireRole allow={['admin']}><AuditPage /></RequireRole>} />
+          <Route path="/categories" element={<RequireRole allow={['admin', 'warehouse', 'client']}><CategoriesPage /></RequireRole>} />
+          <Route path="/products" element={<RequireRole allow={['admin', 'warehouse', 'client']}><ProductsPage /></RequireRole>} />
+          <Route path="/suppliers" element={<RequireRole allow={['admin', 'warehouse']}><SuppliersPage /></RequireRole>} />
+          <Route path="/warehouses" element={<RequireRole allow={['admin', 'warehouse', 'client']}><WarehousesPage /></RequireRole>} />
+          <Route path="/stock" element={<RequireRole allow={['admin', 'warehouse', 'client']}><StockPage /></RequireRole>} />
+          <Route path="/inbounds" element={<RequireRole allow={['admin', 'warehouse']}><InboundPage /></RequireRole>} />
+          <Route path="/outbounds" element={<RequireRole allow={['admin', 'warehouse']}><OutboundPage /></RequireRole>} />
+          <Route path="/transactions" element={<RequireRole allow={['admin', 'warehouse']}><TransactionsPage /></RequireRole>} />
+          {featureRoutes.map((route) => (
+            <Route key={route.path} path={route.path} element={
+              <RequireRole allow={route.roles}>
+                <FeaturePlaceholder label={route.label} />
+              </RequireRole>
+            } />
+          ))}
+          <Route path="*" element={<HomeRedirect />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/products" replace />} />
+    </Routes>
+  )
+}

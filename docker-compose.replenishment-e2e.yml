@@ -1,0 +1,112 @@
+name: sw-m7-replenishment-e2e
+services:
+  db:
+    image: sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    pull_policy: never
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+    environment:
+      POSTGRES_DB: ${M7_DB_NAME:?required}
+      POSTGRES_USER: ${M7_DB_USER:?required}
+      POSTGRES_PASSWORD: ${M7_DB_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    image: sha256:efaef359acf97e4beb5b50fccc42b3ab86615c61e815e148e3e408c6f3b78bca
+    pull_policy: never
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+    environment:
+      DATABASE_URL: ${M7_DATABASE_URL:?required}
+    volumes:
+      - type: bind
+        source: ${M7_STAGED_APP:?required}
+        target: /app/app
+        read_only: true
+    command: [alembic, upgrade, head]
+    networks: [internal]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+  bootstrap:
+    image: sha256:efaef359acf97e4beb5b50fccc42b3ab86615c61e815e148e3e408c6f3b78bca
+    pull_policy: never
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+    environment:
+      DATABASE_URL: ${M7_DATABASE_URL:?required}
+      SEED_ADMIN_EMAIL: ${M7_ADMIN_EMAIL:?required}
+      SEED_ADMIN_PASSWORD: ${M7_ADMIN_PASSWORD:?required}
+      SEED_WAREHOUSE_EMAIL: ${M7_WAREHOUSE_EMAIL:?required}
+      SEED_WAREHOUSE_PASSWORD: ${M7_WAREHOUSE_PASSWORD:?required}
+      SEED_CLIENT_EMAIL: ${M7_CLIENT_EMAIL:?required}
+      SEED_CLIENT_PASSWORD: ${M7_CLIENT_PASSWORD:?required}
+    volumes:
+      - type: bind
+        source: ${M7_STAGED_APP:?required}
+        target: /app/app
+        read_only: true
+    command: [python, -m, app.seed]
+    networks: [internal]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+  api:
+    image: sha256:efaef359acf97e4beb5b50fccc42b3ab86615c61e815e148e3e408c6f3b78bca
+    pull_policy: never
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+    environment:
+      APP_ENV: integration
+      DATABASE_URL: ${M7_DATABASE_URL:?required}
+      JWT_SECRET_KEY: ${M7_JWT_SECRET:?required}
+      SEED_CLIENT_EMAIL: ${M7_CLIENT_EMAIL:?required}
+      FORECAST_CATALOG_ROOT: /forecast-catalog
+      FORECAST_ALLOW_FIXTURE: 'true'
+      REPLENISHMENT_CATALOG_ROOT: /replenishment-catalog
+      REPLENISHMENT_ALLOW_FIXTURE: 'true'
+    volumes:
+      - type: bind
+        source: ${M7_STAGED_APP:?required}
+        target: /app/app
+        read_only: true
+      - type: bind
+        source: ${M7_FORECAST_CATALOG:?required}
+        target: /forecast-catalog
+        read_only: true
+      - type: bind
+        source: ${M7_REPLENISHMENT_CATALOG:?required}
+        target: /replenishment-catalog
+        read_only: true
+    networks: [internal]
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2).read()"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  web:
+    image: sha256:5c0b47b7b23d7e65adcfbe11a44bb2988f46df44543e6d856bae87c73309af3d
+    pull_policy: never
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+    volumes:
+      - type: bind
+        source: ${M7_STAGED_DIST:?required}
+        target: /usr/share/nginx/html
+        read_only: true
+    networks: [internal]
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - '127.0.0.1:58082:8080'
+volumes:
+  database:
+    name: sw-m7-replenishment-e2e-data
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
+networks:
+  internal:
+    name: sw-m7-replenishment-e2e-net
+    labels: { task: implement-replenishment-policy, role: isolated-e2e }
