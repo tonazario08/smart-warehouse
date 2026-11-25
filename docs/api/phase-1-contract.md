@@ -72,11 +72,13 @@ Responses add `id` and otherwise expose the corresponding safe fields. Passwords
 | `GET /stock` | admin, warehouse, client | Inventory filters and pagination | `200 Page<StockResponse>` |
 | `GET /stock/{stock_id}` | admin, warehouse, client | Path ID | `200 StockResponse` |
 | `GET /inbounds` | admin, warehouse | Inventory filters and pagination | `200 Page<InventoryMovementReadResponse>` |
+| `GET /inbounds/by-key/{key}` | admin, warehouse | Actor-owned UUID path | `200 InventoryMovementReadResponse` |
 | `GET /inbounds/{inbound_id}` | admin, warehouse | Path ID | `200 InventoryMovementReadResponse` |
-| `POST /inbounds` | admin, warehouse | `InventoryMovementCreate` | `201 InventoryMovementResponse` |
+| `POST /inbounds` | admin, warehouse | `InventoryMovementCreate` + required `Idempotency-Key` UUID header | `201 InventoryMovementResponse`, replay `200` |
 | `GET /outbounds` | admin, warehouse | Inventory filters and pagination | `200 Page<InventoryMovementReadResponse>` |
+| `GET /outbounds/by-key/{key}` | admin, warehouse | Actor-owned UUID path | `200 InventoryMovementReadResponse` |
 | `GET /outbounds/{outbound_id}` | admin, warehouse | Path ID | `200 InventoryMovementReadResponse` |
-| `POST /outbounds` | admin, warehouse | `InventoryMovementCreate` | `201 InventoryMovementResponse` |
+| `POST /outbounds` | admin, warehouse | `InventoryMovementCreate` + required `Idempotency-Key` UUID header | `201 InventoryMovementResponse`, replay `200` |
 | `GET /transactions` | admin, warehouse | Transaction filters and pagination | `200 Page<TransactionResponse>` |
 | `GET /transactions/{transaction_id}` | admin, warehouse | Path ID | `200 TransactionResponse` |
 
@@ -84,7 +86,9 @@ Responses add `id` and otherwise expose the corresponding safe fields. Passwords
 
 Inventory filters are optional `warehouse_id`, `product_id`, `created_from`, and `created_to`. Datetime filters must include a timezone and `created_from` cannot be later than `created_to`. Transaction lists additionally accept `transaction_type` as `inbound` or `outbound`. Unknown inventory query fields are rejected.
 
-`InventoryMovementCreate` is `{warehouse_id, product_id, quantity, reference?, note?}`. Validated `quantity` is an integer in `1..2147483647`; optional/null `reference` is limited to 120 characters. Violations return `422 REQUEST_VALIDATION_ERROR` with the corresponding field key. The create response adds `id`; read responses also include `created_by_id` and `created_at`.
+`InventoryMovementCreate` is `{warehouse_id, product_id, quantity, reference?, note?}`. Validated `quantity` is an integer in `1..2147483647`; optional/null `reference` is limited to 120 characters. `reference` and `note` are trimmed; a blank value becomes null. Violations return `422 REQUEST_VALIDATION_ERROR` with the corresponding field key. The create response adds `id`; read responses also include `created_by_id` and `created_at`.
+
+Creating an inbound or outbound requires exactly one `Idempotency-Key` UUID header, owned by the current actor. The same actor, key and normalized body replays the original record with `200` and no second stock change; the same key with a different body returns `409 IDEMPOTENCY_KEY_CONFLICT`; a missing or non-UUID key returns `422 REQUEST_VALIDATION_ERROR` and writes nothing. A key is scoped to its actor and movement type, so another actor reusing the same key creates a separate record and cannot read the first actor's record through `GET /inbounds/by-key/{key}` or `GET /outbounds/by-key/{key}` (unknown keys return `404`). When the commit outcome is uncertain the API returns `503 INBOUND_RETRY_REQUIRED` or `503 OUTBOUND_RETRY_REQUIRED` with `Retry-After: 1`; the caller must retry exactly the same body and key. Internal callers (transfer legs, purchase-request fulfilment) do not go through this API and keep working without a key; historical rows have a null key.
 
 Inbound atomically increases stock. A valid movement quantity whose addition would exceed stock balance `2147483647` returns `409 STOCK_QUANTITY_LIMIT_EXCEEDED`, not a database overflow/500. Outbound atomically decreases stock and returns `409 INSUFFICIENT_STOCK` rather than permitting a negative balance. Rejected movements roll back the complete unit, with no partial stock, movement or immutable transaction writes; the overflow guarantee also applies to competing first inbounds.
 

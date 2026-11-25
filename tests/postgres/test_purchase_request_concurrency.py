@@ -77,12 +77,13 @@ def test_fulfillment_contends_with_real_writers(postgres_session, postgres_engin
                 if scenario in ("duplicate", "competing"):
                     return service_for(session).fulfill(actor(session, ids, "admin"), second_id)
                 if scenario == "outbound":
-                    return InventoryService(InventoryRepository(session)).create_outbound(
+                    outbound, _ = InventoryService(InventoryRepository(session)).create_outbound(
                         ids["warehouse"],
                         InventoryMovementCreate(
                             warehouse_id=ids["source"], product_id=ids["product"], quantity=7
                         ),
                     )
+                    return outbound
                 return TransferService(TransferRepository(session)).create(
                     ids["warehouse"],
                     uuid4(),

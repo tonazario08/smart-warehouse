@@ -205,12 +205,13 @@ def test_waiting_outbound_uses_quantity_committed_by_inbound(
     def ship() -> str:
         with Session(postgres_engine) as session:
             worker_pid.append(session.scalar(text("SELECT pg_backend_pid()")))
-            return InventoryService(InventoryRepository(session)).create_outbound(
+            outbound, _ = InventoryService(InventoryRepository(session)).create_outbound(
                 operator_id,
                 InventoryMovementCreate(
                     warehouse_id=warehouse_id, product_id=product_id, quantity=8
                 ),
-            ).id.__str__()
+            )
+            return outbound.id.__str__()
 
     event.listen(Engine, "before_cursor_execute", observe_lock_query)
     try:

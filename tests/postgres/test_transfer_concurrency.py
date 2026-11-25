@@ -298,7 +298,7 @@ def test_controlled_overlapping_writers_observed_by_postgres(
                     .create_inbound(
                         ids[0],
                         InventoryMovementCreate(warehouse_id=ids[2], product_id=ids[3], quantity=4),
-                    )
+                    )[0]
                     .id
                 )
             request = request_for(ids, 4 if scenario == "first_destination" else 3)

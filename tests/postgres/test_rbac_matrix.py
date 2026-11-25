@@ -1,5 +1,7 @@
 """PostgreSQL-backed success and denial coverage for Phase 1 route actions."""
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import inspect, select
 from sqlalchemy.engine import Engine
@@ -377,7 +379,9 @@ def test_route_action_matrix_uses_valid_success_payloads_for_each_allowed_role(
             json_payload["reference"] += f"-{role.value}"
         if payload_key == "user":
             json_payload["email"] = f"matrix-created-{role.value}@example.com"
-        options = {"headers": data["headers"][role]}
+        options = {"headers": dict(data["headers"][role])}
+        if payload_key == "movement":
+            options["headers"]["Idempotency-Key"] = str(uuid4())
         if json_payload is not None:
             options["json"] = json_payload
         if method == "delete":

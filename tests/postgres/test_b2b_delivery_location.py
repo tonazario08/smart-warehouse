@@ -199,7 +199,10 @@ def test_pre_migration_managed_request_keeps_original_identity(purchase_migratio
             params | {"id": oid},
         )
         session.commit()
-    command.upgrade(config, "20261122_0012")
+    # Upgrade past the delivery-location migration (20261122_0012). The app
+    # also needs the 20261125_0013 idempotency columns on inbounds/outbounds
+    # before it can fulfil: the request itself still predates 0012.
+    command.upgrade(config, "20261125_0013")
     settings = Settings(
         app_env="test",
         database_url=engine.url.render_as_string(hide_password=False),

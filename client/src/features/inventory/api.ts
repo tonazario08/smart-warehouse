@@ -1,10 +1,17 @@
 import type { ApiClient } from '../../shared/api/ApiClient'
 import { collectAllPages } from '../../shared/api/collectAllPages'
+import type { MovementInputLike } from '../../shared/api/movementIdempotency'
 import type { Product } from '../products/types'
 import { createProductsApi, productKeys } from '../products/api'
 import type { Warehouse } from '../warehouses/types'
 import { createWarehousesApi, warehouseKeys } from '../warehouses/api'
 import type { InventoryFilters, MovementCreateResponse, MovementInput, MovementPageData, MovementRow, StockPageData, StockRow } from './types'
+
+/** Accepts both the form input (optional text) and a stored pending input (explicit nulls). */
+export type MovementCreateInput = Omit<MovementInputLike, 'reference' | 'note'> & {
+  reference?: string | null
+  note?: string | null
+}
 
 export const stockKeys = {
   all: ['stock'] as const,
@@ -45,8 +52,10 @@ export const createInventoryApi = (client: ApiClient) => {
   listStock: (filters: InventoryFilters) => client.request<StockPageData>(`/stock?${makeParams(filters)}`),
   listInbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/inbounds?${makeParams(filters)}`),
   listOutbounds: (filters: InventoryFilters) => client.request<MovementPageData>(`/outbounds?${makeParams(filters)}`),
-  createInbound: (input: MovementInput) => client.request<MovementCreateResponse>('/inbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
-  createOutbound: (input: MovementInput) => client.request<MovementCreateResponse>('/outbounds', { method: 'POST', body: JSON.stringify(normalizeMovement(input)) }),
+  createInbound: (input: MovementCreateInput, key: string) => client.request<MovementCreateResponse>('/inbounds', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(normalizeMovement(input)) }),
+  createOutbound: (input: MovementCreateInput, key: string) => client.request<MovementCreateResponse>('/outbounds', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(normalizeMovement(input)) }),
+  getInboundByKey: (key: string) => client.request<MovementCreateResponse>('/inbounds/by-key/' + encodeURIComponent(key)),
+  getOutboundByKey: (key: string) => client.request<MovementCreateResponse>('/outbounds/by-key/' + encodeURIComponent(key)),
   listProducts: () => collectAllPages((page) => productsApi.list({ page, pageSize: 100, search: '', categoryId: '', supplierId: '', isActive: '' })),
   listWarehouses: () => collectAllPages((page) => warehousesApi.list({ page, pageSize: 100, search: '' })),
   getProduct: (id: number) => client.request<Product>(`/products/${id}`),
@@ -54,7 +63,7 @@ export const createInventoryApi = (client: ApiClient) => {
   }
 }
 
-function normalizeMovement(input: MovementInput): MovementInput {
+function normalizeMovement(input: MovementCreateInput): MovementInput {
   const reference = input.reference?.trim()
   const note = input.note?.trim()
   return {

@@ -271,7 +271,7 @@ def seed_records(session: Session, roles: dict[UserRole, User]) -> int:
     movements = InventoryService(InventoryRepository(session))
     for code, quantity in (("ROAD", 30), ("DETOUR", 8), ("DISCONNECTED", 8), ("NO-POINT", 10),
                            ("OUTSIDE", 6)):
-        inbound = movements.create_inbound(operator.id, InventoryMovementCreate(
+        inbound, _ = movements.create_inbound(operator.id, InventoryMovementCreate(
             warehouse_id=sites[code].id, product_id=product.id, quantity=quantity,
             reference=f"M10-GIS-IN-{code}",
         ))
@@ -319,7 +319,7 @@ def seed_records(session: Session, roles: dict[UserRole, User]) -> int:
         set_movement_time(session, transfer.inbound_transaction_id, stamp)
         set_movement_time(session, transfer.outbound_transaction_id, stamp)
 
-    outbound = movements.create_outbound(operator.id, InventoryMovementCreate(
+    outbound, _ = movements.create_outbound(operator.id, InventoryMovementCreate(
         warehouse_id=sites["ROAD"].id, product_id=product.id, quantity=1,
         reference="M10-GIS-STANDARD-OUT",
     ))

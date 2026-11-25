@@ -4,6 +4,15 @@ import { ApiError, api } from '../api'
 import { useAuth } from '../app/AuthProvider'
 import './movements.css'
 import searchIcon from '../shared/assets/figma/search.svg'
+import {
+  browserSessionStorage,
+  clearPendingMovement,
+  movementFingerprint,
+  newMovementKey,
+  readPendingMovement,
+  savePendingMovement,
+  type PendingMovement,
+} from '../shared/api/movementIdempotency'
 import { buildMovementRows, filterMovementRows, type MovementType } from '../shared/lib/movements'
 import { formatQuantity } from '../shared/lib/formatters'
 import { Button } from '../shared/ui/Button'
@@ -122,6 +131,27 @@ export function MovementFormPage({ type }: { type: MovementType }) {
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState('')
   const [stockRetry, setStockRetry] = useState(0)
+  const [uncertain, setUncertain] = useState(false)
+  const [recoveryMessage, setRecoveryMessage] = useState('')
+  const [attempt, setAttempt] = useState<PendingMovement | null>(null)
+
+  // Reload recovery (D-05): a create whose outcome is unknown keeps its
+  // idempotency key in sessionStorage, so the form can offer the exact same
+  // request again instead of creating a duplicate movement. The effect only
+  // runs when the account or the direction changes, never on user edits.
+  useEffect(() => {
+    if (!user?.id) return
+    const stored = readPendingMovement(browserSessionStorage(), user.id, type)
+    if (!stored) return
+    setAttempt(stored)
+    setUncertain(true)
+    setRecoveryMessage('Phiếu này chưa xác định kết quả sau lần gửi trước. Thử lại cùng yêu cầu để tránh tạo trùng.')
+    setWarehouseId(current => current || String(stored.input.warehouse_id))
+    setProductId(current => current || String(stored.input.product_id))
+    setQuantity(current => current || String(stored.input.quantity))
+    setReference(current => current || stored.input.reference || '')
+    setNote(current => current || stored.input.note || '')
+  }, [type, user?.id])
 
   useEffect(() => {
     if (!token) return
@@ -171,28 +201,71 @@ export function MovementFormPage({ type }: { type: MovementType }) {
   const validAmount = quantity.trim() !== '' && Number.isSafeInteger(amount) && amount > 0 && amount <= 2_147_483_647
   const afterStock = currentStock !== null && validAmount ? currentStock + (type === 'inbound' ? amount : -amount) : null
   const selectedProduct = products.find(product => product.id === Number(productId))
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!token || saving || !loaded) return
-    if (!warehouseId || !productId || !validAmount) { setMessage('Vui lòng chọn kho, sản phẩm và nhập số lượng nguyên dương hợp lệ.'); return }
-    if (reference.trim().length > 120) { setMessage('Mã phiếu không được vượt quá 120 ký tự.'); return }
+  const sendAttempt = async (current: PendingMovement) => {
+    if (!token || saving) return
     setSaving(true)
     setMessage('')
+    setRecoveryMessage('')
     try {
-      const input = { warehouse_id: Number(warehouseId), product_id: Number(productId), quantity: amount, reference: reference.trim() || null, note: note.trim() || null }
-      if (type === 'inbound') await api.createInbound(token, input)
-      else await api.createOutbound(token, input)
+      const create = type === 'inbound' ? api.createInbound : api.createOutbound
+      await create(token, current.input, current.key)
+      if (user?.id) clearPendingMovement(browserSessionStorage(), user.id, type)
+      setAttempt(null)
+      setUncertain(false)
       navigate('/' + type)
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) { if (!cause.staleSession) logout() }
-      else setMessage(errorMessage(cause))
+      else if (cause instanceof ApiError && cause.status < 500 && cause.status !== 408) {
+        // Definitive rejection (validation, conflict, insufficient stock):
+        // the key is spent, so a later submit must use a fresh key.
+        if (user?.id) clearPendingMovement(browserSessionStorage(), user.id, type)
+        setAttempt(null)
+        setUncertain(false)
+        setMessage(errorMessage(cause))
+      } else {
+        // Timeout, lost connection, or 5xx/503: the outcome is unknown.
+        // Keep the key so the exact same request can be retried or looked up.
+        setUncertain(true)
+        setRecoveryMessage(cause instanceof ApiError ? cause.message : 'Không thể xác định kết quả. Yêu cầu có thể đã được ghi nhận.')
+      }
       setStockRetry(value => value + 1)
     } finally { setSaving(false) }
+  }
+  const discardAttempt = () => {
+    if (user?.id) clearPendingMovement(browserSessionStorage(), user.id, type)
+    setAttempt(null)
+    setUncertain(false)
+    setRecoveryMessage('')
+    setMessage('Đã hủy khôi phục. Kiểm tra danh sách phiếu trước khi tạo phiếu mới để tránh trùng.')
+  }
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!token || saving || !loaded || uncertain) return
+    if (!warehouseId || !productId || !validAmount) { setMessage('Vui lòng chọn kho, sản phẩm và nhập số lượng nguyên dương hợp lệ.'); return }
+    if (reference.trim().length > 120) { setMessage('Mã phiếu không được vượt quá 120 ký tự.'); return }
+    const input = { warehouse_id: Number(warehouseId), product_id: Number(productId), quantity: amount, reference: reference.trim() || null, note: note.trim() || null }
+    const fingerprint = movementFingerprint(input)
+    const current = attempt && attempt.fingerprint === fingerprint
+      ? attempt
+      : { key: newMovementKey(), direction: type, fingerprint, input }
+    setAttempt(current)
+    if (user?.id) savePendingMovement(browserSessionStorage(), user.id, type, current.key, input)
+    await sendAttempt(current)
   }
 
   return <section className="movement-form-page">
     <PageHeader title={'Tạo phiếu ' + direction(type)} description={type === 'inbound' ? 'Ghi nhận hàng hóa nhập vào kho.' : 'Ghi nhận hàng hóa xuất khỏi kho.'} />
     {message && <FeedbackMessage variant="error">{message}</FeedbackMessage>}
+    {uncertain && attempt && <section className="movement-recovery" aria-live="polite">
+      <h2>Chưa xác định kết quả</h2>
+      <p>Yêu cầu có thể đã được ghi nhận. Thử lại cùng yêu cầu để tránh tạo trùng phiếu.</p>
+      {recoveryMessage && <p>{recoveryMessage}</p>}
+      <div className="ui-form-actions">
+        <Button disabled={saving} onClick={() => void sendAttempt(attempt)}>Thử lại cùng yêu cầu</Button>
+        <Button disabled={saving} variant="secondary" onClick={discardAttempt}>Hủy khôi phục và tạo phiếu mới</Button>
+      </div>
+      {saving && <p>Đang xử lý cùng yêu cầu...</p>}
+    </section>}
     {loading ? <FeedbackMessage>Đang tải dữ liệu biểu mẫu...</FeedbackMessage> : !loaded ? <Button onClick={() => setRetry(value => value + 1)}>Thử lại</Button> :
       <form className="ui-form-card" onSubmit={submit}>
         <fieldset className="ui-form-fields ui-form-section" disabled={saving}>
@@ -208,7 +281,7 @@ export function MovementFormPage({ type }: { type: MovementType }) {
           </div>
           <Input label="Ghi chú" value={note} onChange={event => setNote(event.target.value)} placeholder="Nhập ghi chú (không bắt buộc)" />
         </fieldset>
-        <div className="ui-form-actions"><Button disabled={saving} onClick={() => navigate('/' + type)} variant="secondary">Hủy</Button><Button isLoading={saving} type="submit">Xác nhận {type === 'inbound' ? 'nhập kho' : 'xuất kho'}</Button></div>
+        <div className="ui-form-actions"><Button disabled={saving} onClick={() => navigate('/' + type)} variant="secondary">Hủy</Button><Button disabled={uncertain} isLoading={saving} type="submit">Xác nhận {type === 'inbound' ? 'nhập kho' : 'xuất kho'}</Button></div>
         <section className="movement-stock-impact" aria-live="polite">
           <h2>{type === 'inbound' ? 'Ảnh hưởng tồn kho' : 'Kiểm tra tồn kho'}</h2>
           {!warehouseId || !productId ? <p>Chọn kho và sản phẩm để xem ảnh hưởng tồn kho.</p> : stockLoading ? <p>Đang kiểm tra tồn kho...</p> : stockError ? <><FeedbackMessage variant="error">{stockError}</FeedbackMessage><Button onClick={() => setStockRetry(value => value + 1)} size="small" variant="secondary">Thử lại</Button></> : <dl>

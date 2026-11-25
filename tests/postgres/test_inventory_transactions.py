@@ -1,5 +1,7 @@
 """PostgreSQL-backed inventory write atomicity and API contract tests."""
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -64,8 +66,8 @@ def test_successful_movements_commit_stock_and_one_linked_business_audit(invento
         note="receipt",
     )
 
-    inbound = data["service"].create_inbound(data["operator"].id, movement)
-    outbound = data["service"].create_outbound(
+    inbound, _ = data["service"].create_inbound(data["operator"].id, movement)
+    outbound, _ = data["service"].create_outbound(
         data["operator"].id, movement.model_copy(update={"quantity": 3, "reference": "SO-1"})
     )
 
@@ -104,7 +106,10 @@ def test_inbound_stock_overflow_returns_conflict_without_partial_writes(
             "product_id": data["product"].id,
             "quantity": 1,
         },
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": str(uuid4()),
+        },
     )
 
     assert response.status_code == 409
@@ -130,7 +135,10 @@ def test_inventory_write_rejects_database_bound_violations_without_writes(
             "quantity": 1,
             **invalid,
         },
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": str(uuid4()),
+        },
     )
 
     assert response.status_code == 422
@@ -217,10 +225,12 @@ def test_inventory_write_routes_keep_response_shape_and_enforce_write_rbac(
         "quantity": 6,
     }
     admin_headers = {
-        "Authorization": f"Bearer {create_access_token(data['admin'].id, unit_settings)}"
+        "Authorization": f"Bearer {create_access_token(data['admin'].id, unit_settings)}",
+        "Idempotency-Key": str(uuid4()),
     }
     operator_headers = {
-        "Authorization": f"Bearer {create_access_token(data['operator'].id, unit_settings)}"
+        "Authorization": f"Bearer {create_access_token(data['operator'].id, unit_settings)}",
+        "Idempotency-Key": str(uuid4()),
     }
     client_headers = {
         "Authorization": f"Bearer {create_access_token(data['client'].id, unit_settings)}"

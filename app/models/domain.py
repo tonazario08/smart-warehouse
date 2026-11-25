@@ -177,6 +177,9 @@ class Inbound(IdentifierMixin, Base):
     __tablename__ = "inbounds"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_inbounds_quantity_positive"),
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_inbounds_actor_key"
+        ),
         Index(
             "ix_inbounds_warehouse_product_created_at", "warehouse_id", "product_id", "created_at"
         ),
@@ -197,12 +200,20 @@ class Inbound(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+    # Actor-scoped idempotency, mirroring StockTransfer. NULL for historical
+    # rows and internal legs created before this task; Postgres treats NULL
+    # keys as distinct, so the unique constraint never blocks legacy data.
+    idempotency_key: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class Outbound(IdentifierMixin, Base):
     __tablename__ = "outbounds"
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_outbounds_quantity_positive"),
+        UniqueConstraint(
+            "created_by_id", "idempotency_key", name="uq_outbounds_actor_key"
+        ),
         Index(
             "ix_outbounds_warehouse_product_created_at", "warehouse_id", "product_id", "created_at"
         ),
@@ -223,6 +234,9 @@ class Outbound(IdentifierMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+    # See Inbound: actor-scoped idempotency, NULL for historical/internal rows.
+    idempotency_key: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class StockTransaction(IdentifierMixin, Base):

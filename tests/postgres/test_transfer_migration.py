@@ -74,7 +74,14 @@ def test_historical_balances_and_movements_survive_with_honest_unknown_provenanc
     assert "movement_provenance" in inspect(engine).get_table_names()
     with engine.connect() as connection:
         for table, rows in before.items():
-            assert connection.execute(text(f"SELECT * FROM {table} ORDER BY id")).all() == rows
+            # The 20261125_0013 migration adds two nullable idempotency
+            # columns to inbounds/outbounds. Historical rows keep their
+            # original values and the new columns stay NULL (covered by
+            # test_inventory_idempotency_migration.py), so compare only the
+            # pre-upgrade columns here.
+            after = connection.execute(text(f"SELECT * FROM {table} ORDER BY id")).all()
+            width = len(rows[0]) if rows else 0
+            assert [tuple(row)[:width] for row in after] == [tuple(row) for row in rows]
         assert connection.execute(
             text(
                 "SELECT transaction_id,purpose,transfer_id FROM movement_provenance "

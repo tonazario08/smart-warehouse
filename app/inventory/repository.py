@@ -1,8 +1,10 @@
 """Inventory read queries and persistence primitives."""
 
+from hashlib import sha256
 from typing import Literal
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -177,13 +179,63 @@ class InventoryRepository:
         stock_id = self.session.scalar(statement)
         return self.session.get(Stock, stock_id) if stock_id is not None else None
 
-    def add_inbound(self, movement: InventoryMovementCreate, actor_id: int) -> Inbound:
-        inbound = Inbound(**movement.model_dump(), created_by_id=actor_id)
+    def lock_movement_key(self, actor_id: int, key: UUID, domain: str) -> None:
+        """Serialize concurrent creates for one actor/key, mirroring transfers.
+
+        The advisory lock is transaction-scoped, so it is released by the
+        commit/rollback that ends the attempt. A distinct domain per movement
+        type keeps inbound, outbound and transfer keys independent.
+        """
+        domain_key = f"smart-warehouse:{domain}:v1\0{actor_id}\0{key}".encode()
+        lock_id = int.from_bytes(sha256(domain_key).digest()[:8], "big", signed=True)
+        self.session.execute(text("SET LOCAL lock_timeout = '3s'"))
+        self.session.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
+
+    def find_inbound_by_key(self, actor_id: int, key: UUID) -> Inbound | None:
+        return self.session.scalar(
+            select(Inbound)
+            .where(Inbound.created_by_id == actor_id, Inbound.idempotency_key == key)
+            .execution_options(populate_existing=True)
+        )
+
+    def find_outbound_by_key(self, actor_id: int, key: UUID) -> Outbound | None:
+        return self.session.scalar(
+            select(Outbound)
+            .where(Outbound.created_by_id == actor_id, Outbound.idempotency_key == key)
+            .execution_options(populate_existing=True)
+        )
+
+    def add_inbound(
+        self,
+        movement: InventoryMovementCreate,
+        actor_id: int,
+        *,
+        key: UUID | None = None,
+        fingerprint: str | None = None,
+    ) -> Inbound:
+        inbound = Inbound(
+            **movement.model_dump(),
+            created_by_id=actor_id,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
+        )
         self.session.add(inbound)
         return inbound
 
-    def add_outbound(self, movement: InventoryMovementCreate, actor_id: int) -> Outbound:
-        outbound = Outbound(**movement.model_dump(), created_by_id=actor_id)
+    def add_outbound(
+        self,
+        movement: InventoryMovementCreate,
+        actor_id: int,
+        *,
+        key: UUID | None = None,
+        fingerprint: str | None = None,
+    ) -> Outbound:
+        outbound = Outbound(
+            **movement.model_dump(),
+            created_by_id=actor_id,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
+        )
         self.session.add(outbound)
         return outbound
 

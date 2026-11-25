@@ -1,10 +1,13 @@
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.auth.dependencies import Permission, require_permission
+from app.core.errors import DomainError, ErrorResponse
 from app.core.pagination import Page, PageParams
 from app.db.session import get_session
 from app.inventory.repository import InventoryRepository
@@ -27,6 +30,39 @@ from app.models import (
 )
 
 router = APIRouter(tags=["inventory"])
+
+
+def invalid(location: str, field: str) -> None:
+    raise RequestValidationError(
+        [{"loc": (location, field), "msg": "Invalid value.", "type": "value_error"}]
+    )
+
+
+def parse_uuid(value: str, location: str, field: str) -> UUID:
+    try:
+        return UUID(value)
+    except (ValueError, TypeError, AttributeError):
+        invalid(location, field)
+
+
+def movement_result(operation, retry_code: str):
+    """Run a movement write, mapping an ambiguous commit to a 503 envelope."""
+    try:
+        return operation()
+    except DomainError as error:
+        if error.code != retry_code:
+            raise
+        return JSONResponse(
+            status_code=503,
+            headers={"Retry-After": "1"},
+            content={
+                "detail": {
+                    "code": error.code,
+                    "message": error.message,
+                    "fields": error.fields,
+                }
+            },
+        )
 
 
 def get_page_params(request: Request) -> PageParams:
@@ -99,6 +135,17 @@ def list_inbounds(
     return Page(items=items, total=total, page=page.page, page_size=page.page_size)
 
 
+@router.get("/inbounds/by-key/{key}", response_model=InventoryMovementReadResponse)
+def get_inbound_by_key(
+    key: str,
+    session: Annotated[object, Depends(get_session)],
+    user: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
+) -> Inbound:
+    return InventoryService(InventoryRepository(session)).get_inbound_by_key(
+        user.id, parse_uuid(key, "path", "key")
+    )
+
+
 @router.get("/inbounds/{inbound_id}", response_model=InventoryMovementReadResponse)
 def get_inbound(
     inbound_id: int,
@@ -109,14 +156,57 @@ def get_inbound(
 
 
 @router.post(
-    "/inbounds", response_model=InventoryMovementResponse, status_code=status.HTTP_201_CREATED
+    "/inbounds",
+    response_model=InventoryMovementResponse,
+    status_code=status.HTTP_201_CREATED,
+    description="Create one atomic inbound. The UUID is owned by the current actor. "
+    "Same normalized body/key replays the original result with 200; a different body returns 409. "
+    "After an uncertain result retry exactly the same body and key.",
+    openapi_extra={
+        "parameters": [
+            {
+                "in": "header",
+                "name": "Idempotency-Key",
+                "required": True,
+                "schema": {"type": "string", "format": "uuid"},
+                "description": "Actor-owned durable inbound UUID.",
+            }
+        ]
+    },
+    responses={
+        200: {
+            "model": InventoryMovementResponse,
+            "description": "Authorized original-result replay.",
+        },
+        503: {
+            "model": ErrorResponse,
+            "description": "Retry the exact same request; commit outcome may be unknown.",
+            "headers": {"Retry-After": {"schema": {"type": "integer", "const": 1}}},
+        },
+    },
 )
 def create_inbound(
+    request: Request,
     movement: InventoryMovementCreate,
     session: Annotated[object, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
+    response: Response,
 ) -> Inbound:
-    return InventoryService(InventoryRepository(session)).create_inbound(user.id, movement)
+    values = request.headers.getlist("Idempotency-Key")
+    if len(values) != 1:
+        invalid("header", "Idempotency-Key")
+    key = parse_uuid(values[0], "header", "Idempotency-Key")
+    result = movement_result(
+        lambda: InventoryService(InventoryRepository(session)).create_inbound(
+            user.id, movement, key
+        ),
+        "INBOUND_RETRY_REQUIRED",
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    record, replay = result
+    response.status_code = 200 if replay else 201
+    return record
 
 
 @router.get("/outbounds", response_model=Page[InventoryMovementReadResponse])
@@ -130,6 +220,17 @@ def list_outbounds(
     return Page(items=items, total=total, page=page.page, page_size=page.page_size)
 
 
+@router.get("/outbounds/by-key/{key}", response_model=InventoryMovementReadResponse)
+def get_outbound_by_key(
+    key: str,
+    session: Annotated[object, Depends(get_session)],
+    user: Annotated[User, Depends(require_permission(Permission.INVENTORY_HISTORY_READ))],
+) -> Outbound:
+    return InventoryService(InventoryRepository(session)).get_outbound_by_key(
+        user.id, parse_uuid(key, "path", "key")
+    )
+
+
 @router.get("/outbounds/{outbound_id}", response_model=InventoryMovementReadResponse)
 def get_outbound(
     outbound_id: int,
@@ -140,14 +241,57 @@ def get_outbound(
 
 
 @router.post(
-    "/outbounds", response_model=InventoryMovementResponse, status_code=status.HTTP_201_CREATED
+    "/outbounds",
+    response_model=InventoryMovementResponse,
+    status_code=status.HTTP_201_CREATED,
+    description="Create one atomic outbound. The UUID is owned by the current actor. "
+    "Same normalized body/key replays the original result with 200; a different body returns 409. "
+    "After an uncertain result retry exactly the same body and key.",
+    openapi_extra={
+        "parameters": [
+            {
+                "in": "header",
+                "name": "Idempotency-Key",
+                "required": True,
+                "schema": {"type": "string", "format": "uuid"},
+                "description": "Actor-owned durable outbound UUID.",
+            }
+        ]
+    },
+    responses={
+        200: {
+            "model": InventoryMovementResponse,
+            "description": "Authorized original-result replay.",
+        },
+        503: {
+            "model": ErrorResponse,
+            "description": "Retry the exact same request; commit outcome may be unknown.",
+            "headers": {"Retry-After": {"schema": {"type": "integer", "const": 1}}},
+        },
+    },
 )
 def create_outbound(
+    request: Request,
     movement: InventoryMovementCreate,
     session: Annotated[object, Depends(get_session)],
     user: Annotated[User, Depends(require_permission(Permission.INVENTORY_WRITE))],
+    response: Response,
 ) -> Outbound:
-    return InventoryService(InventoryRepository(session)).create_outbound(user.id, movement)
+    values = request.headers.getlist("Idempotency-Key")
+    if len(values) != 1:
+        invalid("header", "Idempotency-Key")
+    key = parse_uuid(values[0], "header", "Idempotency-Key")
+    result = movement_result(
+        lambda: InventoryService(InventoryRepository(session)).create_outbound(
+            user.id, movement, key
+        ),
+        "OUTBOUND_RETRY_REQUIRED",
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    record, replay = result
+    response.status_code = 200 if replay else 201
+    return record
 
 
 @router.get("/transactions", response_model=Page[TransactionResponse])

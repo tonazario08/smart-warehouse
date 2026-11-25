@@ -39,7 +39,7 @@ describe('active Figma API contract', () => {
 
   it('keeps structured status/code/fields but never renders raw server text', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response({ detail: { code: 'REQUEST_VALIDATION_ERROR', message: 'Sensitive internal English detail', fields: { reference: ['Invalid value.'] } } }, 422)))
-    const failure = await api.createInbound('token', { warehouse_id: 1, product_id: 2, quantity: 3, reference: null, note: null }).catch(error => error)
+    const failure = await api.createInbound('token', { warehouse_id: 1, product_id: 2, quantity: 3, reference: null, note: null }, '00000000-0000-4000-8000-000000000001').catch(error => error)
     expect(failure).toBeInstanceOf(ApiError)
     expect(failure.status).toBe(422)
     expect(failure.code).toBe('REQUEST_VALIDATION_ERROR')
@@ -63,7 +63,7 @@ describe('active Figma API contract', () => {
       expect(JSON.parse(String(init?.body))).toEqual(payload)
       return response({ detail: { code: 'STOCK_QUANTITY_LIMIT_EXCEEDED', message: 'Stock quantity would exceed the supported limit.', fields: null } }, 409)
     }))
-    await expect(api.createInbound('token', payload)).rejects.toMatchObject({ status: 409, code: 'STOCK_QUANTITY_LIMIT_EXCEEDED', message: expect.stringMatching(/giới hạn/) })
+    await expect(api.createInbound('token', payload, '00000000-0000-4000-8000-000000000002')).rejects.toMatchObject({ status: 409, code: 'STOCK_QUANTITY_LIMIT_EXCEEDED', message: expect.stringMatching(/giới hạn/) })
   })
 
   it('uses VITE_API_BASE_URL for the isolated backend', async () => {

@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { jsonResponse, renderRoleRoute, warehouseRow } from '../../test/renderRoleRoute'
+import { movementFingerprint } from '../../shared/api/movementIdempotency'
 import { movementSchema } from './schemas'
 
-afterEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
+afterEach(() => { localStorage.clear(); sessionStorage.clear(); vi.unstubAllGlobals() })
 
 const product = { id: 6, sku: 'SKU-001', name: 'Steel bolt', description: null, category_id: 4, supplier_id: 5, unit: 'piece', reorder_level: 3, is_active: true }
 const page = { items: [], total: 0, page: 1, page_size: 20 }
@@ -275,5 +276,85 @@ describe('movement schema and manifest', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(`${direction} history is unavailable.`)
     await userEvent.click(screen.getByRole('button', { name: `Retry ${direction} history` }))
     expect(await screen.findByText(`No ${direction} records match these filters.`)).toBeInTheDocument()
+  })
+
+  it('sends one Idempotency-Key header per inbound and clears it on success', async () => {
+    const { fetchMock } = renderRoleRoute('/inbounds', 'warehouse', (url, init) => {
+      if (url.includes('/products?') || url.includes('/warehouses?') || url.includes('/inbounds?')) return lookup(url)
+      if (url.endsWith('/inbounds') && init?.method === 'POST') return jsonResponse({ id: 30, warehouse_id: 7, product_id: 6, quantity: 5, reference: 'ASN 12', note: null }, 201)
+      throw new Error(`Unexpected request ${url}`)
+    })
+    const user = userEvent.setup()
+    await screen.findByText('No inbound records match these filters.')
+    await user.selectOptions(screen.getByLabelText('Warehouse for inbound'), '7')
+    await user.selectOptions(screen.getByLabelText('Product for inbound'), '6')
+    await user.type(screen.getByLabelText('Inbound quantity'), '5')
+    await user.click(screen.getByRole('button', { name: 'Record inbound' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Inbound recorded. Movement #30.')
+    const posts = fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/inbounds') && init?.method === 'POST')
+    expect(posts).toHaveLength(1)
+    expect(new Headers(posts[0]?.[1]?.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    expect(sessionStorage.getItem('sw:movement:v1:1:inbound')).toBeNull()
+  })
+
+  it('reuses the same key when retrying after a lost connection', async () => {
+    let posts = 0
+    const { fetchMock } = renderRoleRoute('/inbounds', 'warehouse', (url, init) => {
+      if (url.includes('/products?') || url.includes('/warehouses?') || url.includes('/inbounds?')) return lookup(url)
+      if (url.endsWith('/inbounds') && init?.method === 'POST') {
+        posts += 1
+        if (posts === 1) throw new Error('connection lost')
+        return jsonResponse({ id: 30, warehouse_id: 7, product_id: 6, quantity: 5, reference: 'ASN 12', note: null }, 201)
+      }
+      throw new Error(`Unexpected request ${url}`)
+    })
+    const user = userEvent.setup()
+    await screen.findByText('No inbound records match these filters.')
+    await user.selectOptions(screen.getByLabelText('Warehouse for inbound'), '7')
+    await user.selectOptions(screen.getByLabelText('Product for inbound'), '6')
+    await user.type(screen.getByLabelText('Inbound quantity'), '5')
+    await user.click(screen.getByRole('button', { name: 'Record inbound' }))
+
+    expect(await screen.findByText('Chưa xác định kết quả')).toBeInTheDocument()
+    expect(sessionStorage.getItem('sw:movement:v1:1:inbound')).not.toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Thử lại cùng yêu cầu' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Inbound recorded. Movement #30.')
+    const keys = fetchMock.mock.calls
+      .filter(([url, init]) => String(url).endsWith('/inbounds') && init?.method === 'POST')
+      .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBe(keys[1])
+    expect(sessionStorage.getItem('sw:movement:v1:1:inbound')).toBeNull()
+  })
+
+  it('restores an outcome-unknown inbound after reload and retries with its key', async () => {
+    const storedInput = { warehouse_id: 7, product_id: 6, quantity: 5, reference: 'ASN 12', note: null }
+    const storedKey = '00000000-0000-4000-8000-000000000009'
+    sessionStorage.setItem('sw:movement:v1:1:inbound', JSON.stringify({
+      key: storedKey,
+      direction: 'inbound',
+      fingerprint: movementFingerprint(storedInput),
+      input: storedInput,
+    }))
+    const { fetchMock } = renderRoleRoute('/inbounds', 'warehouse', (url, init) => {
+      if (url.includes('/products?') || url.includes('/warehouses?') || url.includes('/inbounds?')) return lookup(url)
+      if (url.endsWith('/inbounds') && init?.method === 'POST') return jsonResponse({ id: 30, warehouse_id: 7, product_id: 6, quantity: 5, reference: 'ASN 12', note: null }, 201)
+      throw new Error(`Unexpected request ${url}`)
+    })
+    const user = userEvent.setup()
+    expect(await screen.findByText('Chưa xác định kết quả')).toBeInTheDocument()
+    expect(screen.getByLabelText('Warehouse for inbound')).toHaveValue('7')
+    expect(screen.getByLabelText('Product for inbound')).toHaveValue('6')
+    expect(screen.getByLabelText('Inbound quantity')).toHaveValue(5)
+    expect(screen.getByLabelText('Reference')).toHaveValue('ASN 12')
+
+    await user.click(screen.getByRole('button', { name: 'Thử lại cùng yêu cầu' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Inbound recorded. Movement #30.')
+    const keys = fetchMock.mock.calls
+      .filter(([url, init]) => String(url).endsWith('/inbounds') && init?.method === 'POST')
+      .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(keys).toEqual([storedKey])
+    expect(sessionStorage.getItem('sw:movement:v1:1:inbound')).toBeNull()
   })
 })

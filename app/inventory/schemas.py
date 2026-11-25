@@ -44,6 +44,14 @@ class InventoryMovementCreate(BaseModel):
     reference: str | None = Field(default=None, max_length=120)
     note: str | None = None
 
+    @field_validator("reference", "note", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        # Same normalization as TransferCreate: the idempotency fingerprint
+        # is computed over the normalized body, so a retry that only differs
+        # in surrounding whitespace replays instead of conflicting.
+        return value.strip() or None if isinstance(value, str) else value
+
 
 class InventoryMovementResponse(InventoryMovementCreate):
     model_config = ConfigDict(from_attributes=True)

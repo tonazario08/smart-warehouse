@@ -22,7 +22,7 @@ from tests.test_purchase_request_models import (
 )
 
 pytestmark = pytest.mark.postgres
-HEAD = "20261122_0012"
+HEAD = "20261125_0013"
 PARENT = "20261017_0003"
 
 
@@ -194,7 +194,14 @@ def test_legacy_requests_survive_upgrade_readonly(purchase_migration_target):
     require_workflow(engine)
     with engine.connect() as connection:
         for table, rows in old_rows.items():
-            assert connection.execute(text(f"SELECT * FROM {table} ORDER BY 1")).all() == rows
+            # The 20261125_0013 migration adds two nullable idempotency
+            # columns to inbounds/outbounds. Historical rows keep their
+            # original values and the new columns stay NULL (covered by
+            # test_inventory_idempotency_migration.py), so compare only the
+            # pre-upgrade columns here.
+            after = connection.execute(text(f"SELECT * FROM {table} ORDER BY 1")).all()
+            width = len(rows[0]) if rows else 0
+            assert [tuple(row)[:width] for row in after] == [tuple(row) for row in rows]
         assert connection.scalar(text("SELECT count(*) FROM purchase_request_workflows")) == 0
         assert (
             connection.scalar(
