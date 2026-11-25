@@ -6,7 +6,12 @@ import { deferredResponse, jsonResponse, purchase, purchaseHandler, purchasePage
 afterEach(() => localStorage.clear())
 it.each(['admin', 'warehouse', 'client'] as const)('renders real-shaped scoped %s list with role actions and IDs, not a user-directory call', async role => {
   const { fetchMock } = renderPurchaseRequestRoute('/purchase-requests', role)
-  expect(await screen.findByRole('link', { name: 'PR-0008' })).toHaveAttribute('href', '/purchase-requests/8')
+  // First render waits on a chained async load (AuthProvider fetches
+  // /auth/me, then the page fetches list + products + warehouses), which
+  // takes ~900-1600ms when all 55 test files run in parallel on a
+  // limited-CPU machine — past the 1000ms findBy default. The wait budget
+  // is raised here only; the assertion itself is unchanged.
+  expect(await screen.findByRole('link', { name: 'PR-0008' }, { timeout: 5000 })).toHaveAttribute('href', '/purchase-requests/8')
   expect(screen.getByRole('cell', { name: /Bu lông/ })).toHaveTextContent('B2B-003')
   expect(screen.getByRole('cell', { name: 'Chờ duyệt' })).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Tạo yêu cầu mua hàng' }) !== null).toBe(role === 'client')

@@ -13,7 +13,12 @@ it('applies the shared wrapping pagination layout and usable button height', asy
   document.head.append(stylesheet)
   try {
     renderTransferRoute('/transfers')
-    await screen.findByRole('link', { name: 'Phiếu chuyển #8' })
+    // First render waits on a chained async load (AuthProvider fetches
+    // /auth/me, then the page fetches list + products + warehouses), which
+    // takes ~900-1600ms when all 55 test files run in parallel on a
+    // limited-CPU machine — past the 1000ms findBy default. The wait budget
+    // is raised here only; the assertion itself is unchanged.
+    await screen.findByRole('link', { name: 'Phiếu chuyển #8' }, { timeout: 5000 })
     const pagination = screen.getByRole('navigation', { name: 'Phân trang' })
     expect(getComputedStyle(pagination).display).toBe('flex')
     expect(getComputedStyle(pagination).flexWrap).toBe('wrap')
