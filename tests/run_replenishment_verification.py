@@ -5,6 +5,7 @@ import hashlib
 import json
 import ntpath
 import os
+import posixpath
 import re
 import secrets
 import shutil
@@ -491,10 +492,34 @@ def verification_directory():
     return current
 
 
+def _acquire_execution_lock(lock):
+    # Non-blocking exclusive lock on one byte, per platform. Windows keeps
+    # the original msvcrt behaviour; POSIX uses fcntl.flock, which fails
+    # with BlockingIOError (an OSError) when another open file description
+    # already holds the lock, including a second lock in this process.
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _release_execution_lock(lock):
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 @contextmanager
 def execution_lock():
-    import msvcrt
-
     path = verification_directory() / "backend.lock"
     if path.exists() or path.is_symlink():
         info = path.lstat()
@@ -506,7 +531,7 @@ def execution_lock():
             lock.write(b"0")
             lock.flush()
         lock.seek(0)
-        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        _acquire_execution_lock(lock)
     except OSError:
         if "lock" in locals():
             lock.close()
@@ -515,7 +540,7 @@ def execution_lock():
         yield
     finally:
         lock.seek(0)
-        msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+        _release_execution_lock(lock)
         lock.close()
 
 
@@ -1187,12 +1212,26 @@ def e2e_bind_matches(source, expected):
                 return False
             value = rest[0] + ":/" + rest[2:]
             break
-    if not re.fullmatch(r"[A-Za-z]:/.+", value):
-        return False
-    if any(part in ("", ".", "..") or ":" in part for part in value[3:].split("/")):
-        return False
-    approved = str(_checked(expected)).replace("\\", "/")
-    return ntpath.normcase(ntpath.normpath(value)) == ntpath.normcase(ntpath.normpath(approved))
+    if re.fullmatch(r"[A-Za-z]:/.+", value):
+        # Windows bind source, native or translated from a Docker Desktop
+        # prefix above. Unchanged from the original behaviour.
+        if any(part in ("", ".", "..") or ":" in part for part in value[3:].split("/")):
+            return False
+        approved = str(_checked(expected)).replace("\\", "/")
+        return ntpath.normcase(ntpath.normpath(value)) == ntpath.normcase(ntpath.normpath(approved))
+    if value.startswith("/"):
+        # POSIX bind source (Linux Docker reports the host path as-is).
+        # Same protection rules as the Windows branch: reject empty, "."
+        # and ".." components and ":" in any component before comparing,
+        # so a path such as ".../catalog/../catalog" is rejected even
+        # though normpath would collapse it to the approved path. The
+        # comparison is case-sensitive (no normcase): Linux paths are.
+        parts = value.split("/")[1:]
+        if any(part in ("", ".", "..") or ":" in part for part in parts):
+            return False
+        approved = str(_checked(expected))
+        return posixpath.normpath(value) == posixpath.normpath(approved)
+    return False
 
 
 def e2e_resource_inventory():
