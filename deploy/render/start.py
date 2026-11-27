@@ -1,16 +1,23 @@
-"""Start a dedicated Render demo with a verified public road snapshot."""
+"""Prepare the Render demo and start its API and B2B queues."""
 
+import argparse
 import os
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
+from time import sleep
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.pool import NullPool
 
 from alembic import command
 from app.assistant.provider import ModelProvider
@@ -21,6 +28,10 @@ from app.seed import load_seed_settings
 from deploy.render.integrated import prepare_bundle, seed_analytics
 
 DEMO_DATABASE = "smart_warehouse_render_demo"
+WORKER_MODULES = {
+    "order-analytics": "app.order_analytics.worker",
+    "operational-anomaly": "app.anomalies.operational_worker",
+}
 
 
 def demo_database_url(raw: str) -> str:
@@ -94,6 +105,70 @@ def prepare_snapshot(root: Path, snapshot_id: str, asset_base: str) -> None:
         folder.rename(target)
 
 
+def wait_for_database_schema(database_url: str) -> None:
+    expected = set(ScriptDirectory.from_config(Config("alembic.ini")).get_heads())
+    if not expected:
+        raise RuntimeError("Render worker image has no database migrations")
+    engine = create_engine(
+        database_url,
+        connect_args={"connect_timeout": 3, "options": "-c statement_timeout=3000"},
+        poolclass=NullPool,
+        hide_parameters=True,
+    )
+    waiting = False
+    try:
+        while True:
+            try:
+                with engine.connect() as connection:
+                    current = set(MigrationContext.configure(connection).get_current_heads())
+                    if current == expected:
+                        return
+            except SQLAlchemyError:
+                pass  # Readiness errors can include credentials and connection details.
+            if not waiting:
+                print("Render demo worker waiting for the database schema.", file=sys.stderr)
+                waiting = True
+            # Blueprint services can start before the API has deployed and migrated the database.
+            sleep(5)
+    finally:
+        engine.dispose()
+
+
+def start_worker(worker: str) -> int:
+    stage = "validate environment"
+    try:
+        os.environ["DATABASE_URL"] = demo_database_url(os.environ["DATABASE_URL"])
+        settings = Settings(_env_file=None)
+        if settings.app_env != "production":
+            raise ValueError("Invalid Render worker configuration")
+
+        if worker == "order-analytics":
+            stage = "verify synthetic bundle"
+            bundle_url = os.environ.get("RENDER_DEMO_BUNDLE_URL", "")
+            bundle_sha = os.environ.get("RENDER_DEMO_BUNDLE_SHA256", "")
+            if not bundle_url or not bundle_sha:
+                raise ValueError("Order analytics requires a pinned bundle")
+            catalogs, _ = prepare_bundle(
+                bundle_url, bundle_sha, Path(mkdtemp(prefix="render-order-")), download_asset
+            )
+            os.environ.update({
+                "APP_ENV": "integration",
+                "FORECAST_CATALOG_ROOT": str(catalogs / "forecast"),
+                "REPLENISHMENT_CATALOG_ROOT": str(catalogs / "replenishment"),
+                "FORECAST_ALLOW_FIXTURE": "true",
+                "REPLENISHMENT_ALLOW_FIXTURE": "true",
+            })
+
+        stage = "wait for the demo database schema"
+        wait_for_database_schema(settings.database_url)
+        stage = "start the worker"
+        os.execv(sys.executable, [sys.executable, "-m", WORKER_MODULES[worker]])
+    except Exception:
+        print(f"Render demo worker startup failed: {stage}.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     stage = "validate environment"
     try:
@@ -157,8 +232,10 @@ def main() -> int:
             subprocess.run(
                 [sys.executable, "-m", "app.assistant.cli", "/app/assistant-corpus"], check=True
             )
-        stage = "start the API"
-        os.execvp("uvicorn", ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)])
+        stage = "start the API and B2B queues"
+        os.execv(sys.executable, [
+            sys.executable, "-m", "deploy.render.runtime", "--port", str(port),
+        ])
     except Exception:
         print(f"Render demo startup failed: {stage}.", file=sys.stderr)
         return 1
@@ -166,4 +243,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--worker", choices=WORKER_MODULES)
+    args = parser.parse_args()
+    raise SystemExit(start_worker(args.worker) if args.worker else main())

@@ -8,6 +8,8 @@ services:
     dockerCommand: python /app/render-start.py
     healthCheckPath: /api/v1/health/ready
     envVars:
+      - key: INSTALL_ANOMALY_DEPENDENCIES
+        value: "1"
       - key: APP_ENV
         value: production
       - key: DATABASE_URL

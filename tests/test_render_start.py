@@ -225,7 +225,13 @@ def test_start_imports_corpus_only_for_configured_assistant(
             events.append("corpus")
 
     monkeypatch.setattr(start.subprocess, "run", run)
-    monkeypatch.setattr(start.os, "execvp", lambda *_: events.append("serve"))
+    def serve(executable, args):
+        assert executable == start.sys.executable
+        assert args == [executable, "-m", "deploy.render.runtime", "--port", "8000"]
+        events.append("serve")
+
+    monkeypatch.setattr(start.os, "execv", serve)
+    monkeypatch.setattr(start.os, "execvp", lambda *_: pytest.fail("bypassed shared runtime"))
 
     assert start.main() == (0 if expected else 1)
     assert events == expected
@@ -283,7 +289,14 @@ def test_render_synthetic_mode_requires_pinned_bundle(monkeypatch, tmp_path, dig
     monkeypatch.setattr(start, "upgrade_demo_database", lambda _: calls.append("migration"))
     monkeypatch.setattr(start.subprocess, "run", lambda *_, **__: calls.append("seed"))
     monkeypatch.setattr(start, "seed_analytics", seed)
-    monkeypatch.setattr(start.os, "execvp", lambda *_: calls.append("serve"))
+    def serve(_executable, _args):
+        settings = start.Settings(_env_file=None)
+        assert settings.forecast_catalog_root == tmp_path / "forecast"
+        assert settings.replenishment_catalog_root == tmp_path / "replenishment"
+        calls.append("serve")
+
+    monkeypatch.setattr(start.os, "execv", serve)
+    monkeypatch.setattr(start.os, "execvp", lambda *_: pytest.fail("bypassed shared runtime"))
 
     assert start.main() == (0 if digest else 1)
     assert calls == (["gis", "bundle", "migration", "seed", "analytics", "serve"] if digest else [])
